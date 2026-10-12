@@ -324,8 +324,8 @@ test, and check what it prints with `expect` or `expect_file`.
 The outcome line gives the mutation score: the percentage of killed
 mutants among the mutants that were killed, survived or were not
 evaluated. A mutant that no test reached, or that ran outside every
-test, is not part of the score. When no mutant is part of it, the line
-gives no score.
+test, is not part of the score. When no mutant is part of it and no gate
+is given, the line gives no score.
 
 A project can keep a survivor that it does not plan to kill. To gate on
 the score and not on each survivor, give `--min-score PCT` to
@@ -349,9 +349,9 @@ the score, the executables, and each mutant with its verdict. A
 survivor also has the tests that ran it. A test names its executable by
 its index in `executables`, because two executables can have the same
 name. Under `--min-score` the outcome line goes to standard error, and
-the exit code is that of the gate. The keys do not change in a later
-version, and [`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives
-each one:
+the exit code is that of the gate. A later version can add keys. A
+change to the meaning of a key increments `version`.
+[`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each key:
 
 ```
 $ dune exec windtrap -- mutants --json
