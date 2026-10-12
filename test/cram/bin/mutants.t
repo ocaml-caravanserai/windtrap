@@ -478,6 +478,18 @@ as 100:
   $ run windtrap mutants --min-score 100 | tail -n 1
   mutants: 0 reached, 1 never reached, 1 evaluated outside tests, 1 executable, score 100.0%, minimum 100%: ok
 
+A mutant that a child did not evaluate is scored as not killed. Thus a
+gate can fail a merge in which no mutant survived:
+
+  $ plant "$scratch/unevaluated" && cd "$scratch/unevaluated"
+  $ mkdata mutants _build/_mutants/u.mutants "$add=killed" "$sub=not_evaluated"
+  $ for min in '' 50 60; do
+  >   run windtrap mutants ${min:+--min-score=$min} > gated; echo "[$?] $(tail -n 1 gated)"
+  > done
+  [0] mutants: 2 reached, 1 killed, 1 not evaluated, 1 executable, score 50.0%
+  [0] mutants: 2 reached, 1 killed, 1 not evaluated, 1 executable, score 50.0%, minimum 50%: ok
+  [1] mutants: 2 reached, 1 killed, 1 not evaluated, 1 executable, score 50.0%, minimum 60%: FAILED
+
 A value that is not a percentage from 0 to 100 is a usage error, and the
 flag needs its value:
 
