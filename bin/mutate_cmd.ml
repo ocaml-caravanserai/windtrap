@@ -456,6 +456,20 @@ let gate o (m : Sections.mutation) =
              (Sections.mutation_line ~min:(Some min) m));
       if Sections.mutation_score m >= min then 0 else 1
 
+(* Standard output can refuse the text (a full disk, a closed descriptor). The
+   reader then has only a part of it, so the command fails and runs no gate.
+   Standard output is closed, so that the flush at exit does not try the write
+   again and stop the process with an exception. *)
+let write text =
+  match
+    print_string text;
+    flush stdout
+  with
+  | () -> Ok ()
+  | exception Sys_error reason ->
+      close_out_noerr stdout;
+      fail ~code:1 (strf "cannot write to standard output: %s" reason)
+
 let run args =
   let code =
     let* o = options args in
@@ -468,12 +482,14 @@ let run args =
     let* files = fresh files in
     let merged = merged files in
     let mutation, invocation = merge ~source:(source ~roots) files merged in
-    if o.json then (
-      print_string (json files merged mutation);
-      flush stdout)
-    else
-      Sections.print ~out:Format.std_formatter ~ansi
-        (Sections.mutation_report ~invocation ~min:o.min_score mutation);
+    let* () =
+      write
+        (if o.json then json files merged mutation
+         else
+           Pp.str "%a"
+             (fun out -> Sections.print ~out ~ansi)
+             (Sections.mutation_report ~invocation ~min:o.min_score mutation))
+    in
     Ok (gate o mutation)
   in
   match code with Ok code | Error code -> code

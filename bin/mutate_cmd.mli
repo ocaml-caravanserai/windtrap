@@ -94,11 +94,11 @@
     merge: the percentage of the killed mutants among those killed, survived and
     not evaluated, unrounded, and [100.] when the merge has none of them.
     [--min-score PCT] requires the score to be at least [PCT]. It runs after the
-    report or the document is printed. The outcome line of the report then
-    states the gate and whether it is met
-    ({!Windtrap.Private.Report_sections.mutation_line}). A score that prints
-    equal to the threshold can thus fail. Without the flag, the command fails
-    when a mutant survived. *)
+    report or the document is printed, and does not run when standard output
+    refuses them. The outcome line of the report then states the gate and
+    whether it is met ({!Windtrap.Private.Report_sections.mutation_line}). A
+    score that prints equal to the threshold can thus fail. Without the flag,
+    the command fails when a mutant survived. *)
 
 (** {1:format Machine format}
 
@@ -172,9 +172,9 @@ val run : string list -> int
     [--color] is absent, finds the {{!section-files}files}, judges and loads
     them, prints the report or the document of the {{!section-merge}merge} on
     standard output, and runs the gate, in that order. A step before the gate
-    that fails returns its code, so a failure prints no report. Every other line
-    goes to standard error, through {!Windtrap.Private.Os.say} but for the usage
-    line that follows a usage error.
+    that fails returns its code, and the steps after it do not run. Every other
+    line goes to standard error, through {!Windtrap.Private.Os.say} but for the
+    usage line that follows a usage error.
 
     The result is:
     - [0] when the report or the document was printed and the merge passes.
@@ -193,6 +193,9 @@ val run : string list -> int
       is found. It is also [1] when a file that is not excluded cannot be read,
       is corrupt or has another format version. It is also [1] when every file
       is excluded.
+    - [1] when standard output refuses the report or the document, for example
+      on a full disk. The reader then has only a part of it. Standard error
+      gives the reason, and the gate does not run.
     - [2] for a usage error. A usage error is an unknown option, a flag that
       lacks its value, a [--min-score] that is not in the interval
       \[[0];[100]\], or a [--color] value that the flag refuses.

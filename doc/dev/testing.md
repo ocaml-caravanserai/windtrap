@@ -98,8 +98,9 @@ what is non-obvious.
   `bin/` pins the `windtrap` command: its dispatch (`windtrap.t`), where
   the two merges find their files and which they merge (`data.t`), the
   coverage and mutants reports (`coverage.t`, `mutants.t`), what they
-  cannot read (`unreadable.t`), and two executables that disagree about
-  one library (`two_executables.t`). `mkdata.exe` writes the synthetic
+  cannot read (`unreadable.t`), a standard output that refuses the
+  mutants report (`full.t`, on Linux, which alone has `/dev/full`), and
+  two executables that disagree about one library (`two_executables.t`). `mkdata.exe` writes the synthetic
   dumps and verdict files the sessions merge; `pins_add.exe` and
   `pins_sub.exe` are instrumented suites over `calc.ml`, a library under
   both backends in every build.

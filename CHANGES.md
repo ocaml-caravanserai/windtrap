@@ -125,6 +125,9 @@
   counts, the score, the executables, and each mutant with its verdict
   and, for a survivor, the tests that ran it (see
   [Exporting the verdicts](https://github.com/invariant-hq/windtrap/blob/main/doc/manual/mutation.md#exporting-the-verdicts)).
+- `windtrap mutants` exits 1 with the reason on standard error when
+  standard output refuses its report or document, for example on a full
+  disk, and runs no gate.
 
 ## v0.2.0 2026-09-26
 
