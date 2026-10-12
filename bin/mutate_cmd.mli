@@ -166,17 +166,20 @@ val run : string list -> int
     line that follows a usage error.
 
     The result is:
-    - [0] when the report or the document was printed, and no mutant survived
-      or, under [--min-score], the score met the gate. Unreached mutants are
-      listed and do not fail the command. It is also [0] for the help page.
-    - [1] when the report or the document was printed, and at least one mutant
-      survived every executable that reached it or, under [--min-score], the
-      score is below the gate. Without the gate one survivor fails the command,
-      and a mutant that is equivalent to the original is dismissed at its site
-      with [[@mutate off]]. It is also [1], with no report, when a [PATH] cannot
-      be used, when no verdict file is found, when a file that is not excluded
-      cannot be read, is corrupt or has another format version, or when every
-      file is excluded.
+    - [0] when the report or the document was printed and, without
+      [--min-score], no mutant survived or, under [--min-score], the score met
+      the gate. Under the gate a survivor does not fail the command. Unreached
+      mutants are listed and do not fail the command. It is also [0] for the
+      help page.
+    - [1] when the report or the document was printed and, without
+      [--min-score], at least one mutant survived every executable that reached
+      it or, under [--min-score], the score is below the gate. Under the gate a
+      merge with no survivor can fail, because a mutant that was not evaluated
+      lowers the score. Without the gate a mutant that is equivalent to the
+      original is dismissed at its site with [[@mutate off]]. It is also [1],
+      with no report, when a [PATH] cannot be used, when no verdict file is
+      found, when a file that is not excluded cannot be read, is corrupt or has
+      another format version, or when every file is excluded.
     - [2] for a usage error: an unknown option, a [--min-score] that is not a
       number of the interval \[[0];[100]\], a flag that lacks its value, or a
       [--color] value that the flag refuses. It is also [2] for a

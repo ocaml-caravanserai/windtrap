@@ -738,8 +738,8 @@ The command line
   
   The score is the percentage of killed mutants among those killed, survived and
   not evaluated. Runs no tests and drives no build. Exits 1 when any mutant
-  survived every executable that reached it, or under --min-score when the score
-  is below PCT.
+  survived every executable that reached it, or under --min-score only when the
+  score is below PCT.
   
   OPTIONS:
     --min-score=PCT
