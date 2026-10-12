@@ -103,39 +103,50 @@
 (** {1:format Machine format}
 
     [--json] makes standard output the document, so the report is not printed.
-    Under [--json], and only under [--min-score], the text of the outcome line
-    is said on standard error behind [windtrap:], whether the gate is met or
-    not. The keys and the values below are frozen. A key that a later version
-    adds does not change the meaning of the others, and a change to the meaning
-    of a key increments ["version"].
+    The outcome line is not printed on standard output either. Under
+    [--min-score], standard error gives its text behind [windtrap:], whether the
+    gate is met or not. The keys and the values below are frozen. A later
+    version can add a key, and that key does not change the meaning of the
+    others. A change to the meaning of a key increments ["version"].
 
-    The document is one object with four keys.
-    - ["version"] is the number [1].
-    - ["summary"] is an object with the keys ["reached"], ["killed"],
-      ["survived"], ["not_evaluated"], ["outside_tests"], ["unreached"] and
-      ["score"]. Each is the count of the merged mutants that have that verdict,
-      but ["reached"], which is the sum of the first three counts after it, and
-      ["score"], which is the score of the {{!section-gate}gate} with two
-      decimals.
-    - ["executables"] is an array with one object for each file that is kept, in
-      path order. Its keys are ["name"], the label that the report gives the
-      executable ({{!section-merge}the merge}), and ["path"], the executable
-      that the file records, as {!Windtrap_runtime.Instr.exe_identity} spells
-      it, or [null] for a file that records none. Two executables can have the
-      same name.
-    - ["mutants"] is an array with one object for each merged mutant, in the
-      order of [Windtrap_runtime.Mutate.compare_id]. Its keys are ["id"], as
-      [Windtrap_runtime.Mutate.id_to_string] spells it, ["file"], ["line"],
-      ["col"] and ["rewrite"], the four parts of the identifier, then ["before"]
-      and ["after"], the source text of the original and of the armed
-      expression, and ["verdict"], one of ["killed"], ["survived"],
-      ["not_evaluated"], ["outside_tests"] and ["unreached"]. A survivor has one
-      more key, ["tests"].
-    - ["tests"] is an array with one object for each reaching test of the
-      survivor in each file in which it survived, sorted by file and then by
-      test, without duplicates. Its keys are ["executable"], the index of the
-      file in ["executables"], and ["test"], the path of the test as an array of
-      names, the outermost group first.
+    The document is one object with the keys ["version"], ["summary"],
+    ["executables"] and ["mutants"]. ["version"] is the number [1].
+
+    ["summary"] is an object with these keys:
+    - ["reached"] is the sum of the three counts that follow it.
+    - ["killed"], ["survived"], ["not_evaluated"], ["outside_tests"] and
+      ["unreached"] are each the count of the merged mutants that have that
+      verdict.
+    - ["score"] is the score of the {{!section-gate}gate}, with two decimals.
+
+    ["executables"] is an array with one object for each file that is kept, in
+    path order. Two executables can have the same name. The object has these
+    keys:
+    - ["name"] is the label that the report gives the executable
+      ({{!section-merge}the merge}).
+    - ["path"] is the executable that the file records, as
+      {!Windtrap_runtime.Instr.exe_identity} spells it. It is [null] for a file
+      that records none.
+
+    ["mutants"] is an array with one object for each merged mutant, in the order
+    of [Windtrap_runtime.Mutate.compare_id]. The object has these keys:
+    - ["id"] is the identifier, as [Windtrap_runtime.Mutate.id_to_string] spells
+      it.
+    - ["file"], ["line"], ["col"] and ["rewrite"] are the four parts of the
+      identifier.
+    - ["before"] is the source text of the original expression.
+    - ["after"] is the source text of the armed expression.
+    - ["verdict"] is one of ["killed"], ["survived"], ["not_evaluated"],
+      ["outside_tests"] and ["unreached"].
+    - ["tests"] is in the object of a survivor only. It is an array of the tests
+      that reached the survivor.
+
+    ["tests"] has one object for each reaching test of the survivor in each file
+    in which it survived. The objects are sorted by file and then by test,
+    without duplicates. The object has these keys:
+    - ["executable"] is the index of the file in ["executables"].
+    - ["test"] is the path of the test as an array of names, the outermost group
+      first.
 
     Each string is written by {!Windtrap.Private.Text.json_string}. *)
 
@@ -166,22 +177,25 @@ val run : string list -> int
     line that follows a usage error.
 
     The result is:
-    - [0] when the report or the document was printed and, without
-      [--min-score], no mutant survived or, under [--min-score], the score met
-      the gate. Under the gate a survivor does not fail the command. Unreached
-      mutants are listed and do not fail the command. It is also [0] for the
-      help page.
-    - [1] when the report or the document was printed and, without
-      [--min-score], at least one mutant survived every executable that reached
-      it or, under [--min-score], the score is below the gate. Under the gate a
-      merge with no survivor can fail, because a mutant that was not evaluated
-      lowers the score. Without the gate a mutant that is equivalent to the
-      original is dismissed at its site with [[@mutate off]]. It is also [1],
-      with no report, when a [PATH] cannot be used, when no verdict file is
-      found, when a file that is not excluded cannot be read, is corrupt or has
-      another format version, or when every file is excluded.
-    - [2] for a usage error: an unknown option, a [--min-score] that is not a
-      number of the interval \[[0];[100]\], a flag that lacks its value, or a
-      [--color] value that the flag refuses. It is also [2] for a
-      [WINDTRAP_COLOR] that the flag would refuse, when [--color] is absent and
-      the report is printed. A document reads no [WINDTRAP_COLOR]. *)
+    - [0] when the report or the document was printed and the merge passes.
+      Without [--min-score], the merge passes when no mutant survived. Under
+      [--min-score], it passes when the score meets the gate, and a survivor
+      does not fail it. Unreached mutants are listed and do not fail the merge.
+      The result is also [0] for the help page.
+    - [1] when the report or the document was printed and the merge fails.
+      Without [--min-score], the merge fails when at least one mutant survived
+      every executable that reached it. Under [--min-score], it fails when the
+      score is below the gate. Thus under the gate, a merge with no survivor can
+      fail, because a mutant that was not evaluated lowers the score. Without
+      the gate, a mutant that is equivalent to the original is dismissed at its
+      site with [[@mutate off]].
+    - [1], with no report, when a [PATH] cannot be used or when no verdict file
+      is found. It is also [1] when a file that is not excluded cannot be read,
+      is corrupt or has another format version. It is also [1] when every file
+      is excluded.
+    - [2] for a usage error. A usage error is an unknown option, a flag that
+      lacks its value, a [--min-score] that is not in the interval
+      \[[0];[100]\], or a [--color] value that the flag refuses.
+    - [2] also for a [WINDTRAP_COLOR] that the flag would refuse, when [--color]
+      is absent and the report is printed. A document reads no [WINDTRAP_COLOR].
+*)
