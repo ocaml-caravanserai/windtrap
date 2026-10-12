@@ -278,7 +278,10 @@ let verdict_name : Verdicts.verdict -> string = function
   | Unreached -> "unreached"
 
 (* A reaching test names its executable by its index in ["executables"],
-   because two executables can have one label. *)
+   because two executables can have one label. A collection holds the
+   reaching tests of a survivor sorted and without duplicates, and
+   [survivals] is in the order of [files]. Thus the tests of a survivor are
+   sorted by file and then by test, without a sort here. *)
 let json files merged (m : Sections.mutation) =
   let string = Text.json_string in
   let survivals = List.mapi (fun i f -> (i, survived_in f.verdicts)) files in
@@ -303,7 +306,7 @@ let json files merged (m : Sections.mutation) =
             survivals
         in
         strf ",\n      \"tests\": [%s ]"
-          (String.concat "," (List.map test (List.sort_uniq compare tests)))
+          (String.concat "," (List.map test tests))
     | Killed | Not_evaluated | Outside_tests | Unreached -> ""
   in
   let mutant (r : Verdicts.record) =

@@ -613,6 +613,21 @@ records none:
           { "executable": 2, "test": ["calc", "adds zero"] } ] } ] }
   [1]
 
+In one executable, the tests are sorted name by name, the outermost name
+first, and a test that the file records two times is given once. The
+report compares the names that it prints, so its order can be different:
+
+  $ plant "$scratch/json-order" && cd "$scratch/json-order"
+  $ mkdata mutants _build/_mutants/s.mutants "$add=survived:z/b;a b;a/b;z/b"
+  $ run windtrap mutants --json | grep '"executable"'
+          { "executable": 0, "test": ["a", "b"] },
+          { "executable": 0, "test": ["a b"] },
+          { "executable": 0, "test": ["z", "b"] } ] } ] }
+  $ run windtrap mutants | grep 's\.mutants  '
+        s.mutants  a b
+        s.mutants  a › b
+        s.mutants  z › b
+
 A mutant that a child did not evaluate, and a mutant that ran outside
 every test, have their verdicts and no tests:
 

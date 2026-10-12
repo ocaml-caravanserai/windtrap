@@ -142,8 +142,9 @@
       that reached the survivor.
 
     ["tests"] has one object for each reaching test of the survivor in each file
-    in which it survived. The objects are sorted by file and then by test,
-    without duplicates. The object has these keys:
+    in which it survived. The objects are sorted by file, and then by the names
+    of the test, one name after the other. There are no duplicates. This order
+    can be different from the order of the report. The object has these keys:
     - ["executable"] is the index of the file in ["executables"].
     - ["test"] is the path of the test as an array of names, the outermost group
       first.
