@@ -442,9 +442,9 @@ type mutation = {
 val mutation_score : mutation -> float
 (** [mutation_score m] is the percentage of killed mutants among the scored
     mutants of [m], unrounded. The scored mutants are those killed, those that
-    survived and those not evaluated, so a mutant that no test reached and a
-    mutant that has no verdict count for nothing. It is {!percent} of [m.killed]
-    in their number, and thus [100.] when [m] has none. *)
+    survived and those not evaluated. A mutant that no test reached and a mutant
+    that has no verdict do not count. It is {!percent} of [m.killed] in their
+    number, and thus [100.] when [m] has none. *)
 
 val mutation_line : min:float option -> mutation -> span list
 (** [mutation_line ~min m] is the outcome line of a mutation report. It gives

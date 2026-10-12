@@ -100,10 +100,10 @@ what is non-obvious.
   coverage and mutants reports (`coverage.t`, `mutants.t`), what they
   cannot read (`unreadable.t`), a standard output that refuses the
   mutants report (`full.t`, on Linux, which alone has `/dev/full`), and
-  two executables that disagree about one library (`two_executables.t`). `mkdata.exe` writes the synthetic
-  dumps and verdict files the sessions merge; `pins_add.exe` and
-  `pins_sub.exe` are instrumented suites over `calc.ml`, a library under
-  both backends in every build.
+  two executables that disagree about one library (`two_executables.t`).
+  `mkdata.exe` writes the synthetic dumps and verdict files the sessions
+  merge; `pins_add.exe` and `pins_sub.exe` are instrumented suites over
+  `calc.ml`, a library under both backends in every build.
   `ppx/` holds the rewriters' sessions: their expansions and refusals,
   one session per rewriter (`coverage.t`, `mutate.t`, `expect.t`), over
   fixtures that are never compiled. Each block runs `pp.exe`, a

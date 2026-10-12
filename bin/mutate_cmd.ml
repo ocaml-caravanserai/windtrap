@@ -278,7 +278,7 @@ let verdict_name : Verdicts.verdict -> string = function
   | Unreached -> "unreached"
 
 (* A reaching test names its executable by its index in ["executables"],
-   because two executables can bear one label. *)
+   because two executables can have one label. *)
 let json files merged (m : Sections.mutation) =
   let string = Text.json_string in
   let survivals = List.mapi (fun i f -> (i, survived_in f.verdicts)) files in
@@ -444,8 +444,9 @@ let ansi o =
           (Os.resolve_color color ~tty:(Os.is_tty_stdout ())
              ~inside_dune:(Os.inside_dune ()) ~term_dumb:(Os.term_dumb ()))
 
-(* Without a gate one survivor fails the command. With one, only the score
-   does, and a document leaves the outcome line out, so the gate says it. *)
+(* Without a gate, one survivor fails the command. With a gate, only the score
+   can fail it. A document does not contain the outcome line. Thus the gate
+   gives that line on standard error. *)
 let gate o (m : Sections.mutation) =
   match o.min_score with
   | None -> if m.survivors = [] then 0 else 1

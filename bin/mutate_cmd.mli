@@ -91,11 +91,11 @@
 (** {1:gate The gate}
 
     The score is {!Windtrap.Private.Report_sections.mutation_score} of the
-    merge: the percentage of the killed mutants among those killed, survived and
-    not evaluated, unrounded, and [100.] when the merge has none of them.
-    [--min-score PCT] requires the score to be at least [PCT]. It runs after the
-    report or the document is printed, and does not run when standard output
-    refuses them. The outcome line of the report then states the gate and
+    merge. It is the percentage of the killed mutants among those killed,
+    survived and not evaluated, unrounded. It is [100.] when the merge has none
+    of them. [--min-score PCT] requires the score to be at least [PCT]. It runs
+    after the report or the document is printed, and does not run when standard
+    output refuses them. The outcome line of the report then states the gate and
     whether it is met ({!Windtrap.Private.Report_sections.mutation_line}). A
     score that prints equal to the threshold can thus fail. Without the flag,
     the command fails when a mutant survived. *)
@@ -168,13 +168,18 @@ val run : string list -> int
     flag that takes a value can also be spelled [--flag=value]. Every other
     argument that starts with [-] is refused, and the rest are [PATH]s.
 
-    [run] parses the arguments, reads [WINDTRAP_COLOR] for the report when
-    [--color] is absent, finds the {{!section-files}files}, judges and loads
-    them, prints the report or the document of the {{!section-merge}merge} on
-    standard output, and runs the gate, in that order. A step before the gate
-    that fails returns its code, and the steps after it do not run. Every other
-    line goes to standard error, through {!Windtrap.Private.Os.say} but for the
-    usage line that follows a usage error.
+    [run] does these steps, in this order:
+    - It parses the arguments.
+    - It reads [WINDTRAP_COLOR] for the report when [--color] is absent.
+    - It finds the {{!section-files}files}, judges them and loads them.
+    - It prints the report or the document of the {{!section-merge}merge} on
+      standard output.
+    - It runs the gate.
+
+    A step before the gate that fails returns its code, and the steps after it
+    do not run. Every other line goes to standard error, through
+    {!Windtrap.Private.Os.say} but for the usage line that follows a usage
+    error.
 
     The result is:
     - [0] when the report or the document was printed and the merge passes.

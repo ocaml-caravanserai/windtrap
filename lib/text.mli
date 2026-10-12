@@ -102,10 +102,10 @@ val escape_controls : string -> string
 (** {1:json JSON} *)
 
 val json_string : string -> string
-(** [json_string s] is [s] as a JSON string literal, between double quotes. Each
-    double quote and backslash is escaped with a backslash, LF, CR and TAB are
-    written [\n], [\r] and [\t], and each other byte below [0x20] is written
-    [\u00NN] in lowercase hexadecimal. Bytes that are not well-formed UTF-8 are
-    written [\ufffd], once for each replacement character that
-    [String.get_utf_8_uchar] decodes from them, so the result is always valid
-    JSON text. Every other code point passes as its UTF-8 bytes. *)
+(** [json_string s] is [s] as a JSON string literal, between double quotes. It
+    puts a backslash before each double quote and each backslash. It writes LF,
+    CR and TAB as [\n], [\r] and [\t]. It writes each other byte below [0x20] as
+    [\u00NN] in lowercase hexadecimal. [String.get_utf_8_uchar] decodes
+    replacement characters from bytes that are not well-formed UTF-8. It writes
+    each of these replacement characters as [\ufffd]. Thus the result is always
+    valid JSON text. Every other code point passes as its UTF-8 bytes. *)

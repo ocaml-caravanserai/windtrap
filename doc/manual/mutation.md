@@ -349,9 +349,9 @@ the score, the executables, and each mutant with its verdict. A
 survivor also has the tests that ran it. A test names its executable by
 its index in `executables`, because two executables can have the same
 name. Under `--min-score` the outcome line goes to standard error, and
-the exit code is that of the gate. When standard output refuses the
-document, for example on a full disk, the command gives the reason on
-standard error and exits 1, and the gate does not run. A later version
+the exit code is that of the gate. Standard output can refuse the
+document, for example on a full disk. The command then gives the reason
+on standard error and exits 1. The gate does not run. A later version
 can add keys. A change to the meaning of a key increments `version`.
 [`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each key:
 
