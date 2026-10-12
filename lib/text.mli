@@ -98,3 +98,14 @@ val escape_controls : string -> string
     written as [\xNN] in lowercase hexadecimal. LF is escaped too, so the result
     is one line. Every other byte passes. It is not injective: the four
     characters [\x1b] print as ESC does. *)
+
+(** {1:json JSON} *)
+
+val json_string : string -> string
+(** [json_string s] is [s] as a JSON string literal, between double quotes. Each
+    double quote and backslash is escaped with a backslash, LF, CR and TAB are
+    written [\n], [\r] and [\t], and each other byte below [0x20] is written
+    [\u00NN] in lowercase hexadecimal. Bytes that are not well-formed UTF-8 are
+    written [\ufffd], once for each replacement character that
+    [String.get_utf_8_uchar] decodes from them, so the result is always valid
+    JSON text. Every other code point passes as its UTF-8 bytes. *)
