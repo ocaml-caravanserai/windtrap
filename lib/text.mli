@@ -3,8 +3,8 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
-(** Strings read as text: lines, UTF-8 code points, byte search and control
-    bytes.
+(** Strings read as text: lines, UTF-8 code points, byte search, control bytes
+    and JSON string literals.
 
     Every function is pure, and {!elide_middle} is as pure as the [show] that it
     is given. Lengths are in code points. No function knows grapheme clusters or
