@@ -381,7 +381,7 @@ type options = {
   paths : string list;
 }
 
-(* The flags are the options; any other argument that starts with [-] is
+(* The flags are the options. Any other argument that starts with [-] is
    refused, and the rest are PATHs. *)
 let options args =
   let usage_error message =

@@ -435,7 +435,7 @@ dune exec windtrap -- mutants
 ```
 
 `--min-score PCT` gates on the score instead, the percentage of killed
-mutants; as with `--min`, set it a little under the measured score.
+mutants. Set PCT a little under the measured score, as for `--min`.
 `--json` gives each verdict to other tools.
 
 Mutation testing forks a child per mutant and is refused on Windows.

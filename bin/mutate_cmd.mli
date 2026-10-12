@@ -150,7 +150,7 @@ val run : string list -> int
     and [-help] print the help page on standard output. [--min-score PCT] and
     [--json] are those of the {{!section-gate}gate} and the
     {{!section-format}machine format}. [--color MODE] is the runner's flag, read
-    by {!Windtrap.Private.Cli.parse_color}; without it the colour mode of the
+    by {!Windtrap.Private.Cli.parse_color}. Without it, the colour mode of the
     report is its mirror [WINDTRAP_COLOR], read by
     {!Windtrap.Private.Cli.color_mode}. The mode is resolved for standard output
     by {!Windtrap.Private.Os.resolve_color}, and a document is never styled. A
