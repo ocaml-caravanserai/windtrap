@@ -1320,7 +1320,7 @@ mutant:
 
 Code that gives its location keeps the mutants of its two copies:
 
-  $ mut --impl ./fixture_equivalent_located.ml | ../elide.exe | head -11
+  $ mut --impl ./fixture_equivalent_located.ml | ../elide.exe | head -12
   mutation sites of "./fixture_equivalent_located.ml" in Windtrap_mut_________fixture_equivalent_located___ml, with type 'a operands:
     0: 7:20 "ge" "x > 0" -> "x >= 0"
     1: 8:15 "not" "c" -> "not c"
@@ -1330,8 +1330,9 @@ Code that gives its location keeps the mutants of its two copies:
     5: 12:20 "drop" "| 0 -> ..." -> "| 0 when false -> ..."
     6: 12:42 "drop" "| _ -> ..." -> "| _ when false -> ..."
     7: 13:21 "not" "c" -> "not c"
-    8: 14:21 "not" "c" -> "not c"
-    9: 15:23 "not" "c" -> "not c"
+    8: 16:21 "not" "c" -> "not c"
+    9: 17:23 "not" "c" -> "not c"
+    10: 18:18 "not" "c" -> "not c"
 
   $ mut --impl ./fixture_equivalent_log.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml:
