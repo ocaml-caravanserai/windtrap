@@ -559,12 +559,46 @@ let erase_locations =
     method! location _ = Location.none
   end
 
+exception Larger
+
+(* [size ~limit e] is the number of locations in [e], or [None] when [e] has
+   more than [limit]. *)
+let size ~limit e =
+  let count = ref 0 in
+  let counter =
+    object
+      inherit Ast_traverse.iter
+
+      method! location _ =
+        incr count;
+        if !count > limit then raise_notrace Larger
+    end
+  in
+  match counter#expression e with () -> Some !count | exception Larger -> None
+
+(* [same_size a b] tells that [a] and [b] have the same number of locations.
+   The two counts stop at a limit that doubles, so that the check costs the
+   size of the smaller tree. In [if c then 0 else if ...], the [else] branch
+   holds the rest of the chain, and a full count of it at each [if] makes the
+   time increase with the square of the chain length. *)
+let same_size a b =
+  let rec within limit =
+    match (size ~limit a, size ~limit b) with
+    | Some m, Some n -> m = n
+    | Some _, None | None, Some _ -> false
+    | None, None -> within (2 * limit)
+  in
+  within 64
+
 (* [same a b] tells that [a] and [b] are one expression at two places, which
    gives one value at each. The two trees are compared without their
-   locations, and not as texts, which lose the blanks of a string. *)
+   locations, and not as texts, which lose the blanks of a string. The sizes
+   are compared first, so that [same] costs the size of the smaller tree at
+   most. *)
 let same a b =
-  (not (locates#expression a false))
+  same_size a b
   && erase_locations#expression a = erase_locations#expression b
+  && not (locates#expression a false)
 
 (* [calls p e] tells that [e] applies a function that [p] accepts, as
    [f x], [f @@ x] or [x |> f], or gives one to [Printf.ksprintf] or
@@ -1130,7 +1164,9 @@ class instrumenter ~keeps ~loggers ~module_name =
       match e.pexp_desc with
       | Pexp_ifthenelse (condition, then_, else_) ->
           let branches =
-            match else_ with Some else_ -> same then_ else_ | None -> false
+            match else_ with
+            | Some else_ -> self#keeps Filter && same then_ else_
+            | None -> false
           in
           {
             e with

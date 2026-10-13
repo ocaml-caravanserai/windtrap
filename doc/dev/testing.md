@@ -139,6 +139,10 @@ what is non-obvious.
   `mutate_effects.t` removes the suffix that ppxlib 0.38 adds to the
   name of the effect encoding, so that its golden holds with ppxlib 0.37
   too.
+  `mutate_scale.t` runs the mutation rewriter on an else-if chain of
+  20000 branches under a limit of processor time. The limit stops a
+  rewriter whose time increases with the square of the chain length.
+  The session does not run on Windows, whose shell has no `ulimit`.
   `coverage.t` holds the two backends' attribute grammars in parity:
   both accept every spelling of `spellings.ml`, an `off` with a reason
   included, and each coverage refusal reads as the mutation one once
