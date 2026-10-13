@@ -83,7 +83,7 @@ let unmutated ~scope reason =
         strf "no mutant of this executable's catalogue is under %s"
           (String.concat "," scope)
     | All_dismissed ->
-        "every mutant of this executable is dismissed by [@mutate off] or \
+        "every mutant this run could test is dismissed by [@mutate off] or \
          filtered by the rewriter"
   in
   strf "WINDTRAP_MUTATE is set, but %s, so the suite runs without mutation" why

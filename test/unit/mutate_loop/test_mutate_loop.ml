@@ -20,10 +20,11 @@ let suite_exe = Filename.concat exe_dir "suite_main.exe"
 let plain_exe = Filename.concat exe_dir "plain_main.exe"
 let runaway_exe = Filename.concat exe_dir "runaway/runaway_main.exe"
 let inline_exe = Filename.concat exe_dir "inline/runner_main.exe"
+let scoped_exe = Filename.concat exe_dir "scoped/scoped_main.exe"
 
 (* Under --instrument-with the fixtures link an instrumented core, so every
    loop scenario passes this directory as its scope: the counts below are
-   those of subject.ml, spinner.ml and inline_armed.ml alone. *)
+   those of subject.ml, spinner.ml, inline_armed.ml and quiet.ml alone. *)
 let scope = "test/unit/mutate_loop/"
 let mutate = "--mutate=" ^ scope
 let mutate_mirror = ("WINDTRAP_MUTATE", scope)
@@ -1049,9 +1050,38 @@ let unwritable () =
   starts_with ~affix:"windtrap: could not write the verdict file: " r.err;
   equal int 1 (List.length (lines (String.trim r.err)))
 
+(* scoped_main links subject.ml and quiet.ml, whose only site is
+   filtered. A scope of subject.ml leaves the filtered mutant of quiet.ml
+   out, as it leaves out the other mutants of quiet.ml. *)
+let filtered_in_scope () =
+  let subject_rows =
+    [
+      "subject.ml:15 killed";
+      "subject.ml:18 unreached";
+      "subject.ml:21 unreached";
+      "subject.ml:27 unreached";
+      "subject.ml:38 filtered: zero operand";
+    ]
+  in
+  let whole = spawn ~exe:scoped_exe [ mutate ] in
+  let one = spawn ~exe:scoped_exe [ "--mutate=" ^ scope ^ "subject.ml" ] in
+  equal (pair string text) ("exited 0", "") (whole.status, whole.err);
+  equal
+    (option (list string))
+    (Some ("scoped/quiet.ml:8 filtered: zero operand" :: subject_rows))
+    (rows whole);
+  equal (pair string text) ("exited 0", "") (one.status, one.err);
+  equal (option (list string)) (Some subject_rows) (rows one);
+  equal string
+    "mutants: 1 reached by this suite, 1 killed, 3 never reached, 1 filtered, \
+     score 100.0%"
+    (outcome one.out)
+
 let verdict_file =
   group "The verdict file"
     [
+      test "a scope records the filtered mutants of its files alone"
+        filtered_in_scope;
       test
         "a loop that ran whole under a scope writes its file, with its writer"
         written;
@@ -1114,6 +1144,22 @@ let environment =
              executable's catalogue is under perhaps, so the suite runs \
              without mutation\n"
             r.err);
+      test "WINDTRAP_MUTATE where every mutant is filtered runs the suite"
+        (fun () ->
+          let r =
+            spawn ~exe:scoped_exe
+              ~env:[ ("WINDTRAP_MUTATE", scope ^ "scoped/") ]
+              []
+          in
+          equal (pair string string)
+            ("exited 0", "scoped: 2 passed in <time>.")
+            (r.status, masked (String.trim r.out));
+          equal text
+            "windtrap: WINDTRAP_MUTATE is set, but every mutant this run could \
+             test is dismissed by [@mutate off] or filtered by the rewriter, \
+             so the suite runs without mutation\n"
+            r.err;
+          equal (option (list string)) None (rows r));
       test "WINDTRAP_MUTATE on a build with no mutants names the backend"
         (fun () ->
           if core_instrumented then
@@ -1218,6 +1264,15 @@ let refusals =
         no_backend;
       test "a scope is refused by name even where there is nothing to mutate"
         loud_scope;
+      test "a scope where every mutant is filtered is refused" (fun () ->
+          let r = spawn ~exe:scoped_exe [ "--mutate=" ^ scope ^ "scoped/" ] in
+          equal string "exited 1" r.status;
+          equal text
+            "windtrap: every mutant this run could test is dismissed by \
+             [@mutate off] or filtered by the rewriter; there is nothing to \
+             test\n"
+            r.err;
+          equal (option (list string)) None (rows r));
       test
         "a suite that spawned a domain is refused, since the loop cannot fork"
         (fun () ->
@@ -1827,7 +1882,7 @@ let () =
   at_exit (fun () ->
       List.iter
         (fun exe -> remove (Verdicts.output_file ~exe))
-        [ suite_exe; inline_exe; runaway_exe; plain_exe ])
+        [ suite_exe; inline_exe; runaway_exe; plain_exe; scoped_exe ])
 
 let () =
   exit

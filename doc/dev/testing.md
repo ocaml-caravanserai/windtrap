@@ -42,7 +42,9 @@ what is non-obvious.
   through a real spawned process (a loop that forks cannot be observed
   from inside its own image), with `plain_main.exe` as the zero-mutant
   control that must be declined by name, `runaway/` for the hit-count
-  budget and `inline/` for an armed inline partition.
+  budget, `inline/` for an armed inline partition and `scoped/` for a
+  second file whose one site is filtered, which a scope of the other
+  file must not record.
   Under `semantics/`, `coverage/` and `mutate/` are the
   semantics-preservation suites: a fixture library instrumented
   unconditionally through `(pps)`, run and compared with the

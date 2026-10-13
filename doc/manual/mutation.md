@@ -309,6 +309,12 @@ the source spells it. `-no-filter` switches every filter off:
 `[@mutate off "reason"]` on a filtered site dismisses it, and the site
 is then neither tested nor counted.
 
+When each mutant that a run can test is dismissed or filtered, there
+is nothing to test. `--mutate` then refuses the run and exits 1, and
+`WINDTRAP_MUTATE` runs the suite without mutation. The two write no
+verdict file, so `windtrap mutants` does not count these filtered
+mutants.
+
 ## Mutation testing a project
 
 A suite's mutation run covers its own executable. To judge the project,

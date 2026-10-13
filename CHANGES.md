@@ -179,6 +179,9 @@
 - `windtrap mutants --json` gives the count `"filtered"` in
   `"summary"`, and each filtered mutant with its `"reason"` in the
   array `"filtered"`, not in `"mutants"`.
+- `WINDTRAP_MUTATE` on a suite whose mutants in scope are all dismissed
+  or filtered says that of the mutants that the run could test, not of
+  every mutant of the executable.
 - A verdict file starts with `windtrap-mutants-v4`, and
   `windtrap mutants` refuses one of an earlier version; a new mutation
   run writes it again.
