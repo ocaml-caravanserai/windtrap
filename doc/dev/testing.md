@@ -60,10 +60,11 @@ what is non-obvious.
   generated code under fatal warnings, a shadowed `not` and `bool`, a
   constructor `()`, `true` or `false` of the file (declared or as an
   extension constructor), a declared `Some` and `(::)`, a `let rec`
-  value of a structure, of an expression and of a class, the
-  typing-order and expected-type corpora, and a registration suite that
-  arms each mutant and checks that the library then behaves as the
-  mutant's text says. An instrumenter change that cannot keep the
+  value of a structure, of an expression and of a class, a site of each
+  filter, the typing-order and expected-type corpora, and a registration
+  suite that arms each mutant and checks that the library then behaves
+  as the mutant's text says, and that a filtered mutant changes
+  nothing. An instrumenter change that cannot keep the
   semantics suites green is rejected, not accommodated; grow the
   fixtures with every expression form the instrumenter learns.
 - `cram/`: cram sessions, one directory per subject. Cram pins stdout,

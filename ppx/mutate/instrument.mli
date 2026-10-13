@@ -290,7 +290,8 @@
     expression with no other: an expression that holds [assert], [__LOC__],
     [__LINE__], [__POS__], [__LOC_OF__], [__LINE_OF__] or [__POS_OF__], a
     [match], a [function] with cases, a pattern that can fail to match, or an
-    extension node.
+    extension node. The rewriter does not see the location that a backtrace
+    gives for a call.
 
     A filter ends the chain of its operator. In [a + b + 0], the operand [a + b]
     starts at the first byte of the site and has its identifier. Thus the
