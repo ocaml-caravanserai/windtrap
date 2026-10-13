@@ -1359,15 +1359,19 @@ Code that gives its location keeps the mutants of its two copies:
 
   $ mut -lit --impl ./fixture_equivalent_lit.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_lit.ml" in Windtrap_mut_________fixture_equivalent_lit___ml:
-    0: 6:54 "sub" "n + 1" -> "n - 1"
-    1: 6:59 "inc" "1" -> "2", filtered "failure message"
-    2: 6:62 "inc" "10" -> "11", filtered "failure message"
-    3: 7:51 "inc" "3" -> "4", filtered "failure message"
-    4: 8:54 "inc" "4" -> "5", filtered "failure message"
-    5: 9:29 "inc" "5" -> "6", filtered "failure message"
-    6: 10:55 "inc" "6" -> "7"
-    7: 11:56 "inc" "8" -> "9", filtered "failure message"
-    8: 12:50 "inc" "9" -> "10", filtered "failure message"
+    0: 7:54 "sub" "n + 1" -> "n - 1"
+    1: 7:59 "inc" "1" -> "2", filtered "failure message"
+    2: 7:62 "inc" "10" -> "11", filtered "failure message"
+    3: 8:51 "inc" "3" -> "4", filtered "failure message"
+    4: 9:54 "inc" "4" -> "5", filtered "failure message"
+    5: 10:29 "inc" "5" -> "6", filtered "failure message"
+    6: 11:55 "inc" "6" -> "7"
+    7: 12:56 "inc" "8" -> "9", filtered "failure message"
+    8: 13:50 "inc" "9" -> "10", filtered "failure message"
+    9: 14:38 "one" "0" -> "1", filtered "failure message"
+    10: 15:44 "zero" "2.5" -> "0.", filtered "failure message"
+    11: 16:46 "one" "0." -> "1.", filtered "failure message"
+    12: 17:39 "flip" "true" -> "false", filtered "failure message"
   let fail n =
     failwith
       (Printf.sprintf "item %d of %d"
@@ -1391,11 +1395,22 @@ Code that gives its location keeps the mutants of its two copies:
              else 6)))
   let kformatted () = Format.kasprintf failwith "code %d" 8
   let qualified () = Stdlib.failwith (string_of_int 9)
+  let zero () = failwith (string_of_int 0)
+  let float () = invalid_arg (string_of_float 2.5)
+  let float_zero () = failwith (string_of_float 0.)
+  let flag () = failwith (string_of_bool true)
 
-  $ mut -lit --impl ./fixture_equivalent_lit_bound.ml | ../elide.exe | head -3
+  $ mut -lit --impl ./fixture_equivalent_lit_bound.ml | ../elide.exe | head -4
   mutation sites of "./fixture_equivalent_lit_bound.ml" in Windtrap_mut_________fixture_equivalent_lit_bound___ml:
     0: 3:17 "sub" "n + 1" -> "n - 1"
     1: 3:21 "inc" "1" -> "2"
+    2: 4:23 "inc" "7" -> "8"
+
+  $ mut -lit --impl ./fixture_equivalent_lit_bound_invalid.ml | ../elide.exe | head -4
+  mutation sites of "./fixture_equivalent_lit_bound_invalid.ml" in Windtrap_mut_________fixture_equivalent_lit_bound_invalid___ml:
+    0: 3:20 "sub" "n + 1" -> "n - 1"
+    1: 3:24 "inc" "1" -> "2"
+    2: 4:26 "inc" "7" -> "8"
 
 The backend flag -no-filter tests every mutant:
 
