@@ -297,7 +297,8 @@ other code. A test can read what `print_string`, `Printf.printf` and
 mutants. A literal in the argument of `raise` keeps its mutant too,
 because a test can compare the exception.
 
-A project that logs through its own functions gives their names with
+A project that logs through its own functions, or through
+`Printf.eprintf` or `prerr_endline`, gives their names with
 `-log-function` after the backend, one flag for each name, spelled as
 the source spells it. `-no-filter` switches every filter off:
 
