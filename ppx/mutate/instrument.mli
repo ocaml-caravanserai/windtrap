@@ -267,14 +267,19 @@
       inside the condition and the branches keep their mutants. A [con] mutant
       also changes which operand is evaluated, and has no filter.
     - [same body as the next case]: the [arm] mutant of a case without a guard
-      whose pattern binds no variable, when the next case is [_] without a
-      guard, or [exception _] for an exception case of a [match], and the two
-      bodies are one expression.
+      whose pattern binds no variable and has no [lazy] pattern, when the next
+      case is [_] without a guard, or [exception _] for an exception case of a
+      [match], and the two bodies are one expression. A [lazy] pattern forces
+      the value, and the next case does not.
     - [logging call]: each site in the arguments of a logging function, as in
       [Logs.debug (fun m -> m "%d" (x + 1))]. The logging functions are
       [Logs.app], [Logs.err], [Logs.warn], [Logs.info], [Logs.debug], [Logs.msg]
       and the names that [log_functions] adds, as the source spells them. The
-      call itself keeps its [call] mutant. A printing function, as
+      call itself keeps its [call] mutant. A statement in the arguments, which
+      is the left operand of a sequence or the expression of [let () = e in],
+      keeps its mutants, with the sites inside it, because it acts on the state
+      of the program. The filter does not see the other effects, as of a
+      function with an effect that the message calls. A printing function, as
       [Printf.printf], is no logging function, because a test can read what it
       prints.
     - [failure message]: a [lit] site in the arguments of [failwith] or

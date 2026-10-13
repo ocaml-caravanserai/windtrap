@@ -1084,22 +1084,24 @@ filtered, with its reason, and gives it no guard:
 
   $ mut --impl ./fixture_equivalent_arm.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_arm.ml" in Windtrap_mut_________fixture_equivalent_arm___ml:
-    0: 6:20 "drop" "| `A -> ..." -> "| `A when false -> ...", filtered "same body as the next case"
-    1: 6:30 "drop" "| _ -> ..." -> "| _ when false -> ..."
-    2: 7:21 "drop" "| Some _x -> ..." -> "| Some _x when false -> ..."
-    3: 7:36 "drop" "| _ -> ..." -> "| _ when false -> ..."
-    4: 8:25 "drop" "| `A when p -> ..." -> "| `A when false -> ..."
-    5: 8:33 "not" "p" -> "not p"
-    6: 8:42 "drop" "| _ -> ..." -> "| _ when false -> ..."
-    7: 9:21 "drop" "| `A -> ..." -> "| `A when false -> ..."
-    8: 9:31 "drop" "| x -> ..." -> "| x when false -> ..."
-    9: 9:36 "skip" "ignore x" -> "()"
-    10: 10:22 "drop" "| `A -> ..." -> "| `A when false -> ...", filtered "same body as the next case"
-    11: 10:35 "drop" "| _ -> ..." -> "| _ when false -> ..."
-    12: 11:30 "drop" "| Not_found -> ..." -> "| Not_found when false -> ...", filtered "same body as the next case"
-    13: 11:47 "drop" "| _ -> ..." -> "| _ when false -> ..."
-    14: 13:27 "drop" "| exception Not_found -> ..." -> "| exception Not_found when false -> ...", filtered "same body as the next case"
-    15: 13:54 "drop" "| exception _ -> ..." -> "| exception _ when false -> ..."
+    0: 7:20 "drop" "| `A -> ..." -> "| `A when false -> ...", filtered "same body as the next case"
+    1: 7:30 "drop" "| _ -> ..." -> "| _ when false -> ..."
+    2: 8:21 "drop" "| Some _x -> ..." -> "| Some _x when false -> ..."
+    3: 8:36 "drop" "| _ -> ..." -> "| _ when false -> ..."
+    4: 9:25 "drop" "| `A when p -> ..." -> "| `A when false -> ..."
+    5: 9:33 "not" "p" -> "not p"
+    6: 9:42 "drop" "| _ -> ..." -> "| _ when false -> ..."
+    7: 10:21 "drop" "| `A -> ..." -> "| `A when false -> ..."
+    8: 10:31 "drop" "| x -> ..." -> "| x when false -> ..."
+    9: 10:36 "skip" "ignore x" -> "()"
+    10: 11:22 "drop" "| `A -> ..." -> "| `A when false -> ...", filtered "same body as the next case"
+    11: 11:35 "drop" "| _ -> ..." -> "| _ when false -> ..."
+    12: 12:30 "drop" "| Not_found -> ..." -> "| Not_found when false -> ...", filtered "same body as the next case"
+    13: 12:47 "drop" "| _ -> ..." -> "| _ when false -> ..."
+    14: 14:27 "drop" "| exception Not_found -> ..." -> "| exception Not_found when false -> ...", filtered "same body as the next case"
+    15: 14:54 "drop" "| exception _ -> ..." -> "| exception _ when false -> ..."
+    16: 15:22 "drop" "| (lazy 0) -> ..." -> "| (lazy 0) when false -> ..."
+    17: 15:36 "drop" "| _ -> ..." -> "| _ when false -> ..."
   let kind =
     ((function
       | `A when true -> 0
@@ -1201,15 +1203,35 @@ filtered, with its reason, and gives it no guard:
           then false
           else true -> 0)
     [@ocaml.warning "-8-57"])
+  let forced =
+    ((function
+      | (lazy 0) when
+          if
+            Windtrap_mut_________fixture_equivalent_arm___ml.___windtrap_armed___
+              16
+          then false
+          else true -> 1
+      | _ when
+          if
+            Windtrap_mut_________fixture_equivalent_arm___ml.___windtrap_armed___
+              17
+          then false
+          else true -> 1)
+    [@ocaml.warning "-8-57"])
 
   $ mut --impl ./fixture_equivalent_log.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml:
-    0: 6:45 "sub" "x + 1" -> "x - 1", filtered "logging call"
-    1: 6:70 "none" "Some x" -> "None", filtered "logging call"
-    2: 7:42 "add" "x - 1" -> "x + 1", filtered "logging call"
-    3: 8:33 "sub" "x + 1" -> "x - 1"
-    4: 11:2 "skip" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
-    5: 11:29 "sub" "x + 1" -> "x - 1"
+    0: 8:45 "sub" "x + 1" -> "x - 1", filtered "logging call"
+    1: 8:70 "none" "Some x" -> "None", filtered "logging call"
+    2: 9:42 "add" "x - 1" -> "x + 1", filtered "logging call"
+    3: 10:33 "sub" "x + 1" -> "x - 1"
+    4: 13:2 "skip" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
+    5: 13:29 "sub" "x + 1" -> "x - 1"
+    6: 17:2 "skip" "Logs.debug (fun m -> y := ((!y) + 1); (let () = incr y in m \"%d\" (!y)))" -> "()"
+    7: 18:6 "skip" "y := ((!y) + 1)" -> "()"
+    8: 18:11 "sub" "(!y) + 1" -> "(!y) - 1"
+    9: 19:15 "skip" "incr y" -> "()"
+    10: 21:2 "sub" "(!y) + x" -> "(!y) - x"
   let debug x =
     Logs.debug
       (fun m -> m "%d %a" (x + 1) (let open Fmt in option int) (Some x))
@@ -1239,16 +1261,50 @@ filtered, with its reason, and gives it no guard:
                else __windtrap_mut_5_l + __windtrap_mut_5_r));
        ());
     x
+  let counted y x =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
+           6)
+    then
+      (Logs.debug
+         (fun m ->
+            if
+              Stdlib.not
+                (Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
+                   7)
+            then
+              (y :=
+                 ((let (__windtrap_mut_8_l, __windtrap_mut_8_r) = ((!y), 1) in
+                   if
+                     Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
+                       8
+                   then __windtrap_mut_8_l - __windtrap_mut_8_r
+                   else __windtrap_mut_8_l + __windtrap_mut_8_r));
+               ());
+            (let () =
+               if
+                 Stdlib.not
+                   (Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
+                      9)
+               then incr y in
+             m "%d" (!y)));
+       ());
+    (let (__windtrap_mut_10_l, __windtrap_mut_10_r) = ((!y), x) in
+     if
+       Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 10
+     then __windtrap_mut_10_l - __windtrap_mut_10_r
+     else __windtrap_mut_10_l + __windtrap_mut_10_r)
 
   $ mut -log-function Log.debug --impl ./fixture_equivalent_log.ml | ../elide.exe | head -8
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml:
-    0: 6:45 "sub" "x + 1" -> "x - 1", filtered "logging call"
-    1: 6:70 "none" "Some x" -> "None", filtered "logging call"
-    2: 7:42 "add" "x - 1" -> "x + 1", filtered "logging call"
-    3: 8:33 "sub" "x + 1" -> "x - 1"
-    4: 11:2 "skip" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
-    5: 11:29 "sub" "x + 1" -> "x - 1", filtered "logging call"
-  let debug x =
+    0: 8:45 "sub" "x + 1" -> "x - 1", filtered "logging call"
+    1: 8:70 "none" "Some x" -> "None", filtered "logging call"
+    2: 9:42 "add" "x - 1" -> "x + 1", filtered "logging call"
+    3: 10:33 "sub" "x + 1" -> "x - 1"
+    4: 13:2 "skip" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
+    5: 13:29 "sub" "x + 1" -> "x - 1", filtered "logging call"
+    6: 17:2 "skip" "Logs.debug (fun m -> y := ((!y) + 1); (let () = incr y in m \"%d\" (!y)))" -> "()"
 
   $ mut -lit --impl ./fixture_equivalent_lit.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_lit.ml" in Windtrap_mut_________fixture_equivalent_lit___ml:

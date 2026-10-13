@@ -278,11 +278,14 @@ outcome line gives their total, as `3 filtered`. The reasons are these:
   mutants.
 - `same body as the next case`: in `| A -> 0 | _ -> 0`, the `drop`
   mutant of `A` sends `A` to `_`, which gives the same value. The case
-  has no guard and binds no variable, and the next case is `_` without
-  a guard.
+  has no guard, binds no variable and has no `lazy` pattern, which
+  forces a value. The next case is `_` without a guard.
 - `logging call`: each site in the arguments of `Logs.app`,
   `Logs.err`, `Logs.warn`, `Logs.info`, `Logs.debug` and `Logs.msg`.
-  The call itself keeps its `skip` mutant.
+  The call itself keeps its `skip` mutant. A statement in the
+  arguments, as `incr n;` in the message function, changes the state of
+  the program, so it keeps its mutants. The rewriter does not see other
+  effects, as those of a function that the message calls.
 - `failure message`: under `-lit`, a literal in the arguments of
   `failwith` or `invalid_arg`.
 

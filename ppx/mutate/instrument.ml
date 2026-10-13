@@ -655,7 +655,9 @@ let rec catch_all ~exception_case p =
   | Ppat_constraint (inner, _) -> catch_all ~exception_case inner
   | _ -> false
 
-let binds =
+(* [acts p] tells that [p] binds a variable, or forces a lazy value as it
+   matches, which can raise or have an effect. *)
+let acts =
   object
     inherit [bool] Ast_traverse.fold as super
 
@@ -663,7 +665,7 @@ let binds =
       found
       ||
       match p.ppat_desc with
-      | Ppat_var _ | Ppat_alias _ | Ppat_unpack _ -> true
+      | Ppat_var _ | Ppat_alias _ | Ppat_unpack _ | Ppat_lazy _ -> true
       | _ -> super#pattern p found
   end
 
@@ -948,7 +950,8 @@ class instrumenter ~keeps ~loggers ~module_name =
     val mutable suppressed = false (* inside a [[@@@mutate off]] region *)
 
     (* Inside the arguments of a logging call, and of [failwith] or
-       [invalid_arg]. *)
+       [invalid_arg]. A statement there is outside the logging call, because
+       it acts on the state of the program. *)
     val mutable logging = false
     val mutable message = false
 
@@ -971,10 +974,10 @@ class instrumenter ~keeps ~loggers ~module_name =
 
     method private keeps family = keeps family && not (recursive && family = Ret)
 
-    method private within_logging : 'a. (unit -> 'a) -> 'a =
-      fun f ->
+    method private within_logging : 'a. bool -> (unit -> 'a) -> 'a =
+      fun flag f ->
         let outer = logging in
-        logging <- true;
+        logging <- flag;
         let result = f () in
         logging <- outer;
         result
@@ -1195,13 +1198,20 @@ class instrumenter ~keeps ~loggers ~module_name =
                   ] );
           }
       | Pexp_sequence (first, rest) ->
-          let first = self#mutate Statement first in
+          let first =
+            self#within_logging false (fun () -> self#mutate Statement first)
+          in
           let rest = self#expression rest in
           { e with pexp_desc = Pexp_sequence (first, rest) }
       | Pexp_let (rec_flag, bindings, body) ->
           let binding vb =
             if is_unit_binding vb then
-              { vb with pvb_expr = self#mutate Unit_binding vb.pvb_expr }
+              {
+                vb with
+                pvb_expr =
+                  self#within_logging false (fun () ->
+                      self#mutate Unit_binding vb.pvb_expr);
+              }
             else self#value_binding vb
           in
           let bindings =
@@ -1252,7 +1262,7 @@ class instrumenter ~keeps ~loggers ~module_name =
             silence ~loc:{ e.pexp_loc with loc_ghost = true } "-57" e
           else e
       | Pexp_apply _ when self#keeps Filter && calls (names loggers) e ->
-          self#within_logging (fun () -> super#expression e)
+          self#within_logging true (fun () -> super#expression e)
       | Pexp_apply _ when self#keeps Message && calls is_failure e ->
           self#within_message (fun () -> super#expression e)
       | _ -> super#expression e
@@ -1279,13 +1289,14 @@ class instrumenter ~keeps ~loggers ~module_name =
       (* A case without a guard whose body is that of the next case, when the
          next case catches all that it catches, gives the same value
          dropped. The case binds no variable, so that the two bodies read
-         the same names. *)
+         the same names, and forces no lazy value, which the next case does
+         not force. *)
       let equivalent c next =
         match next with
         | Some next
           when self#keeps Filter && Option.is_none c.pc_guard
                && Option.is_none next.pc_guard
-               && (not (binds#pattern c.pc_lhs false))
+               && (not (acts#pattern c.pc_lhs false))
                && catch_all
                     ~exception_case:
                       ((not handlers) && not (matches_values c.pc_lhs))
