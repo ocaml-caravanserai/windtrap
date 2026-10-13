@@ -18,7 +18,7 @@ in full. The file is mutated under its own name:
         rewrite: string ;
         before: string ;
         after: string ;
-        dismissed: string option }
+        dismissed: Windtrap_runtime.Mutate.dismissal option }
       type 'a operands = ('a * 'a)
       let ___windtrap_armed___ =
         Windtrap_runtime.Mutate.register ~file:"./fixture_input_name.ml"
