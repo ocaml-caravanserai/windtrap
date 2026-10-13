@@ -1249,6 +1249,19 @@ mutant:
     22: 27:22 "drop" "| ((module M) : (module S)) -> ..." -> "| ((module M) : (module S)) when false -> ..."
     23: 27:44 "drop" "| _ -> ..." -> "| _ when false -> ..."
 
+Code that gives its location keeps the mutants of its two copies:
+
+  $ mut --impl ./fixture_equivalent_located.ml | ../elide.exe | head -9
+  mutation sites of "./fixture_equivalent_located.ml" in Windtrap_mut_________fixture_equivalent_located___ml, with type 'a operands:
+    0: 6:20 "ge" "x > 0" -> "x >= 0"
+    1: 7:15 "not" "c" -> "not c"
+    2: 8:21 "not" "c" -> "not c"
+    3: 9:15 "not" "c" -> "not c"
+    4: 10:16 "not" "c" -> "not c"
+    5: 11:20 "drop" "| 0 -> ..." -> "| 0 when false -> ..."
+    6: 11:42 "drop" "| _ -> ..." -> "| _ when false -> ..."
+    7: 12:21 "not" "c" -> "not c"
+
   $ mut --impl ./fixture_equivalent_log.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml:
     0: 8:45 "sub" "x + 1" -> "x - 1", filtered "logging call"

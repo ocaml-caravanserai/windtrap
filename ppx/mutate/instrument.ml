@@ -524,11 +524,17 @@ let rec is_irrefutable p =
   | Ppat_tuple ps -> List.for_all is_irrefutable ps
   | _ -> false
 
+(* The primitives that give the location of their use. *)
+let locations =
+  [
+    "__LOC__"; "__LINE__"; "__POS__"; "__LOC_OF__"; "__LINE_OF__"; "__POS_OF__";
+  ]
+
 (* What can give two copies of one text two values: [assert] and
-   [__LOC__] and its kin, which give the location of the copy, a pattern that
-   can fail and a [match] or a [function] with cases, which can fail on a
-   guard, whose [Match_failure] gives it too, and an extension node, which a
-   later rewriter expands. *)
+   [__LOC__] and its kin under any path, as [Stdlib.__LOC__], which give the
+   location of the copy, a pattern that can fail and a [match] or a
+   [function] with cases, which can fail on a guard, whose [Match_failure]
+   gives it too, and an extension node, which a later rewriter expands. *)
 let locates =
   object
     inherit [bool] Ast_traverse.fold as super
@@ -537,16 +543,11 @@ let locates =
       found
       ||
       match e.pexp_desc with
-      | Pexp_assert _ | Pexp_match _
-      | Pexp_function (_, _, Pfunction_cases _)
-      | Pexp_ident
-          {
-            txt =
-              Lident
-                ( "__LOC__" | "__LINE__" | "__POS__" | "__LOC_OF__"
-                | "__LINE_OF__" | "__POS_OF__" );
-            _;
-          } ->
+      | Pexp_assert _ | Pexp_match _ | Pexp_function (_, _, Pfunction_cases _)
+        ->
+          true
+      | Pexp_ident { txt = Lident name | Ldot (_, name); _ }
+        when List.mem name locations ->
           true
       | _ -> super#expression e found
 
