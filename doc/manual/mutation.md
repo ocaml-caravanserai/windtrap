@@ -271,8 +271,8 @@ outcome line gives their total, as `3 filtered`. The reasons are these:
 - `zero operand`: `x + 0` and `x - 0` are equal on integers, so their
   `sub` and `add` mutants are filtered. On floats, `-0. +. 0.` is `0.`
   and `-0. -. 0.` is `-0.`, so `x +. 0.` keeps its mutant.
-- `same operands`: `a && a` and `a || a` are `a` when `a` is a name, a
-  constant, a constructor or a field, which only gives a value.
+- `same operands`: `a && a` and `a || a` are `a` when `a` is a name,
+  `true`, `false` or a field, which only gives a value.
 - `same branches`: in `if c then e else e`, the `not` or comparison
   mutant of `c` changes nothing. The sites inside `c` and `e` keep their
   mutants.

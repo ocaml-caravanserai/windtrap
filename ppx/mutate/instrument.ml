@@ -506,13 +506,13 @@ let is_zero e =
   | Pexp_constant (Pconst_integer (s, None)) -> int_of_string_opt s = Some 0
   | _ -> false
 
-(* An expression that gives one value each time and does nothing else, so
-   that [a && a] and [a || a] are [a] with one evaluation or two. *)
+(* An operand of [&&] or [||] that gives one value each time and does
+   nothing else, so that [a && a] and [a || a] are [a] with one evaluation
+   or two. Such a boolean is a name, a constructor without an argument, as
+   [true], or a field. *)
 let rec is_pure e =
   match e.pexp_desc with
-  | Pexp_ident _ | Pexp_constant _ -> true
-  | Pexp_construct (_, arg) | Pexp_variant (_, arg) ->
-      Option.for_all is_pure arg
+  | Pexp_ident _ | Pexp_construct (_, None) -> true
   | Pexp_field (e, _) | Pexp_constraint (e, _) -> is_pure e
   | _ -> false
 
@@ -526,8 +526,9 @@ let rec is_irrefutable p =
 
 (* What can give two copies of one text two values: [assert] and
    [__LOC__] and its kin, which give the location of the copy, a pattern that
-   can fail, whose [Match_failure] gives it too, and an extension node, which
-   a later rewriter expands. *)
+   can fail and a [match] or a [function] with cases, which can fail on a
+   guard, whose [Match_failure] gives it too, and an extension node, which a
+   later rewriter expands. *)
 let locates =
   object
     inherit [bool] Ast_traverse.fold as super

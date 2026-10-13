@@ -259,9 +259,9 @@
       integer literal without a suffix, as [0] or [0x0]. On floats, [-0. +. 0.]
       is [0.] and [-0. -. 0.] is [-0.], so [x +. 0.] has no filter.
     - [same operands]: the [con] mutant of [a && a] or [a || a], when [a] is an
-      identifier, a constant, a constructor or a field of such an expression,
-      with or without a type constraint. Such an operand gives one value each
-      time and does nothing else.
+      identifier, a constructor without an argument, as [true], or a field of
+      such an expression, with or without a type constraint. Such an operand
+      gives one value each time and does nothing else.
     - [same branches]: the [neg] or [cmp] mutant of the condition of
       [if c then e else e], when the two branches are one expression. The sites
       inside the condition and the branches keep their mutants. A [con] mutant

@@ -13,6 +13,11 @@ let local x =
   Log.debug (fun m -> m "%d" (x + 1));
   x
 
+let app x = Logs.app (fun m -> m "%d" (x + 1))
+let err x = Logs.err (fun m -> m "%d" (x + 1))
+let warn x = Logs.warn (fun m -> m "%d" (x + 1))
+let msg x = Logs.msg Logs.Info (fun m -> m "%d" (x + 1))
+
 let counted y x =
   Logs.debug (fun m ->
       y := !y + 1;

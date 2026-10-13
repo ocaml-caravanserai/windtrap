@@ -1219,6 +1219,36 @@ filtered, with its reason, and gives it no guard:
           else true -> 1)
     [@ocaml.warning "-8-57"])
 
+Each filter reads these forms, and a form that it does not read keeps its
+mutant:
+
+  $ mut --impl ./fixture_equivalent_forms.ml | ../elide.exe | head -25
+  mutation sites of "./fixture_equivalent_forms.ml" in Windtrap_mut_________fixture_equivalent_forms___ml, with type 'a operands:
+    0: 8:21 "or" "true && true" -> "true || true", filtered "same operands"
+    1: 9:20 "and" "(a : bool) || (a : bool)" -> "(a : bool) && (a : bool)", filtered "same operands"
+    2: 10:15 "not" "c" -> "not c"
+    3: 11:20 "not" "c" -> "not c"
+    4: 12:21 "not" "c" -> "not c"
+    5: 13:20 "not" "c" -> "not c"
+    6: 16:68 "ge" "y > 0" -> "y >= 0"
+    7: 16:32 "ge" "y > 0" -> "y >= 0"
+    8: 16:5 "not" "c" -> "not c"
+    9: 19:60 "ge" "y > 0" -> "y >= 0"
+    10: 19:28 "ge" "y > 0" -> "y >= 0"
+    11: 19:5 "not" "c" -> "not c"
+    12: 21:63 "sub" "a + b" -> "a - b"
+    13: 21:38 "sub" "a + b" -> "a - b"
+    14: 21:17 "not" "c" -> "not c", filtered "same branches"
+    15: 22:17 "not" "c" -> "not c", filtered "same branches"
+    16: 23:17 "not" "c" -> "not c", filtered "same branches"
+    17: 24:16 "not" "c" -> "not c", filtered "same branches"
+    18: 25:19 "drop" "| `A -> ..." -> "| `A when false -> ...", filtered "same body as the next case"
+    19: 25:29 "drop" "| (_ : [ `A | `B ]) -> ..." -> "| (_ : [ `A | `B ]) when false -> ..."
+    20: 26:21 "drop" "| `A as _v -> ..." -> "| `A as _v when false -> ..."
+    21: 26:37 "drop" "| _ -> ..." -> "| _ when false -> ..."
+    22: 27:22 "drop" "| ((module M) : (module S)) -> ..." -> "| ((module M) : (module S)) when false -> ..."
+    23: 27:44 "drop" "| _ -> ..." -> "| _ when false -> ..."
+
   $ mut --impl ./fixture_equivalent_log.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml:
     0: 8:45 "sub" "x + 1" -> "x - 1", filtered "logging call"
@@ -1227,11 +1257,15 @@ filtered, with its reason, and gives it no guard:
     3: 10:33 "sub" "x + 1" -> "x - 1"
     4: 13:2 "skip" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
     5: 13:29 "sub" "x + 1" -> "x - 1"
-    6: 17:2 "skip" "Logs.debug (fun m -> y := ((!y) + 1); (let () = incr y in m \"%d\" (!y)))" -> "()"
-    7: 18:6 "skip" "y := ((!y) + 1)" -> "()"
-    8: 18:11 "sub" "(!y) + 1" -> "(!y) - 1"
-    9: 19:15 "skip" "incr y" -> "()"
-    10: 21:2 "sub" "(!y) + x" -> "(!y) - x"
+    6: 16:38 "sub" "x + 1" -> "x - 1", filtered "logging call"
+    7: 17:38 "sub" "x + 1" -> "x - 1", filtered "logging call"
+    8: 18:40 "sub" "x + 1" -> "x - 1", filtered "logging call"
+    9: 19:48 "sub" "x + 1" -> "x - 1", filtered "logging call"
+    10: 22:2 "skip" "Logs.debug (fun m -> y := ((!y) + 1); (let () = incr y in m \"%d\" (!y)))" -> "()"
+    11: 23:6 "skip" "y := ((!y) + 1)" -> "()"
+    12: 23:11 "sub" "(!y) + 1" -> "(!y) - 1"
+    13: 24:15 "skip" "incr y" -> "()"
+    14: 26:2 "sub" "(!y) + x" -> "(!y) - x"
   let debug x =
     Logs.debug
       (fun m -> m "%d %a" (x + 1) (let open Fmt in option int) (Some x))
@@ -1261,40 +1295,44 @@ filtered, with its reason, and gives it no guard:
                else __windtrap_mut_5_l + __windtrap_mut_5_r));
        ());
     x
+  let app x = Logs.app (fun m -> m "%d" (x + 1))
+  let err x = Logs.err (fun m -> m "%d" (x + 1))
+  let warn x = Logs.warn (fun m -> m "%d" (x + 1))
+  let msg x = Logs.msg Logs.Info (fun m -> m "%d" (x + 1))
   let counted y x =
     if
       Stdlib.not
         (Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
-           6)
+           10)
     then
       (Logs.debug
          (fun m ->
             if
               Stdlib.not
                 (Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
-                   7)
+                   11)
             then
               (y :=
-                 ((let (__windtrap_mut_8_l, __windtrap_mut_8_r) = ((!y), 1) in
+                 ((let (__windtrap_mut_12_l, __windtrap_mut_12_r) = ((!y), 1) in
                    if
                      Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
-                       8
-                   then __windtrap_mut_8_l - __windtrap_mut_8_r
-                   else __windtrap_mut_8_l + __windtrap_mut_8_r));
+                       12
+                   then __windtrap_mut_12_l - __windtrap_mut_12_r
+                   else __windtrap_mut_12_l + __windtrap_mut_12_r));
                ());
             (let () =
                if
                  Stdlib.not
                    (Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
-                      9)
+                      13)
                then incr y in
              m "%d" (!y)));
        ());
-    (let (__windtrap_mut_10_l, __windtrap_mut_10_r) = ((!y), x) in
+    (let (__windtrap_mut_14_l, __windtrap_mut_14_r) = ((!y), x) in
      if
-       Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 10
-     then __windtrap_mut_10_l - __windtrap_mut_10_r
-     else __windtrap_mut_10_l + __windtrap_mut_10_r)
+       Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 14
+     then __windtrap_mut_14_l - __windtrap_mut_14_r
+     else __windtrap_mut_14_l + __windtrap_mut_14_r)
 
   $ mut -log-function Log.debug --impl ./fixture_equivalent_log.ml | ../elide.exe | head -8
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml:
@@ -1304,7 +1342,7 @@ filtered, with its reason, and gives it no guard:
     3: 10:33 "sub" "x + 1" -> "x - 1"
     4: 13:2 "skip" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
     5: 13:29 "sub" "x + 1" -> "x - 1", filtered "logging call"
-    6: 17:2 "skip" "Logs.debug (fun m -> y := ((!y) + 1); (let () = incr y in m \"%d\" (!y)))" -> "()"
+    6: 16:38 "sub" "x + 1" -> "x - 1", filtered "logging call"
 
   $ mut -lit --impl ./fixture_equivalent_lit.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_lit.ml" in Windtrap_mut_________fixture_equivalent_lit___ml:
@@ -1315,6 +1353,8 @@ filtered, with its reason, and gives it no guard:
     4: 8:54 "inc" "4" -> "5", filtered "failure message"
     5: 9:29 "inc" "5" -> "6", filtered "failure message"
     6: 10:55 "inc" "6" -> "7"
+    7: 11:56 "inc" "8" -> "9", filtered "failure message"
+    8: 12:50 "inc" "9" -> "10", filtered "failure message"
   let fail n =
     failwith
       (Printf.sprintf "item %d of %d"
@@ -1336,6 +1376,8 @@ filtered, with its reason, and gives it no guard:
                  6
              then 7
              else 6)))
+  let kformatted () = Format.kasprintf failwith "code %d" 8
+  let qualified () = Stdlib.failwith (string_of_int 9)
 
   $ mut -lit --impl ./fixture_equivalent_lit_bound.ml | ../elide.exe | head -3
   mutation sites of "./fixture_equivalent_lit_bound.ml" in Windtrap_mut_________fixture_equivalent_lit_bound___ml:
