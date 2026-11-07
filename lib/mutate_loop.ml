@@ -1028,142 +1028,136 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
   let refuse ?say ?reach message =
     refuse ?say ?reach ~suite ~scope all message
   in
-  match memory_every () with
-  | Error message -> refuse message
-  | Ok every -> (
-      if not (Supervisor.can_spawn ()) then
-        refuse
-          "this run is in a process that has spawned a domain, after which \
-           OCaml refuses Unix.fork, and that the test executable did not start \
-           as, so a new start of the executable would not reach the run: \
-           mutation testing runs every mutant in a fresh worker, so it cannot \
-           run here. Spawn the domain in a test instead"
-      else
-        let on_reach = observe reach ~xfail:(xfail_paths tests) in
-        let pooled = Hashtbl.create 4 in
-        let on_pool path = Hashtbl.replace pooled path () in
-        match
-          Report.run
-            ~execute:(fun ?on_event config ->
-              Supervisor.execute ~on_reach ~on_pool ?on_event config)
-            ~suite
-            { config with junit = None }
-            tests
-        with
-        | Error error ->
-            (* [Report.run] said why. *)
-            refuse ~say:false
-              ("its dry run was refused: " ^ Run.startup_message error)
-        | Ok outcome -> (
-            let dry_run = Run.results outcome.run in
-            let meter =
-              match every with
-              | None -> None
-              | Some every ->
-                  let meter = meter ~every ~suite reach dry_run in
-                  measure renderer meter "dry-run";
-                  Some meter
-            in
-            if dry_run = [] then
-              refuse "no test ran, so there is nothing to mutate"
-            else if Run.exit_code (Ok outcome) <> 0 then
-              refuse
-                "the dry run is red. Mutation scores a passing suite; a score \
-                 over a failing one is not a score"
-            else
-              match population with
-              | Error No_site_on_lines ->
-                  Os.say no_site_on_lines;
-                  Ok outcome
-              | Error reason -> refuse (refusal ~scope reason)
-              | Ok population -> (
-                  let reached, unreached =
+  let every = memory_every () in
+  if Result.is_error every then refuse (Result.get_error every)
+  else if not (Supervisor.can_spawn ()) then
+    refuse
+      "this run is in a process that has spawned a domain, after which OCaml \
+       refuses Unix.fork, and that the test executable did not start as, so a \
+       new start of the executable would not reach the run: mutation testing \
+       runs every mutant in a fresh worker, so it cannot run here. Spawn the \
+       domain in a test instead"
+  else
+    let every = Result.get_ok every in
+    let on_reach = observe reach ~xfail:(xfail_paths tests) in
+    let pooled = Hashtbl.create 4 in
+    let on_pool path = Hashtbl.replace pooled path () in
+    match
+      Report.run
+        ~execute:(fun ?on_event config ->
+          Supervisor.execute ~on_reach ~on_pool ?on_event config)
+        ~suite
+        { config with junit = None }
+        tests
+    with
+    | Error error ->
+        (* [Report.run] said why. *)
+        refuse ~say:false
+          ("its dry run was refused: " ^ Run.startup_message error)
+    | Ok outcome -> (
+        let dry_run = Run.results outcome.run in
+        let meter =
+          match every with
+          | None -> None
+          | Some every ->
+              let meter = meter ~every ~suite reach dry_run in
+              measure renderer meter "dry-run";
+              Some meter
+        in
+        if dry_run = [] then refuse "no test ran, so there is nothing to mutate"
+        else if Run.exit_code (Ok outcome) <> 0 then
+          refuse
+            "the dry run is red. Mutation scores a passing suite; a score over \
+             a failing one is not a score"
+        else
+          match population with
+          | Error No_site_on_lines ->
+              Os.say no_site_on_lines;
+              Ok outcome
+          | Error reason -> refuse (refusal ~scope reason)
+          | Ok population -> (
+              let reached, unreached =
+                List.partition_map
+                  (fun (m : Mutate.mutant) ->
+                    match Hashtbl.find_opt reach.sites m.id with
+                    | Some site -> Either.Left (m, site)
+                    | None -> Either.Right m)
+                  population
+              in
+              let outside, unreached =
+                List.partition
+                  (fun (m : Mutate.mutant) -> Hashtbl.mem reach.outside m.id)
+                  unreached
+              in
+              let wall = Float.max 0.01 (Os.count_s started) in
+              let skipped, to_test, lines =
+                if not scope.skip_killed then ([], reached, [])
+                else
+                  let killers, used = killed_elsewhere ~suite reached in
+                  let skipped, to_test =
                     List.partition_map
-                      (fun (m : Mutate.mutant) ->
-                        match Hashtbl.find_opt reach.sites m.id with
-                        | Some site -> Either.Left (m, site)
-                        | None -> Either.Right m)
-                      population
+                      (fun (((m : Mutate.mutant), _) as mutant) ->
+                        match Hashtbl.find_opt killers m.id with
+                        | Some exe -> Either.Left (m, exe)
+                        | None -> Either.Right mutant)
+                      reached
                   in
-                  let outside, unreached =
-                    List.partition
-                      (fun (m : Mutate.mutant) ->
-                        Hashtbl.mem reach.outside m.id)
-                      unreached
+                  (skipped, to_test, [ elsewhere_line ~used skipped ])
+              in
+              let narrowed = narrows_suite config ~focus:outcome.focus_active in
+              let save records =
+                if narrowed then ([], save_narrowed ~suite ~scope population)
+                else
+                  save ~suite ~scope
+                    (records
+                    @ List.map
+                        (fun (m, exe) ->
+                          Verdicts.record_of_mutant m
+                            (Verdicts.Killed_elsewhere { exe }))
+                        skipped
+                    @ recorded Verdicts.Outside_tests outside
+                    @ recorded Verdicts.Unreached unreached)
+              in
+              match
+                test_mutants renderer ~meter ~suite config tests ~dry_run
+                  ~pooled ~wall ~save to_test
+              with
+              | exception Sys_error _ when !signal = Some Sys.sigpipe ->
+                  Os.die_by Sys.sigpipe
+              | Refused_by message, _ ->
+                  Report.mutation_refused renderer message;
+                  refuse ~say:false ~reach:(reached, unreached, outside) message
+              | (Finished _ | Interrupted _), _ when !signal = Some Sys.sigpipe
+                ->
+                  Os.die_by Sys.sigpipe
+              | Interrupted (s, during), found ->
+                  let id (m : Mutate.mutant) = Mutate.id_to_string m.id in
+                  Report.mutation_interrupted renderer ~lines
+                    ~during:
+                      (match during with
+                      | `Probe -> `Probe
+                      | `Job m -> `Job (id m)
+                      | `Wait m -> `Wait (id m)
+                      | `Check m -> `Check (id m))
+                    (report ~narrowed ~dry_run ~reached ~unreached ~outside
+                       found);
+                  flush_descriptors ();
+                  Os.die_by s
+              | Finished (changed, note), found -> (
+                  let report =
+                    report ~changed ~narrowed ~dry_run ~reached ~unreached
+                      ~outside found
                   in
-                  let wall = Float.max 0.01 (Os.count_s started) in
-                  let skipped, to_test, lines =
-                    if not scope.skip_killed then ([], reached, [])
-                    else
-                      let killers, used = killed_elsewhere ~suite reached in
-                      let skipped, to_test =
-                        List.partition_map
-                          (fun (((m : Mutate.mutant), _) as mutant) ->
-                            match Hashtbl.find_opt killers m.id with
-                            | Some exe -> Either.Left (m, exe)
-                            | None -> Either.Right mutant)
-                          reached
-                      in
-                      (skipped, to_test, [ elsewhere_line ~used skipped ])
-                  in
-                  let narrowed =
-                    narrows_suite config ~focus:outcome.focus_active
-                  in
-                  let save records =
-                    if narrowed then ([], save_narrowed ~suite ~scope population)
-                    else
-                      save ~suite ~scope
-                        (records
-                        @ List.map
-                            (fun (m, exe) ->
-                              Verdicts.record_of_mutant m
-                                (Verdicts.Killed_elsewhere { exe }))
-                            skipped
-                        @ recorded Verdicts.Outside_tests outside
-                        @ recorded Verdicts.Unreached unreached)
-                  in
-                  match
-                    test_mutants renderer ~meter ~suite config tests ~dry_run
-                      ~pooled ~wall ~save to_test
-                  with
-                  | exception Sys_error _ when !signal = Some Sys.sigpipe ->
-                      Os.die_by Sys.sigpipe
-                  | Refused_by message, _ ->
-                      Report.mutation_refused renderer message;
-                      refuse ~say:false
-                        ~reach:(reached, unreached, outside)
-                        message
-                  | (Finished _ | Interrupted _), _
-                    when !signal = Some Sys.sigpipe ->
-                      Os.die_by Sys.sigpipe
-                  | Interrupted (s, during), found ->
-                      let id (m : Mutate.mutant) = Mutate.id_to_string m.id in
-                      Report.mutation_interrupted renderer ~lines
-                        ~during:
-                          (match during with
-                          | `Probe -> `Probe
-                          | `Job m -> `Job (id m)
-                          | `Wait m -> `Wait (id m)
-                          | `Check m -> `Check (id m))
-                        (report ~narrowed ~dry_run ~reached ~unreached ~outside
-                           found);
-                      flush_descriptors ();
-                      Os.die_by s
-                  | Finished (changed, note), found -> (
-                      let report =
-                        report ~changed ~narrowed ~dry_run ~reached ~unreached
-                          ~outside found
-                      in
-                      (match meter with
-                      | None -> ()
-                      | Some meter ->
-                          count_found meter found;
-                          measure renderer meter "report");
-                      Report.mutation_finish ?note ~lines renderer report;
-                      flush_descriptors ();
-                      match !signal with
-                      | Some s -> Os.die_by s
-                      | None -> Ok outcome))))
+                  (match meter with
+                  | None -> ()
+                  | Some meter ->
+                      count_found meter found;
+                      measure renderer meter "report");
+                  Report.mutation_finish ?note ~lines renderer report;
+                  flush_descriptors ();
+                  match !signal with
+                  | Some s -> Os.die_by s
+                  | None -> Ok outcome)))
 
 (* The armed run *)
 
