@@ -375,8 +375,8 @@ Mutation needs worker processes and declines by name on Windows.
 A full `@self-mutate` can stop because the machine has no more memory.
 The variable `WINDTRAP_DEBUG_MEMORY` helps you find the cause. When you
 set it, the parent process of each mutation loop writes one line on
-standard error at each important point of the run. These three runs
-separate the causes:
+standard error at each important point of the run. Use these three
+runs:
 
 ```
 WINDTRAP_DEBUG_MEMORY=100 WINDTRAP_MUTATE=1 dune build @self-mutate --force --instrument-with ppx_windtrap.mutate
@@ -386,7 +386,7 @@ WINDTRAP_DEBUG_MEMORY=100 dune exec --instrument-with ppx_windtrap.mutate test/u
 
 The first command is the full run. In the second command, dune runs one
 action at a time. If the second run completes and the first run does
-not, the cause is probably the loops that dune runs at the same time.
+not, the loops that dune runs at the same time add their memory.
 The third command runs one large suite alone, and keeps its standard
 error in a file. Dune shows the standard error of an action only when
 the action ends. If dune or the machine stops, dune loses the lines of
@@ -395,15 +395,16 @@ a suite that did not end, but the file keeps them.
 The values of the variable:
 
 - Unset or empty: off. This is the default.
-- A positive integer `N`: on. The loop writes a line after each pass,
-  and after each `N`-th job in a pass.
+- A positive integer `N`, in a form that `int_of_string` reads (for
+  example `100`): on. The loop writes a line after each pass, and after
+  each `N`-th job in a pass.
 - Any other value, for example `0`, `-1`, `nope` or ` 5`: the loop
   refuses to start. It says `invalid value 'VALUE' for
   WINDTRAP_DEBUG_MEMORY: expected a positive integer`, writes the
   verdict file as refused, and the exit code is 1.
 
 Only the mutation loop reads the variable, once, before its dry run.
-These runs do not read the variable, also when its value is incorrect:
+These runs do not read the variable, even when its value is incorrect:
 
 - A run without `--mutate` and without `WINDTRAP_MUTATE`
 - A run with `--arm` or `WINDTRAP_MUTATE_ARM`
@@ -469,9 +470,9 @@ The fields:
 | `pid` | The process of the loop. |
 
 At `dry-run`, `cases` is 0 and `rows` is the rows of the dry run. At
-`report`, `cases` and `rows` are those of the last pass. `rows` starts
-again at 0 in each pass, and does not count a job that ended but that
-the scheduler did not give yet. The reach table does not change after
+`report`, `cases` and `rows` are those of the last pass. `rows` is 0 at
+the start of each pass. It does not count a job that ended, until the
+supervisor gives the result of the job to the loop. The reach table does not change after
 the dry run, so `sites` and `reaches` have the same values in each line.
 When `rss_kb` grows and `heap_kb` does not, the growth is
 outside the OCaml heap.
@@ -481,8 +482,7 @@ The limits:
 - The loop reads `/proc/self/status`, thus the lines are for Linux
   only. On a system without `/proc`, the loop writes no line and no
   warning. Windows refuses mutation before the loop.
-- `hwm_kb` is probably not always monotone from line to line. To get
-  the peak of a run, use the maximum `hwm_kb` of all its lines.
+- To get the peak of a run, use the maximum `hwm_kb` of all its lines.
 - `Gc.quick_stat` updates the heap fields at each minor collection.
   Thus `heap_kb` is 0 in a small run before its first minor
   collection.
@@ -492,7 +492,7 @@ The limits:
   parent. All loops on one machine use the same clock. Thus you can sort
   the lines of all suites by `time_ms`. Then add the `rss_kb` of the
   `pid` values that run at the same time to get the total.
-- `sites` and `reaches` count all sites that a test reached, also the
+- `sites` and `reaches` count all sites that a test reached, and the
   sites outside the scope of `--mutate`.
 
 ## The conformance corpus
