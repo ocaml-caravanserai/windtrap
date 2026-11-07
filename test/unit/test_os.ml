@@ -1224,6 +1224,67 @@ let signals =
           killed_by signal (wait (fork (dies_by signal))));
     ]
 
+(* Memory *)
+
+let realistic_status =
+  "Name:\tsuite_main.exe\n\
+   Umask:\t0022\n\
+   State:\tR (running)\n\
+   VmPeak:\t    9000 kB\n\
+   VmHWM:\t    3000 kB\n\
+   VmRSS:\t    2212 kB\n\
+   RssAnon:\t    1000 kB\n\
+   Threads:\t1\n"
+
+let memory_of text =
+  Option.map
+    (fun (m : Os.memory) -> (m.resident_kb, m.peak_kb))
+    (Os.memory_of_status text)
+
+let status_rows =
+  [
+    ( "a realistic text, with the peak before the resident size",
+      realistic_status,
+      Some (2212, 3000) );
+    ( "the two lines alone, resident size first",
+      "VmRSS:\t1 kB\nVmHWM:\t2 kB\n",
+      Some (1, 2) );
+    ("values with spaces only", "VmRSS:   7 kB\nVmHWM:   9 kB\n", Some (7, 9));
+    ("values with one tab only", "VmRSS:\t7 kB\nVmHWM:\t9 kB\n", Some (7, 9));
+    ("values with no blank", "VmRSS:12 kB\nVmHWM:34 kB\n", Some (12, 34));
+    ("a last line with no newline", "VmRSS:\t7 kB\nVmHWM:\t9 kB", Some (7, 9));
+    ("a text without VmHWM", "VmRSS:\t2212 kB\n", None);
+    ("a text without VmRSS", "VmHWM:\t3000 kB\n", None);
+    ("an empty text", "", None);
+    ("a non-numeric value", "VmRSS:\t abc kB\nVmHWM:\t3000 kB\n", None);
+    ("a negative value", "VmRSS:\t -5 kB\nVmHWM:\t3000 kB\n", None);
+    ("a hexadecimal value", "VmRSS:\t 0x10 kB\nVmHWM:\t3000 kB\n", None);
+    ("a value with an underscore", "VmRSS:\t 1_0 kB\nVmHWM:\t3000 kB\n", None);
+    ("a value with no digits", "VmRSS:\t kB\nVmHWM:\t3000 kB\n", None);
+    ("a value without the unit", "VmRSS:\t 2212\nVmHWM:\t3000 kB\n", None);
+    ("a peak with no unit", "VmRSS:\t 2212 kB\nVmHWM:\t3000\n", None);
+    ( "a line that starts with a space",
+      " VmRSS:\t 2212 kB\nVmHWM:\t3000 kB\n",
+      None );
+  ]
+
+let memory =
+  group "Memory"
+    [
+      cases "memory_of_status reads VmRSS and VmHWM, and nothing else"
+        ~id:(fun (name, _, _) -> name)
+        status_rows
+        (fun (_, text, expected) ->
+          equal (option (pair int int)) expected (memory_of text));
+      test "memory reads this process, with its peak at least its size"
+        (fun () ->
+          match Os.memory () with
+          | Some m ->
+              is_true (0 < m.Os.resident_kb);
+              is_true (m.Os.resident_kb <= m.Os.peak_kb)
+          | None -> is_false (Sys.file_exists "/proc/self/status"));
+    ]
+
 let () =
   exit
     (run "os"
@@ -1240,4 +1301,5 @@ let () =
          filesystem;
          standard_error;
          signals;
+         memory;
        ])

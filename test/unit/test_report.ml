@@ -2143,6 +2143,18 @@ let refused_after_live () =
      no mutant\n"
     (output ())
 
+let say_after_live () =
+  let r =
+    Report.create ~out:Format.std_formatter ~ansi:true ~terminal:true
+      (config ())
+  in
+  Report.mutation_testing r ~index:1 ~total:2 ~id:"lib/a.ml:1:0:add";
+  Report.mutation_say r "memory probe ...";
+  equal text
+    "\r\027[2K\027[2m  [1/2] lib/a.ml:1:0:add\u{2026}\027[0m\r\027[2Kwindtrap: \
+     memory probe ...\n"
+    (output ())
+
 let interrupted_rows =
   [
     ( "a child",
@@ -2186,6 +2198,8 @@ let mutation =
       test
         "mutation_refused erases the live line and flushes before its message"
         refused_after_live;
+      test "mutation_say erases the live line and flushes before its text"
+        say_after_live;
       cases "mutation_interrupted says what it stopped, then closes" ~id:fst
         interrupted_rows interrupted_loop;
     ]

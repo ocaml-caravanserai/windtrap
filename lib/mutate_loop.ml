@@ -500,6 +500,83 @@ let flush_descriptors () =
   (try flush Stdlib.stdout with Sys_error _ -> ());
   try flush Stdlib.stderr with Sys_error _ -> ()
 
+(* Memory records *)
+
+let memory_variable = "WINDTRAP_DEBUG_MEMORY"
+
+(* The fields of a record that are not read at its point. *)
+type meter = {
+  every : int; (* a record after each [every]-th job of a pass *)
+  suite : string;
+  sites : int;
+  reaches : int;
+  mutable cases : int;
+  mutable rows : int;
+  mutable verdicts : int;
+  mutable blocks : int;
+  mutable checks : int;
+}
+
+(* [Ok None] when the variable is unset. *)
+let memory_every () =
+  match Os.getenv memory_variable with
+  | None -> Ok None
+  | Some value -> (
+      match int_of_string_opt value with
+      | Some n when n > 0 -> Ok (Some n)
+      | _ ->
+          Error
+            (strf "invalid value '%s' for %s: expected a positive integer" value
+               memory_variable))
+
+let meter ~every ~suite (reach : reach) dry_run =
+  {
+    every;
+    suite;
+    sites = Hashtbl.length reach.sites;
+    reaches =
+      Hashtbl.fold (fun _ site n -> n + List.length site.tests) reach.sites 0;
+    cases = 0;
+    rows = List.length dry_run;
+    verdicts = 0;
+    blocks = 0;
+    checks = 0;
+  }
+
+let count_found meter found =
+  meter.verdicts <- List.length found.records;
+  meter.blocks <-
+    List.length found.survivors
+    + List.length found.not_evaluated
+    + List.length found.unknown
+
+(* A pass starts: its jobs are made and it has no row yet. *)
+let start_pass meter (jobs : Supervisor.job list) =
+  meter.cases <-
+    List.fold_left
+      (fun n (job : Supervisor.job) -> n + List.length job.cases)
+      0 jobs;
+  meter.rows <- 0
+
+(* No line when the memory of the process cannot be read. *)
+let measure renderer meter point =
+  match Os.memory () with
+  | None -> ()
+  | Some memory ->
+      let gc = Gc.quick_stat () in
+      let kb words = words * (Sys.word_size / 8) / 1024 in
+      Report.mutation_say renderer
+        (strf
+           "memory %s time_ms=%d rss_kb=%d hwm_kb=%d heap_kb=%d \
+            heap_peak_kb=%d sites=%d reaches=%d cases=%d rows=%d verdicts=%d \
+            blocks=%d checks=%d pid=%d suite=%s"
+           point
+           (Float.to_int (Unix.gettimeofday () *. 1000.))
+           memory.resident_kb memory.peak_kb (kb gc.heap_words)
+           (kb gc.top_heap_words) meter.sites meter.reaches meter.cases
+           meter.rows meter.verdicts meter.blocks meter.checks (Unix.getpid ())
+           (Text.escape_controls meter.suite))
+
 (* The loop *)
 
 exception Refused of string
@@ -568,8 +645,8 @@ type check = {
    with a killing test waits for the check of its tests, which runs in up to
    [check_runs] passes after the last retry. The loop starts no pass after a
    signal. *)
-let test_mutants renderer ~suite (config : Run.config) tests ~dry_run ~pooled
-    ~wall ~save reached =
+let test_mutants renderer ~meter ~suite (config : Run.config) tests ~dry_run
+    ~pooled ~wall ~save reached =
   let durations = Hashtbl.create 256 in
   List.iter
     (fun (r : Run.result) -> Hashtbl.replace durations r.path r.duration)
@@ -615,6 +692,32 @@ let test_mutants renderer ~suite (config : Run.config) tests ~dry_run ~pooled
     match Hashtbl.find_opt checks paths with
     | Some check -> check.waiting <- (i, run) :: check.waiting
     | None -> Hashtbl.add checks paths { paths; test; waiting = [ (i, run) ] }
+  in
+  let measured point =
+    match meter with
+    | None -> ()
+    | Some meter ->
+        count_found meter found;
+        meter.checks <- Hashtbl.length checks;
+        measure renderer meter point
+  in
+  let measured_pass kind run =
+    match meter with None -> () | Some _ -> measured (strf "%s-%d" kind run)
+  in
+  (* After the [k]-th of the [t] jobs of a pass. *)
+  let measured_job kind run k t =
+    match meter with
+    | Some meter when k mod meter.every = 0 && k < t ->
+        measured (strf "%s-%d:%d/%d" kind run k t)
+    | Some _ | None -> ()
+  in
+  let starting jobs =
+    match meter with None -> () | Some meter -> start_pass meter jobs
+  in
+  let given (ran : Supervisor.ran) =
+    match meter with
+    | None -> ()
+    | Some meter -> meter.rows <- meter.rows + List.length ran.results
   in
   (* After the first run, only a kill replaces the survivor, and a retry that
      ended early gives a line of the survivor's block. The mutant [i] waits
@@ -674,11 +777,13 @@ let test_mutants renderer ~suite (config : Run.config) tests ~dry_run ~pooled
         let due = Array.of_list due in
         let clean = ref [] in
         let on_ran j ran =
+          given ran;
           let check = due.(j) in
           (match check_failure check.test ran with
           | Some _ as failure -> settle check failure
           | None when run < check_runs -> clean := check :: !clean
           | None -> settle check None);
+          measured_job "check" run (j + 1) (Array.length due);
           if j + 1 < Array.length due then testing (first due.(j + 1))
         in
         testing (first due.(0));
@@ -692,7 +797,10 @@ let test_mutants renderer ~suite (config : Run.config) tests ~dry_run ~pooled
           in
           unarmed_job ~deadline:(fun _ -> longest) ~pooled check.paths
         in
-        pass config ~suite tests (Array.to_list (Array.map job due)) ~on_ran;
+        let jobs = Array.to_list (Array.map job due) in
+        starting jobs;
+        pass config ~suite tests jobs ~on_ran;
+        measured_pass "check" run;
         check_passes ~run:(run + 1) (List.rev !clean)
   in
   let rec passes ~run = function
@@ -702,28 +810,34 @@ let test_mutants renderer ~suite (config : Run.config) tests ~dry_run ~pooled
         let waiting = Array.of_list (List.rev waiting) in
         let again = ref [] in
         let on_ran j ran =
+          given ran;
           (match judge ~run waiting.(j) ran with
           | `Again -> again := waiting.(j) :: !again
           | `Done -> ());
           next :=
             if j + 1 < Array.length waiting then Some waiting.(j + 1) else None;
+          measured_job "pass" run (j + 1) (Array.length waiting);
           Option.iter testing !next
         in
         next := Some waiting.(0);
         testing waiting.(0);
-        pass config ~suite tests
-          ~on_stop:(fun () -> next := None)
-          (Array.to_list
-             (Array.map
-                (fun i -> mutant_job ~deadline ~pooled mutants.(i))
-                waiting))
-          ~on_ran;
+        let jobs =
+          Array.to_list
+            (Array.map
+               (fun i -> mutant_job ~deadline ~pooled mutants.(i))
+               waiting)
+        in
+        starting jobs;
+        pass config ~suite tests ~on_stop:(fun () -> next := None) jobs ~on_ran;
+        measured_pass "pass" run;
         passes ~run:(run + 1) !again
   in
   let again = ref [] in
   let on_ran index (ran : Supervisor.ran) =
+    given ran;
     if index = 0 then begin
       probed := true;
+      measured "probe";
       match probe ~dry_run ran with
       | Ok () ->
           if total > 0 then next := Some 0;
@@ -735,6 +849,7 @@ let test_mutants renderer ~suite (config : Run.config) tests ~dry_run ~pooled
       | `Again -> again := (index - 1) :: !again
       | `Done -> ());
       next := if index < total then Some index else None;
+      measured_job "pass" 1 index total;
       testing index
     end
   in
@@ -743,14 +858,15 @@ let test_mutants renderer ~suite (config : Run.config) tests ~dry_run ~pooled
      for a run, and a kill that waits for its check, have no verdict. *)
   let ended =
     with_interrupts @@ fun () ->
-    match
-      pass config ~suite tests
-        (probe_job ~deadline ~pooled dry_run
-        :: List.map (mutant_job ~deadline ~pooled) reached)
-        ~on_ran
-    with
+    let jobs =
+      probe_job ~deadline ~pooled dry_run
+      :: List.map (mutant_job ~deadline ~pooled) reached
+    in
+    starting jobs;
+    match pass config ~suite tests jobs ~on_ran with
     | exception Refused message -> Refused_by message
     | () -> (
+        measured_pass "pass" 1;
         passes ~run:2 !again;
         check_passes ~run:1
           (List.sort
@@ -912,7 +1028,9 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
   let refuse ?say ?reach message =
     refuse ?say ?reach ~suite ~scope all message
   in
-  if not (Supervisor.can_spawn ()) then
+  let every = memory_every () in
+  if Result.is_error every then refuse (Result.get_error every)
+  else if not (Supervisor.can_spawn ()) then
     refuse
       "this run is in a process that has spawned a domain, after which OCaml \
        refuses Unix.fork, and that the test executable did not start as, so a \
@@ -920,6 +1038,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
        runs every mutant in a fresh worker, so it cannot run here. Spawn the \
        domain in a test instead"
   else
+    let every = Result.get_ok every in
     let on_reach = observe reach ~xfail:(xfail_paths tests) in
     let pooled = Hashtbl.create 4 in
     let on_pool path = Hashtbl.replace pooled path () in
@@ -937,6 +1056,14 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
           ("its dry run was refused: " ^ Run.startup_message error)
     | Ok outcome -> (
         let dry_run = Run.results outcome.run in
+        let meter =
+          match every with
+          | None -> None
+          | Some every ->
+              let meter = meter ~every ~suite reach dry_run in
+              measure renderer meter "dry-run";
+              Some meter
+        in
         if dry_run = [] then refuse "no test ran, so there is nothing to mutate"
         else if Run.exit_code (Ok outcome) <> 0 then
           refuse
@@ -992,8 +1119,8 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                     @ recorded Verdicts.Unreached unreached)
               in
               match
-                test_mutants renderer ~suite config tests ~dry_run ~pooled ~wall
-                  ~save to_test
+                test_mutants renderer ~meter ~suite config tests ~dry_run
+                  ~pooled ~wall ~save to_test
               with
               | exception Sys_error _ when !signal = Some Sys.sigpipe ->
                   Os.die_by Sys.sigpipe
@@ -1017,9 +1144,16 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   flush_descriptors ();
                   Os.die_by s
               | Finished (changed, note), found -> (
-                  Report.mutation_finish ?note ~lines renderer
-                    (report ~changed ~narrowed ~dry_run ~reached ~unreached
-                       ~outside found);
+                  let report =
+                    report ~changed ~narrowed ~dry_run ~reached ~unreached
+                      ~outside found
+                  in
+                  (match meter with
+                  | None -> ()
+                  | Some meter ->
+                      count_found meter found;
+                      measure renderer meter "report");
+                  Report.mutation_finish ?note ~lines renderer report;
                   flush_descriptors ();
                   match !signal with
                   | Some s -> Os.die_by s

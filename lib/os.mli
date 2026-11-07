@@ -355,3 +355,22 @@ val die_by : int -> 'a
     function runs. [signal] must be [SIGHUP], [SIGINT], [SIGPIPE] or [SIGTERM].
     Should the process outlive it, it exits with the status that a shell reports
     for [signal], 128 plus the number of the signal. *)
+
+(** {1:memory Memory} *)
+
+type memory = {
+  resident_kb : int;  (** [VmRSS]: the resident memory, in kB. *)
+  peak_kb : int;  (** [VmHWM]: the peak resident memory, in kB. *)
+}
+
+val memory_of_status : string -> memory option
+(** [memory_of_status text] is the [VmRSS] and [VmHWM] values of [text], the
+    text of a [/proc/<pid>/status] file. Each value comes from the first line
+    that starts with its key and a colon. Spaces or tabs, if any, one or more
+    ASCII digits and [" kB"] follow the colon to the end of the line. The result
+    is [None] when a line is missing or its value does not have this form. *)
+
+val memory : unit -> memory option
+(** [memory ()] is {!memory_of_status} of [/proc/self/status], or [None] when
+    the file cannot be read, for example on a system without [/proc]. It does
+    not raise and does not print. *)
