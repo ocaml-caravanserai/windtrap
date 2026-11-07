@@ -58,6 +58,9 @@ The check gives exit code 1 and a message for each type of error.
   $ ck '### Coverage\n\n-  x.\n'
   changes/x.md:3: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
+  $ ck '### Coverage\n\n- \tx.\n'
+  changes/x.md:3: a line that is not a list item ("- " and text) and does not start with two spaces
+  [1]
   $ ck '### Coverage\n\n- x.\n- \n'
   changes/x.md:4: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
