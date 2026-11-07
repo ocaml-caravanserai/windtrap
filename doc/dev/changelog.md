@@ -1,18 +1,19 @@
 # The changelog
 
 `CHANGES.md` is written for users. It has one entry per release, newest
-first, and the entry for the next release is open at the top while the
-work happens. A pull request does not add its lines to `CHANGES.md`. It
-adds them in a fragment, and the release joins the fragments into the
-open entry.
+first. While the work happens, the lines for the next release are in
+fragments in `changes/`. A pull request does not add its lines to
+`CHANGES.md`. It adds them in a fragment. At release, the changelog tool
+joins the fragments into the open entry, `## Unreleased`, at the top.
+Then you give this entry the heading of the version.
 
 ## Headings
 
 A released entry is headed `## vX.Y.Z YYYY-MM-DD`, the tag's date.
 `dune-release tag` reads the version from the first heading of the
 file, so nothing stands above it. The open entry is headed
-`## Unreleased`, and it exists only while it has lines: at release it is
-renamed to the version's heading.
+`## Unreleased`. It exists only during the release: the join creates it,
+and then you rename it to the heading of the version.
 
 ## While working
 
@@ -58,9 +59,9 @@ The check finds these errors:
 - Text before the first area heading
 - A heading that is not an area heading.
 
-The lines that `CHANGES.md` has under `## Unreleased` stay there. To
-change one of these lines, edit `CHANGES.md`. To change a line of a
-fragment, edit the fragment.
+To change a line, edit the fragment that has it. The lines that pull
+requests gave before the fragments are in `changes/0-open-entry.md`. Its
+name puts its lines first in each area at the join.
 
 ### Lines
 
@@ -100,7 +101,8 @@ dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
 The changelog tool adds the lines of each fragment under the heading of
 their area.
 In an area, the lines of the fragments come after the lines that the
-entry has, in the order of the file names. The tool writes the areas in
+entry has, in the order of the file names. The join ignores a hidden
+file, as dune does. The tool writes the areas in
 the order of the list, and adds the `## Unreleased` heading if the entry
 does not exist. Then it deletes the fragments. If a fragment has an
 error, the tool changes no file. Read the result, and change the order of
