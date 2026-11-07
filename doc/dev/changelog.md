@@ -11,8 +11,9 @@ Then you give this entry the heading of the version.
 A released entry is headed `## vX.Y.Z YYYY-MM-DD`, the tag's date.
 `dune-release tag` reads the version from the first heading after the
 `# Changelog` title, so no other heading stands between them. The open
-entry is headed `## Unreleased`. It exists only during the release: the changelog tool
-makes it, and then you rename it to the heading of the version.
+entry is headed `## Unreleased`. It exists only during the release: the
+changelog tool makes it, and then you rename it to the heading of the
+version.
 
 ## While working
 
@@ -33,10 +34,13 @@ not start with a dot. A pull request that gives lines adds one fragment.
 Give it a name that no other fragment has, for example the name of the
 branch: `changes/mutate-retry.md`. Put `-` in place of each `/` of the
 branch name. When the pull request gives more lines, add them to the
-same fragment. The
-changelog tool ignores the other files of `changes/`, so a fragment
-without the suffix `.md` is lost. A directory in `changes/` is an
-error.
+same fragment.
+
+The changelog tool ignores the other files of `changes/`, so a fragment
+without the suffix `.md` is lost. A directory in `changes/` whose name
+does not start with a dot is an error. The check in dune does not find
+a directory that holds no file that dune copies, for example an empty
+directory. The join command refuses it.
 
 A fragment has the form of the open entry, without the `## Unreleased`
 heading. It starts with an area heading, and each area heading has its
@@ -50,7 +54,9 @@ lines:
 
 An area heading is `### ` and then the name of an area of the list in
 "Lines", with the same spelling and no other space. A list item is `- `
-and then text, at the start of the line. Each other line of an area is
+at the start of the line, and then text that does not start with a
+space or a tab. A line of only dashes and spaces, such as `- - -`, is
+not a list item. Each other line of an area is
 a list item, or starts with two spaces (text under a list item, for
 example a code block). A blank line is also permitted. Thus each line
 stays in the list of its area in `CHANGES.md`.
@@ -63,7 +69,7 @@ The check finds these errors:
 - An area whose first line is not a list item
 - A line of an area that is not a list item and does not start with two
   spaces
-- A directory in `changes/`.
+- A directory in `changes/` whose name does not start with a dot.
 
 The check and the join command use the same rule to find the fragments.
 
