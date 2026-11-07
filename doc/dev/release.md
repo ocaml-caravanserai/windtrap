@@ -73,13 +73,16 @@ with the re-measured numbers (`testing.md`, "The conformance corpus").
 ## Cutting the release
 
 1. `CHANGES.md` (see `changelog.md`, "At release"):
-   1. If a conformance count moved, add a fragment with a line for it.
-   2. Run `dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes`.
-      The tool makes the `## Unreleased` entry and deletes the fragments.
+   1. If a conformance count moved, add a fragment with a line for it,
+      in the area "Baselines and expect tests".
+   2. From the root of the repository, run
+      `dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes`.
+      The tool makes the open entry (`## Unreleased`) and deletes the
+      fragments.
    3. Rename `## Unreleased` to `## vX.Y.Z YYYY-MM-DD`. This heading is
       the first heading of the file after the title.
    4. Write the opening paragraph and the highlights above the areas.
-   5. Commit the changelog and the removal of the fragments together.
+   5. Commit `CHANGES.md` and the deleted fragments in one commit.
 2. Bump nothing in source: the version comes from the git tag
    (`dune-release` and dune substitute it). Opam metadata lives in
    `dune-project` (`generate_opam_files`); if it changed, `dune build`

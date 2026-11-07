@@ -10,8 +10,8 @@ at the top. Then you give this entry the heading of the version.
 ## Headings
 
 A released entry is headed `## vX.Y.Z YYYY-MM-DD`, the tag's date.
-`dune-release tag` reads the version from the first heading of the
-file, so nothing stands above it. The open entry is headed
+`dune-release tag` reads the version from the first heading after the
+`# Changelog` title, so no other heading stands between them. The open entry is headed
 `## Unreleased`. It exists only during the release: the changelog tool
 makes it, and then you rename it to the heading of the version.
 
@@ -24,18 +24,19 @@ internal refactor, a test, a comment, a tool for the development of
 windtrap) gives no line.
 
 The line goes into a fragment, in the same commit as the change. Do not
-add the line to `CHANGES.md`. Thus, two pull requests that are open at
-the same time do not both change `CHANGES.md`.
+add the line to `CHANGES.md`. Thus no two open pull requests change
+`CHANGES.md`.
 
 ### Fragments
 
 A fragment is a file in `changes/` whose name ends with `.md` and does
 not start with a dot. A pull request that gives lines adds one fragment
 with a name that no other fragment has, for example the name of its
-branch: `changes/mutate-retry.md`. When the pull request gives more
-lines, add them to the same fragment. The changelog tool ignores the
-other files of `changes/`, so a fragment without the suffix `.md` is
-lost.
+branch with `-` in place of each `/`: `changes/mutate-retry.md`. When
+the pull request gives more lines, add them to the same fragment. The
+changelog tool ignores the other files of `changes/`, so a fragment
+without the suffix `.md` is lost. A directory in `changes/` is an
+error.
 
 A fragment has the form of the open entry, without the `## Unreleased`
 heading. It starts with an area heading, and each area heading has its
@@ -48,8 +49,10 @@ lines:
 ```
 
 An area heading is `### ` and then the name of an area of the list in
-"Lines", with the same spelling and no other space. A line in a code
-block can have any text, but the code block must end in the fragment.
+"Lines", with the same spelling and no other space. Each other line of
+an area starts with `- ` (a list item) or with two spaces (text under a
+list item, for example a code block). Thus each line stays in the list
+of its area in `CHANGES.md`.
 
 `dune build @runtest` does a check of the fragments (`changes/dune`).
 The check finds these errors:
@@ -57,12 +60,11 @@ The check finds these errors:
 - A fragment that does not start with an area heading
 - An unknown area
 - An area whose first line does not start with `- `
-- A heading that is not an area heading, outside a code block
-- A code block that does not end.
+- A line of an area that does not start with `- ` or two spaces
+- A directory in `changes/`.
 
-Dune copies the fragments into `_build` for the check, but not the files
-whose names start with a dot. Thus the check and the release find the
-same fragments.
+The check and the join command find the fragments with the same rule,
+so they find the same fragments.
 
 To change a line, edit the fragment that has it. Until the first release
 with fragments, the lines of the pull requests before the fragments are
@@ -98,8 +100,8 @@ change the list in this document, change `areas` also.
 
 ## At release
 
-`release.md` gives the steps of a release. Its first step runs the
-changelog tool:
+`release.md` gives the steps of a release. Its first step runs the join
+command of the changelog tool, from the root of the repository:
 
 ```sh
 dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
@@ -109,7 +111,8 @@ The tool makes the open entry above the first released entry. It writes
 the areas in the order of the list. In an area, the lines come in the
 order of the file names of the fragments. Then the tool deletes the
 fragments. If `CHANGES.md` already has a `## Unreleased` entry, or if a
-fragment has an error, the tool changes no file. Read the result, and
+fragment has an error, the tool changes no file. With no fragment, the
+tool changes no file and makes no open entry. Read the result, and
 change the order of the lines if necessary.
 
 The entry opens on one short paragraph saying what got better, in the

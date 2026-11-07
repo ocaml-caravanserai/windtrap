@@ -5,8 +5,10 @@ a directory and joins them into the changelog.
   $ cl() { "$exe" "$@"; }
   $ mkdir changes
 
-A fragment has one or more area headings, each with its lines. A line in
-a code block can start with "#".
+A fragment has one or more area headings, each with its lines. Each line
+of an area is a list item or is indented by two spaces under one. Thus a
+code block or other text in an area stays in the list of the area when
+the join command puts the fragments together.
 
   $ cat > changes/good.md <<'EOF'
   > ### Running tests
@@ -42,33 +44,40 @@ The check gives exit code 1 and a message for each type of error.
   changes/x.md:1: area "Coverage" does not start with a line "- "
   [1]
   $ ck '### Coverage\n\nx.\n'
-  changes/x.md:1: area "Coverage" does not start with a line "- "
+  changes/x.md:3: a line that does not start with "- " or two spaces
   [1]
   $ ck '### Coverage\n\n- x.\n## v1\n'
-  changes/x.md:4: a heading that is not an area heading
+  changes/x.md:4: a line that does not start with "- " or two spaces
   [1]
-  $ ck '### Coverage\n\n- x.\n\n  # Notes\n'
-  changes/x.md:5: a heading that is not an area heading
+  $ ck '### Coverage\n\n- x:\n\n  ```sh\n# a comment\n  ```\n'
+  changes/x.md:6: a line that does not start with "- " or two spaces
   [1]
-  $ ck '### Coverage\n\n- x:\n\n  ```\n  y\n'
-  changes/x.md:5: a code block that does not end
+  $ ck '### Coverage\n\n- x.\n\nA note\n---\n'
+  changes/x.md:5: a line that does not start with "- " or two spaces
+  [1]
+  $ ck '### Coverage\n\n- x.\n\n<!-- a note\n'
+  changes/x.md:5: a line that does not start with "- " or two spaces
   [1]
 
-The check and the join read only the files whose names end with ".md"
-and do not start with a dot. Dune copies these files into _build, so
-the check in "dune build @runtest" sees the same fragments as the join.
+The check command and the join command read only the files whose names
+end with ".md" and do not start with a dot. They ignore the other files.
+A directory gives exit code 1, so that no fragment is lost in it.
 
   $ rm changes/x.md
   $ printf 'junk\n' > changes/.x.md
   $ printf 'junk\n' > 'changes/a.md~'
   $ printf 'junk\n' > changes/notes
-  $ mkdir changes/old.md
   $ touch changes/dune
   $ cl check changes
+  $ mkdir changes/feat
+  $ cl check changes
+  changes/feat: a directory, not a fragment
+  [1]
+  $ rmdir changes/feat
 
-The join adds an open entry above the first release. In each area, the
-lines come in the order of the file names. The areas come in the order
-of the list. Then the join deletes the fragments.
+The join command adds an open entry above the first release. In each
+area, the lines come in the order of the file names. The areas come in
+the order of the list. Then the join command deletes the fragments.
 
   $ rm changes/good.md
   $ printf '### Mutation testing\n\n- From b.\n' > changes/b.md
@@ -100,32 +109,31 @@ of the list. Then the join deletes the fragments.
   a.md~
   dune
   notes
-  old.md
 
-If the changelog has an open entry, the join gives exit code 1 and
-changes no file.
+If the changelog has an open entry, the join command gives exit code 1
+and changes no file.
 
   $ printf '### Coverage\n\n- Good.\n' > changes/a.md
   $ cp CHANGES.md before
   $ cl join CHANGES.md changes
-  CHANGES.md: it has a "## Unreleased" entry; rename it first
+  CHANGES.md has a "## Unreleased" entry. Rename it first.
   [1]
   $ cmp before CHANGES.md
 
-If one fragment has an error, the join changes no file.
+If one fragment has an error, the join command changes no file.
 
   $ printf '# Changelog\n\n## v0.1.0 2026-01-01\n\n- Released line.\n' > CHANGES.md
   $ cp CHANGES.md before
   $ printf '### Coverage\n\nBad.\n' > changes/b.md
   $ cl join CHANGES.md changes
-  changes/b.md:1: area "Coverage" does not start with a line "- "
+  changes/b.md:3: a line that does not start with "- " or two spaces
   [1]
   $ cmp before CHANGES.md
   $ ls changes/a.md changes/b.md
   changes/a.md
   changes/b.md
 
-With no fragment, the join does not change the changelog.
+With no fragment, the join command does not change the changelog.
 
   $ rm changes/a.md changes/b.md
   $ cl join CHANGES.md changes
