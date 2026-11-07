@@ -4424,6 +4424,18 @@ let memory_refused_probe () =
   equal (list string) [ "dry-run"; "probe" ]
     (List.map (fun r -> r.point) (records_of r))
 
+(* Another executable killed the two reached mutants, thus pass 1 has no
+   job. *)
+let memory_all_skipped () =
+  let p = skip_project () in
+  plant_other ~exe:"default/b.exe" p "windtrap-1.mutants"
+    [ (15, Verdicts.Killed); (18, Verdicts.Killed) ];
+  let r = skip_run ~env:[ (memory_var, "1") ] p [ skip_killed ] in
+  equal (pair string text) ("exited 0", "") (r.status, without_memory r.err);
+  equal (list string)
+    [ "dry-run"; "probe"; "pass-1"; "report" ]
+    (List.map (fun r -> r.point) (records_of r))
+
 let memory_line_feed () =
   let r = spawn ~env:[ suite "line_feed"; (memory_var, "1") ] [ mutate ] in
   remove (Verdicts.output_file ~exe:suite_exe ~suite:"ca\nlc");
@@ -4456,15 +4468,17 @@ let memory_refused value =
   equal (option string) (Some message)
     (Option.bind r.file (fun (f : file) -> f.refused))
 
-(* A run that never reaches the loop never reads the variable. *)
+(* A run that never reaches the loop never reads the variable. The last
+   item is a text of its standard error, if any. *)
 let memory_unread =
   [
-    ("a suite without --mutate", suite_exe, [], []);
-    ("an --arm run", suite_exe, [], [ "--arm"; "site" ]);
+    ("a suite without --mutate", suite_exe, [], [], None);
+    ("an --arm run", suite_exe, [], [ "--arm"; "site" ], None);
     ( "a broadcast over a prefix that matches no site",
       suite_exe,
       [ ("WINDTRAP_MUTATE", scope ^ "none.ml") ],
-      [] );
+      [],
+      Some "without mutation" );
   ]
 
 (* Each line that ends with "in <duration>.", with the duration masked. An
@@ -4478,14 +4492,15 @@ let timed out =
   in
   String.concat "\n" (List.map mask (lines out))
 
-let memory_not_read (_, exe, env, args) =
+let memory_not_read (_, exe, env, args, said) =
   let args = List.map (fun a -> if a = "site" then site 18 else a) args in
   let base = spawn ~exe ~env args in
   let r = spawn ~exe ~env:((memory_var, "nope") :: env) args in
   equal string "exited 0" base.status;
   equal string base.status r.status;
   equal text (timed base.out) (timed r.out);
-  equal text base.err r.err
+  equal text base.err r.err;
+  Option.iter (fun sub -> contains ~sub r.err) said
 
 let memory_records =
   group "Memory records"
@@ -4502,6 +4517,8 @@ let memory_records =
       test "a value of 2 records every second job of a pass" memory_every_second;
       test "a check pass of 2 jobs records after its first job" memory_checks;
       test "a probe that refuses gives no record of pass 1" memory_refused_probe;
+      test "a pass 1 that skips each reached mutant records no job"
+        memory_all_skipped;
       test "a control byte of the suite name is escaped" memory_line_feed;
       test "an empty value is off" memory_empty;
       cases "an incorrect value refuses the run, and its file says why"
@@ -4509,19 +4526,8 @@ let memory_records =
         [ "0"; "-1"; "nope"; " 5" ]
         memory_refused;
       cases "a run that does not reach the loop does not read the variable"
-        ~id:(fun (name, _, _, _) -> name)
+        ~id:(fun (name, _, _, _, _) -> name)
         memory_unread memory_not_read;
-      test
-        "a broadcast over a prefix that matches no site runs without mutation"
-        (fun () ->
-          let r =
-            spawn
-              ~env:
-                [ ("WINDTRAP_MUTATE", scope ^ "none.ml"); (memory_var, "nope") ]
-              []
-          in
-          equal string "exited 0" r.status;
-          contains ~sub:"without mutation" r.err);
     ]
 
 (* The fixtures' verdict files land in the real _build/_mutants, where

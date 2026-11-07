@@ -420,9 +420,9 @@ only change. These items stay the same:
 - The verdict file
 - The exit code.
 
-The variable is maintainers' tooling, as
-the aliases are. Thus the manual, `--help` and `CHANGES.md` do not name
-it, as they do not name `WINDTRAP_WORKER`.
+The variable is maintainers' tooling, as the aliases are. Thus the
+manual, `--help` and `CHANGES.md` do not name it, as they do not name
+`WINDTRAP_WORKER`.
 
 Each line has this form, on one line:
 
@@ -434,7 +434,9 @@ The fields are always present and always in this order. Each value but
 `NAME` is a non-negative decimal integer. `suite=` is the last field,
 and its value is the remainder of the line, so a suite name with spaces
 does not break a parse. The loop writes each control byte of `NAME` as
-`\xNN`, thus a suite name with a line feed stays on one line. The points, in the order of a run:
+`\xNN`, thus a suite name with a line feed stays on one line.
+
+The points, in the order of a run:
 
 | Point | When |
 | --- | --- |
