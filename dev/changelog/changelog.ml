@@ -88,7 +88,7 @@ let parse_fragment path =
 
 let fragments dir =
   Sys.readdir dir |> Array.to_list
-  |> List.filter (fun f -> Filename.check_suffix f ".md")
+  |> List.filter (fun f -> f.[0] <> '.' && Filename.check_suffix f ".md")
   |> List.sort compare
   |> List.map (fun f -> dir ^ "/" ^ f)
 

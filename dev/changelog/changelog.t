@@ -77,14 +77,20 @@ the changelog.
 The join puts the lines of each area after the lines that the entry has,
 in the order of the file names. It puts the areas in the order of the
 list. Then it deletes the fragments. It ignores a file that is not a
-Markdown file.
+Markdown file, and a hidden file, as dune does. An editor lock file is
+an example of a hidden file.
 
   $ printf '### Mutation testing\n\n- From b.\n' > changes/b.md
   $ printf '### Mutation testing\n\n- From a,\n  two lines.\n\n### Declaring tests\n\n- New.\n' > changes/a.md
   $ touch changes/dune
+  $ printf 'junk\n' > changes/.x.md
+  $ ln -s user@host.1:1 changes/.#a.md
   $ cl join CHANGES.md changes
-  $ ls changes
+  $ ls -A changes
+  .#a.md
+  .x.md
   dune
+  $ rm changes/.x.md changes/.#a.md
   $ cat CHANGES.md
   # Changelog
   
