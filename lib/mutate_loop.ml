@@ -575,7 +575,7 @@ let measure renderer meter point =
            memory.resident_kb memory.peak_kb (kb gc.heap_words)
            (kb gc.top_heap_words) meter.sites meter.reaches meter.cases
            meter.rows meter.verdicts meter.blocks meter.checks (Unix.getpid ())
-           meter.suite)
+           (Text.escape_controls meter.suite))
 
 (* The loop *)
 

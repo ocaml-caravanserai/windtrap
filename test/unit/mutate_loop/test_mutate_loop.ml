@@ -4275,6 +4275,17 @@ let record line =
       { point; fields; named }
 
 let get r name = List.assoc name r.fields
+
+(* The records of a run. Without /proc/self/status, the run has no record,
+   and the test that called stops there. *)
+let records_of (r : ran) =
+  let found = memory_lines r.err in
+  if not (Sys.file_exists "/proc/self/status") then begin
+    equal (list string) [] found;
+    skip ~reason:"the records read /proc/self/status" ()
+  end;
+  List.map record found
+
 let capped_retry = [ mutate; "--mutate-retry=1" ]
 
 let capped_run ?(env = []) args =
@@ -4324,17 +4335,13 @@ let memory_unchanged () =
   is_true (Option.is_some (rows base))
 
 let memory_points () =
-  let records =
-    List.map record (memory_lines (Lazy.force memory_every_1).err)
-  in
+  let records = records_of (Lazy.force memory_every_1) in
   equal (list string)
     (List.map (fun (p, _, _, _, _, _) -> p) every_job)
     (List.map (fun r -> r.point) records)
 
 let memory_values () =
-  let records =
-    List.map record (memory_lines (Lazy.force memory_every_1).err)
-  in
+  let records = records_of (Lazy.force memory_every_1) in
   let shown r =
     strf "%s cases=%d rows=%d verdicts=%d blocks=%d checks=%d" r.point
       (get r "cases") (get r "rows") (get r "verdicts") (get r "blocks")
@@ -4350,9 +4357,7 @@ let memory_values () =
   List.iter (fun r -> equal string "calc" r.named) records
 
 let memory_sizes () =
-  let records =
-    List.map record (memory_lines (Lazy.force memory_every_1).err)
-  in
+  let records = records_of (Lazy.force memory_every_1) in
   List.iter
     (fun r ->
       is_true (0 < get r "rss_kb");
@@ -4367,9 +4372,7 @@ let memory_sizes () =
   | pids -> failf "%d pids in the lines" (List.length pids)
 
 let memory_reach () =
-  let records =
-    List.map record (memory_lines (Lazy.force memory_every_1).err)
-  in
+  let records = records_of (Lazy.force memory_every_1) in
   let pairs = List.map (fun r -> (get r "sites", get r "reaches")) records in
   match List.sort_uniq compare pairs with
   | [ (sites, reaches) ] ->
@@ -4383,8 +4386,54 @@ let memory_reach () =
 let memory_every_second () =
   let r = Lazy.force memory_every_2 in
   equal (pair string text) ("exited 0", "") (r.status, without_memory r.err);
-  equal (list string) every_second
-    (List.map (fun l -> (record l).point) (memory_lines r.err))
+  equal (list string) every_second (List.map (fun r -> r.point) (records_of r))
+
+(* [a] kills the mutant of [widen], and [b] kills the mutant of [sub]. The
+   two kills have different checks, thus each check pass has 2 jobs. *)
+let memory_checks () =
+  let k =
+    kill_run
+      ~env:
+        [ kill_sub; ("MUTATE_FIRST_PINS", "1"); fail_armed; (memory_var, "1") ]
+      [ retry_once ]
+  in
+  equal (pair string text) ("exited 0", "") (k.r.status, without_memory k.r.err);
+  equal (option (list string)) (two_rows "killed") (rows k.r);
+  equal (list string)
+    [
+      "dry-run";
+      "probe";
+      "pass-1:1/2";
+      "pass-1";
+      "check-1:1/2";
+      "check-1";
+      "check-2:1/2";
+      "check-2";
+      "check-3:1/2";
+      "check-3";
+      "report";
+    ]
+    (List.map (fun r -> r.point) (records_of k.r))
+
+let memory_refused_probe () =
+  let r =
+    spawn ~env:[ suite "flaky"; measured (); (memory_var, "1") ] [ mutate ]
+  in
+  equal string "exited 1" r.status;
+  contains ~sub:"the suite is not deterministic" r.err;
+  equal (list string) [ "dry-run"; "probe" ]
+    (List.map (fun r -> r.point) (records_of r))
+
+let memory_line_feed () =
+  let r = spawn ~env:[ suite "line_feed"; (memory_var, "1") ] [ mutate ] in
+  remove (Verdicts.output_file ~exe:suite_exe ~suite:"ca\nlc");
+  equal string "exited 0" r.status;
+  List.iter
+    (fun line -> is_true (String.starts_with ~prefix:"windtrap: " line))
+    (List.filter (( <> ) "") (lines r.err));
+  let records = records_of r in
+  is_true (records <> []);
+  List.iter (fun r -> equal string "ca\\x0alc" r.named) records
 
 let memory_empty () =
   let base = Lazy.force memory_baseline in
@@ -4451,6 +4500,9 @@ let memory_records =
         memory_sizes;
       test "the reach table is counted once, at the dry run" memory_reach;
       test "a value of 2 records every second job of a pass" memory_every_second;
+      test "a check pass of 2 jobs records after its first job" memory_checks;
+      test "a probe that refuses gives no record of pass 1" memory_refused_probe;
+      test "a control byte of the suite name is escaped" memory_line_feed;
       test "an empty value is off" memory_empty;
       cases "an incorrect value refuses the run, and its file says why"
         ~id:(strf "%S")

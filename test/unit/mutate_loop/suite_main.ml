@@ -859,6 +859,7 @@ let () =
              group "widen" weak;
              group "orphan" two_survivors;
            ]
+  | "line_feed" -> exit @@ run "ca\nlc" [ group "calc" strong ]
   | "red" ->
       exit @@ run "calc" [ group "calc" (strong @ red); group "widen" weak ]
   | "flaky" -> exit @@ run "calc" [ group "calc" strong; group "flaky" flaky ]

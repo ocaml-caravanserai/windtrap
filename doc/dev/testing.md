@@ -402,13 +402,25 @@ The values of the variable:
   WINDTRAP_DEBUG_MEMORY: expected a positive integer`, writes the
   verdict file as refused, and the exit code is 1.
 
-Only the mutation loop reads the variable, once, before its dry run. A
-run without `--mutate`, an `--arm` run, a broadcast run that tests no
-mutant, and a worker do not read it, also when its value is incorrect.
+Only the mutation loop reads the variable, once, before its dry run.
+These runs do not read the variable, also when its value is incorrect:
+
+- A run without `--mutate`
+- An `--arm` run
+- A broadcast run that runs without mutation (an empty population, or a
+  selection that keeps no test)
+- A worker.
+
 When the variable is off, the loop does not read `/proc` and does not
 count. When the variable is on, the lines on standard error are the
-only change: the standard output, the verdicts, the verdict file and
-the exit code stay the same. The variable is maintainers' tooling, as
+only change. These items stay the same:
+
+- The standard output
+- The verdicts
+- The verdict file
+- The exit code.
+
+The variable is maintainers' tooling, as
 the aliases are. Thus the manual, `--help` and `CHANGES.md` do not name
 it, as they do not name `WINDTRAP_WORKER`.
 
@@ -421,14 +433,15 @@ windtrap: memory POINT time_ms=M rss_kb=R hwm_kb=H heap_kb=G heap_peak_kb=P site
 The fields are always present and always in this order. Each value but
 `NAME` is a non-negative decimal integer. `suite=` is the last field,
 and its value is the remainder of the line, so a suite name with spaces
-does not break a parse. The points, in the order of a run:
+does not break a parse. The loop writes each control byte of `NAME` as
+`\xNN`, thus a suite name with a line feed stays on one line. The points, in the order of a run:
 
 | Point | When |
 | --- | --- |
 | `dry-run` | After the dry run, before the checks that can refuse it. |
 | `probe` | When the probe ends, before the loop compares it with the dry run. |
 | `pass-P:K/T` | After the `K`-th of the `T` mutant jobs of pass `P`, when `K` is a multiple of `N` and `K < T`. |
-| `pass-P` | When pass `P` ends. Pass 1 is the probe and one job for each reached mutant. Passes 2 and more are the retries. |
+| `pass-P` | When pass `P` ends. Pass 1 is the probe and one job for each reached mutant that the loop does not skip (`--skip-killed`). Passes 2 and more are the retries. |
 | `check-C:K/T` | After the `K`-th of the `T` jobs of check pass `C`, with the same rule. |
 | `check-C` | When check pass `C` ends (up to 3 passes, under `--mutate-retry`). |
 | `report` | Before the loop prints its report, so the outcome line stays the last line. |
@@ -477,12 +490,12 @@ The limits:
 - The lines are for the parent only, not for the workers. A worker that
   `fork` starts shares the pages of the parent until it writes to them.
   I think that the major GC of a worker writes to most pages of the
-  parent heap, thus a large parent heap can make each worker large.
+  parent heap. Thus a large parent heap can make each worker large.
 - Each suite gives its own set of lines. Dune runs suites at the same
   time, thus the memory of the machine is more than the memory of one
-  parent. All loops on one machine use the same clock, so you can sort
-  the lines of all suites by `time_ms` and add the `rss_kb` of the
-  `pid` values that run at the same time.
+  parent. All loops on one machine use the same clock. Thus you can sort
+  the lines of all suites by `time_ms`. Then add the `rss_kb` of the
+  `pid` values that run at the same time to get the total.
 - `sites` and `reaches` count all sites that a test reached, also the
   sites outside the scope of `--mutate`.
 
