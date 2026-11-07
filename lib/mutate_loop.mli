@@ -188,6 +188,9 @@ val execute_and_report :
     [(hits * 8) + 1000] ([budget_of]) for a site that the dry run evaluated
     [hits] times.
 
+    {b Memory records.} When [WINDTRAP_DEBUG_MEMORY] is set, the loop writes
+    lines about its memory on standard error, as [doc/dev/testing.md] tells.
+
     {b The verdict file.} The file holds one record per reached mutant, one
     [Outside_tests] record per mutant of the population evaluated outside tests,
     and one [Unreached] record per unreached one. A skipped mutant has a
@@ -234,6 +237,7 @@ val execute_and_report :
     unknown, or, past a whole green dry run, the reached mutants as unknown and
     the others as that dry run found them. They are tried in this order:
     - The platform is Windows, where windtrap starts no worker process.
+    - [WINDTRAP_DEBUG_MEMORY] is set to a value that is not a positive integer.
     - This process cannot start the jobs' workers ([Supervisor.can_spawn]): it
       spawned a domain, so it cannot fork, and a new start of the executable
       would not reach this run.

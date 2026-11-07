@@ -1251,6 +1251,7 @@ let status_rows =
       Some (1, 2) );
     ("values with spaces only", "VmRSS:   7 kB\nVmHWM:   9 kB\n", Some (7, 9));
     ("values with one tab only", "VmRSS:\t7 kB\nVmHWM:\t9 kB\n", Some (7, 9));
+    ("values with no blank", "VmRSS:12 kB\nVmHWM:34 kB\n", Some (12, 34));
     ("a last line with no newline", "VmRSS:\t7 kB\nVmHWM:\t9 kB", Some (7, 9));
     ("a text without VmHWM", "VmRSS:\t2212 kB\n", None);
     ("a text without VmRSS", "VmHWM:\t3000 kB\n", None);

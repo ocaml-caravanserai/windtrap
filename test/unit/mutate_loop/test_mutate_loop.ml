@@ -4418,13 +4418,24 @@ let memory_unread =
       [] );
   ]
 
+(* Each line that ends with "in <duration>.", with the duration masked. An
+   armed run gives its summary on its second line. *)
+let timed out =
+  let mask line =
+    match String.rindex_opt line ' ' with
+    | Some i when String.ends_with ~suffix:" in" (String.sub line 0 i) ->
+        String.sub line 0 (i + 1) ^ "<time>."
+    | Some _ | None -> line
+  in
+  String.concat "\n" (List.map mask (lines out))
+
 let memory_not_read (_, exe, env, args) =
   let args = List.map (fun a -> if a = "site" then site 18 else a) args in
   let base = spawn ~exe ~env args in
   let r = spawn ~exe ~env:((memory_var, "nope") :: env) args in
   equal string "exited 0" base.status;
   equal string base.status r.status;
-  equal text (masked base.out) (masked r.out);
+  equal text (timed base.out) (timed r.out);
   equal text base.err r.err
 
 let memory_records =

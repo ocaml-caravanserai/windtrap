@@ -381,7 +381,9 @@ val mutation_not_reached : t -> unit
     A client must call {!mutation_testing} before each child,
     {!mutation_survivor} when the last run of a mutant ends on a survivor, and
     {!mutation_finish} once, last. {!mutation_refused} and
-    {!mutation_interrupted} are the two other ways in which a report ends. *)
+    {!mutation_interrupted} are the two other ways in which a report ends. A
+    client can call {!mutation_say} at any time between the other calls, and it
+    does not end the report. *)
 
 val mutation_testing : t -> index:int -> total:int -> id:string -> unit
 (** [mutation_testing t ~index ~total ~id] draws the live line for the mutant
@@ -412,9 +414,13 @@ val mutation_finish :
     skipped. They print on [out], in order, above the outcome line and its
     [reproduce:] line, and before [note]. *)
 
-val mutation_refused : t -> string -> unit
-(** [mutation_refused t message] erases the live line, flushes [out] and says
+val mutation_say : t -> string -> unit
+(** [mutation_say t message] erases the live line, flushes [out] and says
     [message] on standard error ({!Os.say}). *)
+
+val mutation_refused : t -> string -> unit
+(** [mutation_refused t message] is [mutation_say t message]. It ends the report
+    of a loop that refused. *)
 
 val mutation_interrupted :
   ?lines:string list ->
