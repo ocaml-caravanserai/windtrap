@@ -54,13 +54,25 @@ includes a line in a code block.
 The check finds these errors:
 
 - An entry of `changes/` that is not a file with the suffix `.md`,
-  except the `dune` file and hidden files
+  except the ignored entries
 - A fragment without an area heading
 - An unknown area
 - An area without lines
 - A first line of an area that does not start with `- `
 - Text before the first area heading
 - A heading that is not an area heading.
+
+The check and the join ignore these entries of `changes/`:
+
+- The `dune` file
+- Hidden files and directories
+- Names that end with `~` or `.swp`, for example editor backup files
+- Directories with a name that starts with `_`.
+
+Dune does not copy these entries into `_build`, except some hidden files.
+Thus, the check of `dune build @runtest` and the join find the same
+fragments. The check and the join ignore spaces before and after the
+name of an area.
 
 To change a line, edit the fragment that has it. The lines that pull
 requests gave before the fragments are in `changes/0-open-entry.md`. Its
@@ -102,15 +114,14 @@ dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
 ```
 
 The changelog tool adds the lines of each fragment under the heading of
-their area.
-In an area, the lines of the fragments come after the lines that the
-entry has, in the order of the file names. The join ignores the `dune`
-file and hidden files, as dune does. Another entry that is not a file
-with the suffix `.md` is an error. The tool writes the areas in
-the order of the list, and adds the `## Unreleased` heading if the entry
-does not exist. Then it deletes the fragments. If a fragment has an
-error, the tool changes no file. Read the result, and change the order of
-the lines if necessary.
+their area. In an area, the lines of the fragments come after the lines
+that the entry has, in the order of the file names. The join ignores the
+same entries as the check. Another entry that is not a file with the
+suffix `.md` is an error. The tool writes the areas in the order of the
+list. If the entry does not exist, the tool adds the `## Unreleased`
+heading. Then it deletes the fragments. If a fragment has an error, the
+tool changes no file. Read the result, and change the order of the lines
+if necessary.
 
 The entry opens on one short paragraph saying what got better, in the
 user's terms. It lists no breaking change: each one is a `(breaking)`
