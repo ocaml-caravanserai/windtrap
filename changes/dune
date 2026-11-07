@@ -1,0 +1,14 @@
+; Each Markdown file in this directory is a changelog fragment
+; (doc/dev/changelog.md). The dirs field also copies the directories
+; whose names start with "_" for the check.
+
+(dirs :standard _*)
+
+(rule
+ (alias runtest)
+ (deps
+  (source_tree .))
+ (action
+  (chdir
+   %{project_root}
+   (run %{exe:../dev/changelog/changelog.exe} check changes))))

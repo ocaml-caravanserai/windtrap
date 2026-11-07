@@ -1,23 +1,84 @@
 # The changelog
 
 `CHANGES.md` is written for users. It has one entry per release, newest
-first, and the entry for the next release is open at the top while the
-work happens.
+first. While the work happens, the lines for the next release are in
+fragments in `changes/`, not in `CHANGES.md`. At release, the changelog
+tool puts the lines of the fragments into a new open entry at the top.
+Then you give this entry the heading of the version.
 
 ## Headings
 
 A released entry is headed `## vX.Y.Z YYYY-MM-DD`, the tag's date.
-`dune-release tag` reads the version from the first heading of the
-file, so nothing stands above it. The open entry is headed
-`## Unreleased`, and it exists only while it has lines: at release it is
-renamed to the version's heading.
+`dune-release tag` reads the version from the first heading after the
+`# Changelog` title, so no other heading stands between them. The open
+entry is headed `## Unreleased`. It exists only during the release: the
+changelog tool makes it, and then you rename it to the heading of the
+version.
 
 ## While working
 
-A change a user can see adds its line to the open entry in the same
-commit: a new or changed value, flag, variable, file format, output line,
-exit code, error message, or default. A change a user cannot see (an
-internal refactor, a test, a comment) adds nothing.
+A change that a user can see gives a line in the changelog. Examples are
+a new or changed value, flag, variable, file format, output line, exit
+code, error message or default. A change that a user cannot see (an
+internal refactor, a test, a comment, a tool for the development of
+windtrap) gives no line.
+
+The line goes into a fragment, in the same commit as the change. Do not
+add the line to `CHANGES.md`. Thus no two open pull requests change
+`CHANGES.md`.
+
+### Fragments
+
+A fragment is a file in `changes/` whose name ends with `.md` and does
+not start with a dot. A pull request that gives lines adds one fragment.
+Give it a name that no other fragment has, for example the name of the
+branch: `changes/mutate-retry.md`. Put `-` in place of each `/` of the
+branch name. When the pull request gives more lines, add them to the
+same fragment.
+
+The changelog tool ignores the other files of `changes/`, so a fragment
+without the suffix `.md` is lost. A directory in `changes/` whose name
+does not start with a dot is an error. The check in dune does not find
+a directory that holds no file that dune copies, for example an empty
+directory. The join command refuses it.
+
+A fragment has the form of the open entry, without the `## Unreleased`
+heading. It starts with an area heading, and each area heading has its
+lines:
+
+```markdown
+### Mutation testing
+
+- `--mutate-retry N` does a check of each kill that names a test.
+```
+
+An area heading is `### ` and then the name of an area of the list in
+"Lines", with the same spelling and no other space. A list item is `- `
+at the start of the line, and then text that does not start with a
+space or a tab. A line of only dashes and spaces, such as `- - -`, is
+not a list item. Each other line of an area is
+a list item, or starts with two spaces (text under a list item, for
+example a code block). A blank line is also permitted. Thus each line
+stays in the list of its area in `CHANGES.md`.
+
+`dune build @runtest` does a check of the fragments (`changes/dune`).
+The check finds these errors:
+
+- A fragment that does not start with an area heading
+- An unknown area
+- An area whose first line is not a list item
+- A line of an area that is not a list item and does not start with two
+  spaces
+- A directory in `changes/` whose name does not start with a dot.
+
+The check and the join command use the same rule to find the fragments.
+
+To change a line, edit the fragment that has it. Until the first release
+with fragments, the lines of the pull requests before the fragments are
+in `changes/0-open-entry.md`. The name of this file sorts first, so its
+lines come first in each area.
+
+### Lines
 
 One line per change, addressed to the user, in the present tense,
 stating what is now true: "`expect_file` reads its baseline relative to
@@ -40,9 +101,29 @@ A. B. for the report (#12)."
 Lines go under the area they belong to, in this order: Declaring tests,
 Assertions, Property testing, Stateful testing, Baselines and expect
 tests, Resources and process state, Running tests, Coverage, Mutation
-testing, Packages and libraries. An empty area is omitted.
+testing, Packages and libraries. An empty area is omitted. The changelog
+tool has the same list (`areas` in `dev/changelog/changelog.ml`). If you
+change the list in this document, change `areas` also.
 
 ## At release
+
+`release.md` gives the steps of a release. Its first step runs the join
+command of the changelog tool, from the root of the repository:
+
+```sh
+dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
+```
+
+The tool makes the open entry above the first released entry. It writes
+the areas in the order of the list. In an area, the lines come in the
+order of the file names of the fragments. Then the tool deletes the
+fragments. Read the result. If necessary, change the order of the lines.
+
+The tool changes no file in these cases:
+
+- `CHANGES.md` already has a `## Unreleased` entry.
+- A fragment has an error.
+- `changes/` has no fragment. Then the tool makes no open entry.
 
 The entry opens on one short paragraph saying what got better, in the
 user's terms. It lists no breaking change: each one is a `(breaking)`
