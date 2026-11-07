@@ -49,18 +49,20 @@ lines:
 ```
 
 An area heading is `### ` and then the name of an area of the list in
-"Lines", with the same spelling and no other space. Each other line of
-an area starts with `- ` (a list item) or with two spaces (text under a
-list item, for example a code block). A blank line is also permitted.
-Thus each line stays in the list of its area in `CHANGES.md`.
+"Lines", with the same spelling and no other space. A list item is `- `
+and then text, at the start of the line. Each other line of an area is
+a list item, or starts with two spaces (text under a list item, for
+example a code block). A blank line is also permitted. Thus each line
+stays in the list of its area in `CHANGES.md`.
 
 `dune build @runtest` does a check of the fragments (`changes/dune`).
 The check finds these errors:
 
 - A fragment that does not start with an area heading
 - An unknown area
-- An area whose first line does not start with `- `
-- A line of an area that does not start with `- ` or two spaces
+- An area whose first line is not a list item
+- A line of an area that is not a list item and does not start with two
+  spaces
 - A directory in `changes/`.
 
 The check and the join command use the same rule to find the fragments.

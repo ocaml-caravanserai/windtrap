@@ -35,6 +35,14 @@ let rec drop_blank = function
   | l :: rest when is_blank l -> drop_blank rest
   | lines -> lines
 
+(* "- " and then text, but not a thematic break such as "- - -". *)
+let is_item line =
+  String.length line > 2
+  && String.starts_with ~prefix:"- " line
+  && line.[2] <> ' '
+  && line.[2] <> '\t'
+  && not (String.for_all (fun c -> c = '-' || c = ' ' || c = '\t') line)
+
 (* Each area of a fragment with its lines, in the order of the fragment. *)
 let parse path =
   let sections = ref [] in
@@ -55,12 +63,12 @@ let parse path =
         | (_, _, body) :: _ ->
             if
               not
-                (is_blank line
-                || String.starts_with ~prefix:"- " line
+                (is_blank line || is_item line
                 || String.starts_with ~prefix:"  " line)
             then
               error path n
-                "a line that does not start with \"- \" or two spaces";
+                "a line that is not a list item (\"- \" and text) and does not \
+                 start with two spaces";
             body := (if is_blank line then "" else line) :: !body)
     (read_lines path);
   if !sections = [] then
@@ -71,8 +79,8 @@ let parse path =
         List.rev (drop_blank (List.rev (drop_blank (List.rev !body))))
       in
       (match body with
-      | l :: _ when String.starts_with ~prefix:"- " l -> ()
-      | _ -> error path n "area %S does not start with a line \"- \"" area);
+      | l :: _ when is_item l -> ()
+      | _ -> error path n "area %S does not start with a list item" area);
       (area, body))
     !sections
 
