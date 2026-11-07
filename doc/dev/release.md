@@ -80,7 +80,8 @@ with the re-measured numbers (`testing.md`, "The conformance corpus").
       The tool makes the open entry (`## Unreleased`) and deletes the
       fragments.
    3. Rename `## Unreleased` to `## vX.Y.Z YYYY-MM-DD`. This heading is
-      the first heading of the file after the title.
+      the first heading of the file after the title. If the tool made no
+      open entry, `changes/` has no fragment: write the entry by hand.
    4. Write the opening paragraph and the highlights above the areas.
    5. Commit `CHANGES.md` and the deleted fragments in one commit.
 2. Bump nothing in source: the version comes from the git tag
