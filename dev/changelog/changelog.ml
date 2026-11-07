@@ -35,9 +35,7 @@ let rec drop_blank = function
   | l :: rest when is_blank l -> drop_blank rest
   | lines -> lines
 
-(* Each area of a fragment with its lines, in the order of the fragment.
-   Each line of an area is a list item or indented under one, so the
-   joined file keeps it in the list of its area. *)
+(* Each area of a fragment with its lines, in the order of the fragment. *)
 let parse path =
   let sections = ref [] in
   List.iteri
@@ -63,7 +61,7 @@ let parse path =
             then
               error path n
                 "a line that does not start with \"- \" or two spaces";
-            body := line :: !body)
+            body := (if is_blank line then "" else line) :: !body)
     (read_lines path);
   if !sections = [] then
     error path 1 "the fragment does not start with an area heading";
@@ -79,7 +77,7 @@ let parse path =
     !sections
 
 (* The files of [dir] whose names end with .md and do not start with a
-   dot. A directory is an error, so no fragment is lost in one. *)
+   dot. *)
 let fragments dir =
   Sys.readdir dir |> Array.to_list
   |> List.filter (fun f -> f.[0] <> '.')

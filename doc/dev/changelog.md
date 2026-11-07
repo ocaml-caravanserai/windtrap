@@ -2,17 +2,16 @@
 
 `CHANGES.md` is written for users. It has one entry per release, newest
 first. While the work happens, the lines for the next release are in
-fragments in `changes/`. A pull request does not add its lines to
-`CHANGES.md`. It adds them in a fragment. At release, the changelog tool
-puts the lines of the fragments into a new open entry, `## Unreleased`,
-at the top. Then you give this entry the heading of the version.
+fragments in `changes/`, not in `CHANGES.md`. At release, the changelog
+tool puts the lines of the fragments into a new open entry at the top.
+Then you give this entry the heading of the version.
 
 ## Headings
 
 A released entry is headed `## vX.Y.Z YYYY-MM-DD`, the tag's date.
 `dune-release tag` reads the version from the first heading after the
-`# Changelog` title, so no other heading stands between them. The open entry is headed
-`## Unreleased`. It exists only during the release: the changelog tool
+`# Changelog` title, so no other heading stands between them. The open
+entry is headed `## Unreleased`. It exists only during the release: the changelog tool
 makes it, and then you rename it to the heading of the version.
 
 ## While working
@@ -30,10 +29,11 @@ add the line to `CHANGES.md`. Thus no two open pull requests change
 ### Fragments
 
 A fragment is a file in `changes/` whose name ends with `.md` and does
-not start with a dot. A pull request that gives lines adds one fragment
-with a name that no other fragment has, for example the name of its
-branch with `-` in place of each `/`: `changes/mutate-retry.md`. When
-the pull request gives more lines, add them to the same fragment. The
+not start with a dot. A pull request that gives lines adds one fragment.
+Give it a name that no other fragment has, for example the name of the
+branch: `changes/mutate-retry.md`. Put `-` in place of each `/` of the
+branch name. When the pull request gives more lines, add them to the
+same fragment. The
 changelog tool ignores the other files of `changes/`, so a fragment
 without the suffix `.md` is lost. A directory in `changes/` is an
 error.
@@ -51,8 +51,8 @@ lines:
 An area heading is `### ` and then the name of an area of the list in
 "Lines", with the same spelling and no other space. Each other line of
 an area starts with `- ` (a list item) or with two spaces (text under a
-list item, for example a code block). Thus each line stays in the list
-of its area in `CHANGES.md`.
+list item, for example a code block). A blank line is also permitted.
+Thus each line stays in the list of its area in `CHANGES.md`.
 
 `dune build @runtest` does a check of the fragments (`changes/dune`).
 The check finds these errors:
@@ -63,8 +63,7 @@ The check finds these errors:
 - A line of an area that does not start with `- ` or two spaces
 - A directory in `changes/`.
 
-The check and the join command find the fragments with the same rule,
-so they find the same fragments.
+The check and the join command use the same rule to find the fragments.
 
 To change a line, edit the fragment that has it. Until the first release
 with fragments, the lines of the pull requests before the fragments are
@@ -110,10 +109,13 @@ dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
 The tool makes the open entry above the first released entry. It writes
 the areas in the order of the list. In an area, the lines come in the
 order of the file names of the fragments. Then the tool deletes the
-fragments. If `CHANGES.md` already has a `## Unreleased` entry, or if a
-fragment has an error, the tool changes no file. With no fragment, the
-tool changes no file and makes no open entry. Read the result, and
-change the order of the lines if necessary.
+fragments. Read the result. If necessary, change the order of the lines.
+
+The tool changes no file in these cases:
+
+- `CHANGES.md` already has a `## Unreleased` entry.
+- A fragment has an error.
+- `changes/` has no fragment. Then the tool makes no open entry.
 
 The entry opens on one short paragraph saying what got better, in the
 user's terms. It lists no breaking change: each one is a `(breaking)`

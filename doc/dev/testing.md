@@ -257,9 +257,8 @@ Every golden is accepted the way windtrap tells its users to accept one,
 and every promoted diff is reviewed as a code change.
 
 - Cram sessions (`test/cram`, `examples/x-blueprint/test/cram`,
-  `dev/changelog`) and rule
-  goldens (the `.expected` files under `test/unit/semantics` and
-  `test/conformance`): `dune promote` after the failing `dune runtest`.
+  `dev/changelog`) and rule goldens (the `.expected` files under
+  `test/unit/semantics` and `test/conformance`): `dune promote` after the failing `dune runtest`.
 - Inline suites (`test/inline/forms`, `test/inline/strict_flags`,
   `test/inline/config`, the corpus): the runner runs under
   `--corrected`, dune diffs the `.corrected` file, and `dune promote`

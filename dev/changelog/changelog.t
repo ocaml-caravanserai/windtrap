@@ -81,7 +81,7 @@ the order of the list. Then the join command deletes the fragments.
 
   $ rm changes/good.md
   $ printf '### Mutation testing\n\n- From b.\n' > changes/b.md
-  $ printf '### Mutation testing\n\n- From a,\n  two lines.\n\n### Declaring tests\n\n- New.\n' > changes/a.md
+  $ printf '### Mutation testing\n\n- From a,\n  two lines:\n\n  ```sh\n  # code\n  ```\n  \n### Declaring tests\n\n- New.\n' > changes/a.md
   $ printf '### Mutation testing\n\n- From 0.\n' > changes/0-old.md
   $ printf '# Changelog\n\n## v0.1.0 2026-01-01\n\n- Released line.\n' > CHANGES.md
   $ cl join CHANGES.md changes
@@ -98,7 +98,11 @@ the order of the list. Then the join command deletes the fragments.
   
   - From 0.
   - From a,
-    two lines.
+    two lines:
+  
+    ```sh
+    # code
+    ```
   - From b.
   
   ## v0.1.0 2026-01-01
