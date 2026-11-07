@@ -386,7 +386,8 @@ WINDTRAP_DEBUG_MEMORY=100 dune exec --instrument-with ppx_windtrap.mutate test/u
 
 The first command is the full run. In the second command, dune runs one
 action at a time. If the second run completes and the first run does
-not, the loops that dune runs at the same time add their memory.
+not, the memory of the loops that dune runs at the same time is a
+possible cause.
 The third command runs one large suite alone, and keeps its standard
 error in a file. Dune shows the standard error of an action only when
 the action ends. If dune or the machine stops, dune loses the lines of
@@ -472,10 +473,10 @@ The fields:
 At `dry-run`, `cases` is 0 and `rows` is the rows of the dry run. At
 `report`, `cases` and `rows` are those of the last pass. `rows` is 0 at
 the start of each pass. It does not count a job that ended, until the
-supervisor gives the result of the job to the loop. The reach table does not change after
-the dry run, so `sites` and `reaches` have the same values in each line.
-When `rss_kb` grows and `heap_kb` does not, the growth is
-outside the OCaml heap.
+supervisor gives the result of the job to the loop. The reach table
+does not change after the dry run, so `sites` and `reaches` have the
+same values in each line. When `rss_kb` grows and `heap_kb` does not,
+the growth is outside the OCaml heap.
 
 The limits:
 
