@@ -4361,6 +4361,7 @@ let memory_sizes () =
   List.iter
     (fun r ->
       is_true (0 < get r "rss_kb");
+      is_true (get r "rss_kb" <= get r "hwm_kb");
       is_true (get r "heap_kb" <= get r "heap_peak_kb"))
     records;
   let times = List.map (fun r -> get r "time_ms") records in
