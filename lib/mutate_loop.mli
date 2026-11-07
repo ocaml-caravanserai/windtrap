@@ -237,8 +237,8 @@ val execute_and_report :
     unknown, or, past a whole green dry run, the reached mutants as unknown and
     the others as that dry run found them. They are tried in this order:
     - The platform is Windows, where windtrap starts no worker process.
-    - [WINDTRAP_DEBUG_MEMORY] is set to a value that [int_of_string] does not
-      read as a positive integer.
+    - [WINDTRAP_DEBUG_MEMORY] is set to a value that is not empty and that
+      [int_of_string] does not read as a positive integer.
     - This process cannot start the jobs' workers ([Supervisor.can_spawn]): it
       spawned a domain, so it cannot fork, and a new start of the executable
       would not reach this run.
