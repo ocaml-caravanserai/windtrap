@@ -172,6 +172,10 @@ val settings : parsed -> (Run.config, error) result
       [--mutate], and [0] otherwise. [--mutate-retry] from the command line
       without [--mutate] is [Error (Requires_any _)]. From its mirror alone it
       is ignored.
+    - [mutate_memory] is the layers' [--mutate-memory] when a layer gives
+      [--mutate], and the default otherwise. [--mutate-memory] from the command
+      line without [--mutate] is [Error (Requires_any _)]. From its mirror alone
+      it is ignored.
     - A relative path of [--junit], [--json] or [-o] is made absolute, against
       the working directory when the command line gives it and against
       {!Os.project_root} when its mirror does. It is kept as given when that

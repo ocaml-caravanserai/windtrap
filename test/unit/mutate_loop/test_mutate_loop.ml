@@ -1195,6 +1195,29 @@ let deadline_kill () =
        ])
     (rows b.run)
 
+let memory_limit () =
+  if not (Sys.file_exists "/proc/self/status") then
+    skip ~reason:"the limit reads /proc/<pid>/status" ();
+  remove (verdicts_path ());
+  let r =
+    finish_within ~what:"the hog's memory limit"
+      (start ~env:[ suite "hog" ] [ mutate; "--mutate-memory=64" ])
+  in
+  equal string "exited 0" r.status;
+  equal text "" r.err;
+  equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+    (outcome r.out);
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 unknown: its run passed its memory limit of 64 MB";
+         "subject.ml:18 unreached";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r)
+
 (* The sleep runs armed and unarmed alike, so the dry run prices it into
    the deadline; the verdict, not a stopwatch, says whether the clock
    ended the child. *)
@@ -1260,6 +1283,8 @@ let limits =
       test "a mutant that never terminates is killed by its hit budget" runaway;
       test "a mutant whose run hangs is unknown at its job's deadline"
         deadline_kill;
+      test "a mutant whose worker passes its memory limit is unknown"
+        memory_limit;
       test "a child's deadline is at least one second" (fun () ->
           let b = Lazy.force blocked in
           equal string "exited 0" b.run.status;

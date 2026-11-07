@@ -89,6 +89,7 @@ let flags (p : Cli.parsed) =
         bool "skip_killed" p.skip_killed;
         bool "mutate_workers" c.mutate_workers;
         some "--mutate-retry" "mutate_retry" string_of_int c.mutate_retry;
+        some "--mutate-memory" "mutate_memory" string_of_int c.mutate_memory;
         bool "help" p.help;
         bool "version" p.version;
       ]
@@ -159,6 +160,7 @@ let changes (c : Run.config) =
         field "mutation" mutation_name (fun c -> c.Run.mutation);
         field "mutate_workers" bool (fun c -> c.Run.mutate_workers);
         field "mutate_retry" string_of_int (fun c -> c.Run.mutate_retry);
+        field "mutate_memory" string_of_int (fun c -> c.Run.mutate_memory);
         field "github" bool (fun c -> c.Run.github);
         field "invocation" invocation_name (fun c -> c.Run.invocation);
         field "broadcast selection" bool (fun c ->
@@ -377,6 +379,7 @@ let messages () =
       Cli.Requires ("--lines", "--mutate");
       Cli.Requires_any ("--mutate-workers", [ "--mutate"; "--arm" ]);
       Cli.Requires_any ("--mutate-retry", [ "--mutate" ]);
+      Cli.Requires_any ("--mutate-memory", [ "--mutate" ]);
     ]
   in
   let refused =
@@ -412,6 +415,7 @@ let messages () =
     option '--lines' scopes '--mutate', which is not given
     option '--mutate-workers' requires '--mutate' or '--arm'
     option '--mutate-retry' requires '--mutate'
+    option '--mutate-memory' requires '--mutate'
     invalid value 'nope' for --seed: expected an s1: token with 16 lowercase hexadecimal digits
     invalid value '9/2' for --shard: expected K/N with 1 <= K <= N (e.g. 2/4)
     invalid value 'x' for --list: expected no argument
@@ -577,6 +581,8 @@ let parsing =
           ([ "--mutate-retry"; "2" ], "mutate_retry 2");
           ([ "--mutate-retry=0" ], "mutate_retry 0");
           ([ "--mutate-retry=100" ], "mutate_retry 100");
+          ([ "--mutate-memory"; "64" ], "mutate_memory 64");
+          ([ "--mutate-memory=4096" ], "mutate_memory 4096");
           ([ "-h" ], "help");
           ([ "--help" ], "help");
           ([ "-V" ], "version");
@@ -675,6 +681,9 @@ let parsing =
           ("--mutate-retry", "-1");
           ("--mutate-retry", "101");
           ("--mutate-retry", "two");
+          ("--mutate-memory", "0");
+          ("--mutate-memory", "-5");
+          ("--mutate-memory", "lots");
         ]
         refused_value;
       parse_rows "parse is the first error from the left"
@@ -970,6 +979,22 @@ let resolution =
           ( [ ("WINDTRAP_MUTATE_RETRY", "101") ],
             [ "--mutate=lib/" ],
             {|invalid WINDTRAP_MUTATE_RETRY "101"|} );
+        ];
+      resolve_rows
+        "--mutate-memory or its mirror sets mutate_memory under --mutate, and \
+         on the command line it needs --mutate"
+        [
+          ( [],
+            [ "--mutate"; "--mutate-memory=64" ],
+            "mutation loop [], mutate_memory 64" );
+          ( [ ("WINDTRAP_MUTATE_MEMORY", "128") ],
+            [ "--mutate" ],
+            "mutation loop [], mutate_memory 128" );
+          ([], [ "--mutate-memory=64" ], "--mutate-memory requires --mutate");
+          ([ ("WINDTRAP_MUTATE_MEMORY", "128") ], [], "defaults");
+          ( [ ("WINDTRAP_MUTATE_MEMORY", "0") ],
+            [ "--mutate=lib/" ],
+            {|invalid WINDTRAP_MUTATE_MEMORY "0"|} );
         ];
       resolve_rows "--mutate with --arm is refused, whichever layer gave each"
         [

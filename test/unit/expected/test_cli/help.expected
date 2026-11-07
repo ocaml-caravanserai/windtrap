@@ -100,6 +100,10 @@ OPTIONS:
       is above 0, also check each kill with no mutant (with --mutate, default
       0).
 
+  --mutate-memory=MB (env WINDTRAP_MUTATE_MEMORY)
+      Stop the worker of a mutant whose resident memory is above MB megabytes,
+      and give the mutant as unknown (with --mutate, Linux only, default 1024).
+
   --mutate-workers (env WINDTRAP_MUTATE_WORKERS)
       Let a stateful test on several domains spawn its worker domains (with
       --mutate or --arm).

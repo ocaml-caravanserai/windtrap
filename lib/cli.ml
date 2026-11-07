@@ -315,6 +315,13 @@ let entries =
       "Run the job of a survivor up to N more times, each in a fresh worker. \
        If N is above 0, also check each kill with no mutant (with --mutate, \
        default 0).";
+    row "--mutate-memory"
+      (value "MB" positive_int
+         (field (fun c mutate_memory -> { c with mutate_memory })))
+      ~mirror:(mirrored "WINDTRAP_MUTATE_MEMORY")
+      "Stop the worker of a mutant whose resident memory is above MB \
+       megabytes, and give the mutant as unknown (with --mutate, Linux only, \
+       default 1024).";
     row "--mutate-workers"
       (switch (fun c -> { c with mutate_workers = true }))
       ~mirror:(mirrored "WINDTRAP_MUTATE_WORKERS")
@@ -586,6 +593,11 @@ let settings cli =
     else Ok ()
   in
   let* () =
+    if gave cli "--mutate-memory" && not (gave layered "--mutate") then
+      Error (Requires_any ("--mutate-memory", [ "--mutate" ]))
+    else Ok ()
+  in
+  let* () =
     if gave layered "--mutate" && gave layered "--arm" then
       Error (Incompatible_flags ("--mutate", "--arm"))
     else Ok ()
@@ -608,6 +620,9 @@ let settings cli =
         | (Run.Armed _ | Run.No_mutation) as m -> m);
       mutate_workers = c.mutate_workers && mutates;
       mutate_retry = (if gave layered "--mutate" then c.mutate_retry else 0);
+      mutate_memory =
+        (if gave layered "--mutate" then c.mutate_memory
+         else (Run.default_config ()).mutate_memory);
       case_file;
       log_dir = path "--output" c.log_dir;
       junit = Option.map (path "--junit") c.junit;

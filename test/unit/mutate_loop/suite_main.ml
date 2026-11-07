@@ -192,6 +192,21 @@ let hang () =
   let never_written, _held_open = Unix.pipe () in
   ignore (Unix.read never_written (Bytes.create 1) 0 1)
 
+(* Touches 512 MB when [sub]'s answer changes, then waits as [hang] does,
+   so only the memory limit or the deadline ends the run. *)
+let hog =
+  [
+    test "fills memory when sub changes" (fun () ->
+        if Subject.sub 10 4 <> 6 then begin
+          let chunks =
+            List.init 64 (fun _ -> Bytes.make (8 * 1024 * 1024) 'x')
+          in
+          ignore (Sys.opaque_identity chunks);
+          hang ()
+        end;
+        is_true (Subject.sub 10 4 < 100));
+  ]
+
 let block =
   [
     test "watches sub without pinning it" (fun () ->
@@ -813,6 +828,7 @@ let () =
         (Windtrap_runtime.Mutate.catalogue ())
   | "weak" -> exit @@ run "calc" [ group "widen" weak ]
   | "block" -> exit @@ run "calc" [ group "block" block ]
+  | "hog" -> exit @@ run "calc" [ group "hog" hog ]
   | "held" -> exit @@ run "calc" [ group "held" held ]
   | "interrupted" -> exit @@ run "calc" [ group "held" interrupted ]
   | "pinned" ->

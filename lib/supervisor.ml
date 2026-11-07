@@ -1336,6 +1336,19 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
     ignore (reap st.w);
     settle st Expired
   in
+  let limit_kb = config.mutate_memory * 1024 in
+  let outgrown st =
+    match Os.memory_of_pid st.w.pid with
+    | Some m -> m.resident_kb > limit_kb
+    | None -> false
+  in
+  let stopped_at_limit st =
+    kill st.w;
+    ignore (reap st.w);
+    settle st
+      (Lost
+         (Printf.sprintf "passed its memory limit of %d MB" config.mutate_memory))
+  in
   let rec deliver () =
     if !delivered < n then
       match settled.(!delivered) with
@@ -1374,7 +1387,7 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
               (* A new start is checked once a step until it serves. *)
               if Option.is_some st.restarted then acc
               else Float.min acc (Float.max 0. (remaining st)))
-            1. running'
+            0.25 running'
         in
         let ready =
           match
@@ -1387,6 +1400,7 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
           (fun st ->
             if Option.is_none !signal then
               if remaining st <= 0. then expired st
+              else if outgrown st then stopped_at_limit st
               else if List.mem st.w.reports ready then handle st
               else if ready = [] then
                 match reap ~flags:[ Unix.WNOHANG ] st.w with

@@ -291,6 +291,16 @@ its site, as when an earlier test that its run leaves out
 decided whether the site runs, is not evaluated and is no survivor
 either, listed under `not evaluated` with its `arm:` command.
 
+A mutant can also make its run take memory with no limit, for example
+when it removes the step of a loop that builds a list. On Linux, the
+loop reads the resident memory of each worker. A worker above the
+limit ends with its process group, as at its deadline, and the mutant
+is unknown: `its run passed its memory limit of 1024 MB`.
+`--mutate-memory MB` (mirror `WINDTRAP_MUTATE_MEMORY`) sets the limit,
+and the default is 1024. The limit is for the worker process only, not
+for a process that a test starts. The dry run has no limit. On a
+system without `/proc`, the loop has no limit.
+
 Until a mutant's run evaluates the site, the run executes the code
 without the mutant. Thus a test that fails before the first evaluation
 does not kill the mutant. Its failure has another cause, for example a

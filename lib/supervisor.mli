@@ -194,7 +194,11 @@ val fresh :
     under [bail] after the first counted failure in or after the test that first
     evaluated the armed site. A worker that retires leaves the rest of the job
     to a fresh worker, which arms the mutant again. Coverage counted by a worker
-    is dropped, since a mutant changed what the program does.
+    is dropped, since a mutant changed what the program does. A worker whose
+    resident memory ({!Os.memory_of_pid}) is above [config.mutate_memory] MB
+    ends its job with its process group, as
+    [Lost "passed its memory limit of N MB"]. A worker whose memory cannot be
+    read has no limit.
 
     While it runs, the parent handles [SIGINT], [SIGTERM], [SIGHUP] and
     [SIGPIPE], and tells [on_signal] of each as it arrives, in the handler,
