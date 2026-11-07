@@ -76,15 +76,15 @@ the changelog.
 
 The join puts the lines of each area after the lines that the entry has,
 in the order of the file names. It puts the areas in the order of the
-list. Then it deletes the fragments. It ignores a file that is not a
-Markdown file, and a hidden file, as dune does. An editor lock file is
-an example of a hidden file.
+list. Then it deletes the fragments. It ignores the dune file and each
+hidden file, as dune does. An editor lock file is an example of a hidden
+file.
 
   $ printf '### Mutation testing\n\n- From b.\n' > changes/b.md
   $ printf '### Mutation testing\n\n- From a,\n  two lines.\n\n### Declaring tests\n\n- New.\n' > changes/a.md
   $ touch changes/dune
   $ printf 'junk\n' > changes/.x.md
-  $ ln -s user@host.1:1 changes/.#a.md
+  $ touch 'changes/.#a.md'
   $ cl join CHANGES.md changes
   $ ls -A changes
   .#a.md
@@ -133,6 +133,41 @@ If one fragment has an error, the join changes no file.
   b.md
   dune
 
+A directory or a file without the suffix .md in the directory of
+fragments gives exit code 1, for the join and for the check of the
+directory. The join then changes no file.
+
+  $ cp CHANGES.md before
+  $ mkdir changes/feat
+  $ cp changes/a.md changes/feat/x.md
+  $ cl join CHANGES.md changes
+  changes/feat: not a file with the suffix .md
+  [1]
+  $ cl check changes
+  changes/feat: not a file with the suffix .md
+  [1]
+  $ rm -r changes/feat
+  $ cp changes/a.md changes/mutate-retry
+  $ cl join CHANGES.md changes
+  changes/mutate-retry: not a file with the suffix .md
+  [1]
+  $ cl check changes
+  changes/mutate-retry: not a file with the suffix .md
+  [1]
+  $ cmp before CHANGES.md
+  $ ls changes
+  a.md
+  b.md
+  dune
+  mutate-retry
+  $ rm changes/mutate-retry
+
+The check of the directory does a check of each fragment in it.
+
+  $ cl check changes
+  changes/b.md:1: the first line of area "Coverage" does not start with "- "
+  [1]
+
 If the changelog has no open entry, the join adds one above the first
 release.
 
@@ -174,6 +209,6 @@ A file that does not exist gives exit code 1.
 With no command, the tool shows the usage and gives exit code 2.
 
   $ cl
-  usage: changelog check FRAGMENT...
+  usage: changelog check PATH...
          changelog join CHANGES DIR
   [2]

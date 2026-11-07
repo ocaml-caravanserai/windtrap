@@ -88,9 +88,17 @@ let parse_fragment path =
 
 let fragments dir =
   Sys.readdir dir |> Array.to_list
-  |> List.filter (fun f -> f.[0] <> '.' && Filename.check_suffix f ".md")
+  |> List.filter (fun f -> f <> "dune" && f.[0] <> '.')
   |> List.sort compare
-  |> List.map (fun f -> dir ^ "/" ^ f)
+  |> List.map (fun f ->
+      let path = dir ^ "/" ^ f in
+      if Sys.is_directory path || not (Filename.check_suffix f ".md") then
+        raise (Error (path ^ ": not a file with the suffix .md"));
+      path)
+
+let check path =
+  let paths = if Sys.is_directory path then fragments path else [ path ] in
+  List.iter (fun p -> ignore (parse_fragment p)) paths
 
 let join changes dir =
   let paths = fragments dir in
@@ -137,12 +145,11 @@ let join changes dir =
 let () =
   try
     match List.tl (Array.to_list Sys.argv) with
-    | "check" :: paths -> List.iter (fun p -> ignore (parse_fragment p)) paths
+    | "check" :: paths -> List.iter check paths
     | [ "join"; changes; dir ] -> join changes dir
     | _ ->
         prerr_endline
-          "usage: changelog check FRAGMENT...\n\
-          \       changelog join CHANGES DIR";
+          "usage: changelog check PATH...\n       changelog join CHANGES DIR";
         exit 2
   with Error msg | Sys_error msg ->
     prerr_endline msg;
