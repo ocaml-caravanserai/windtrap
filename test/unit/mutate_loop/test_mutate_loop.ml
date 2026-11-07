@@ -4209,6 +4209,258 @@ let flaky_kills =
         live_line_of_a_check;
     ]
 
+(* Memory records *)
+
+let memory_var = "WINDTRAP_DEBUG_MEMORY"
+let memory_prefix = "windtrap: memory "
+let is_memory_line line = String.starts_with ~prefix:memory_prefix line
+let memory_lines err = List.filter is_memory_line (lines err)
+
+let without_memory err =
+  String.concat "\n"
+    (List.filter (fun line -> not (is_memory_line line)) (lines err))
+
+let field_names =
+  [
+    "time_ms";
+    "rss_kb";
+    "hwm_kb";
+    "heap_kb";
+    "heap_peak_kb";
+    "sites";
+    "reaches";
+    "cases";
+    "rows";
+    "verdicts";
+    "blocks";
+    "checks";
+    "pid";
+  ]
+
+type record = { point : string; fields : (string * int) list; named : string }
+
+let decimal v = v <> "" && String.for_all (fun c -> '0' <= c && c <= '9') v
+
+(* The line in its full form: the point, the fields in their order, each
+   value a decimal integer, and the suite name to the end. *)
+let record line =
+  let rest =
+    String.sub line
+      (String.length memory_prefix)
+      (String.length line - String.length memory_prefix)
+  in
+  match index_of ~sub:" suite=" rest with
+  | None -> failf "no suite= field in: %s" line
+  | Some i ->
+      let head = String.sub rest 0 i in
+      let start = i + String.length " suite=" in
+      let named = String.sub rest start (String.length rest - start) in
+      let point, pairs =
+        match String.split_on_char ' ' head with
+        | point :: pairs -> (point, pairs)
+        | [] -> failf "no point in: %s" line
+      in
+      let fields =
+        List.map
+          (fun pair ->
+            match String.index_opt pair '=' with
+            | Some j ->
+                let v = String.sub pair (j + 1) (String.length pair - j - 1) in
+                if not (decimal v) then failf "%S is no integer in: %s" v line;
+                (String.sub pair 0 j, int_of_string v)
+            | None -> failf "%S is no name=value in: %s" pair line)
+          pairs
+      in
+      equal (list string) field_names (List.map fst fields);
+      { point; fields; named }
+
+let get r name = List.assoc name r.fields
+let capped_retry = [ mutate; "--mutate-retry=1" ]
+
+let capped_run ?(env = []) args =
+  spawn ~env:(suite "capped" :: env) (capped_retry @ args)
+
+let memory_baseline = lazy (capped_run [])
+let memory_every n = capped_run ~env:[ (memory_var, n) ] []
+let memory_every_1 = lazy (memory_every "1")
+let memory_every_2 = lazy (memory_every "2")
+
+(* point, cases, rows, verdicts, blocks, checks *)
+let every_job =
+  [
+    ("dry-run", 0, 6, 0, 0, 0);
+    ("probe", 12, 6, 0, 0, 0);
+    ("pass-1:1/3", 12, 7, 0, 0, 1);
+    ("pass-1:2/3", 12, 9, 0, 0, 1);
+    ("pass-1", 12, 10, 0, 0, 1);
+    ("pass-2:1/2", 3, 2, 1, 1, 1);
+    ("pass-2", 3, 3, 2, 2, 1);
+    ("check-1", 1, 1, 2, 2, 1);
+    ("check-2", 1, 1, 2, 2, 1);
+    ("check-3", 1, 1, 3, 2, 1);
+    ("report", 1, 1, 3, 2, 1);
+  ]
+
+let every_second =
+  [
+    "dry-run";
+    "probe";
+    "pass-1:2/3";
+    "pass-1";
+    "pass-2";
+    "check-1";
+    "check-2";
+    "check-3";
+    "report";
+  ]
+
+let memory_unchanged () =
+  let base = Lazy.force memory_baseline and r = Lazy.force memory_every_1 in
+  equal string "exited 0" base.status;
+  equal string "exited 0" r.status;
+  equal text (masked base.out) (masked r.out);
+  equal text (without_memory base.err) (without_memory r.err);
+  equal (option (list string)) (rows base) (rows r);
+  is_true (Option.is_some (rows base))
+
+let memory_points () =
+  let records =
+    List.map record (memory_lines (Lazy.force memory_every_1).err)
+  in
+  equal (list string)
+    (List.map (fun (p, _, _, _, _, _) -> p) every_job)
+    (List.map (fun r -> r.point) records)
+
+let memory_values () =
+  let records =
+    List.map record (memory_lines (Lazy.force memory_every_1).err)
+  in
+  let shown r =
+    strf "%s cases=%d rows=%d verdicts=%d blocks=%d checks=%d" r.point
+      (get r "cases") (get r "rows") (get r "verdicts") (get r "blocks")
+      (get r "checks")
+  in
+  equal (list string)
+    (List.map
+       (fun (p, cases, rows, verdicts, blocks, checks) ->
+         strf "%s cases=%d rows=%d verdicts=%d blocks=%d checks=%d" p cases rows
+           verdicts blocks checks)
+       every_job)
+    (List.map shown records);
+  List.iter (fun r -> equal string "calc" r.named) records
+
+let memory_sizes () =
+  let records =
+    List.map record (memory_lines (Lazy.force memory_every_1).err)
+  in
+  List.iter
+    (fun r ->
+      is_true (0 < get r "rss_kb");
+      is_true (get r "rss_kb" <= get r "hwm_kb");
+      is_true (get r "heap_kb" <= get r "heap_peak_kb"))
+    records;
+  let times = List.map (fun r -> get r "time_ms") records in
+  equal (list int) (List.sort compare times) times;
+  is_true (times <> []);
+  match List.sort_uniq compare (List.map (fun r -> get r "pid") records) with
+  | [ pid ] -> is_true (0 < pid)
+  | pids -> failf "%d pids in the lines" (List.length pids)
+
+let memory_reach () =
+  let records =
+    List.map record (memory_lines (Lazy.force memory_every_1).err)
+  in
+  let pairs = List.map (fun r -> (get r "sites", get r "reaches")) records in
+  match List.sort_uniq compare pairs with
+  | [ (sites, reaches) ] ->
+      if core_instrumented then begin
+        is_true (3 <= sites);
+        is_true (sites <= reaches)
+      end
+      else equal (pair int int) (3, 6) (sites, reaches)
+  | other -> failf "%d different reach counts in the lines" (List.length other)
+
+let memory_every_second () =
+  let r = Lazy.force memory_every_2 in
+  equal (pair string text) ("exited 0", "") (r.status, without_memory r.err);
+  equal (list string) every_second
+    (List.map (fun l -> (record l).point) (memory_lines r.err))
+
+let memory_empty () =
+  let base = Lazy.force memory_baseline in
+  let r = capped_run ~env:[ (memory_var, "") ] [] in
+  equal string base.status r.status;
+  equal text base.err r.err;
+  equal text (masked base.out) (masked r.out);
+  equal (list string) [] (memory_lines r.err)
+
+let memory_refused value =
+  let r = capped_run ~env:[ (memory_var, value) ] [] in
+  let message =
+    strf "invalid value '%s' for %s: expected a positive integer" value
+      memory_var
+  in
+  equal string "exited 1" r.status;
+  contains ~sub:("windtrap: " ^ message) r.err;
+  not_contains ~sub:"passed" r.out;
+  equal (list string) [] (memory_lines r.err);
+  equal (option string) (Some message)
+    (Option.bind r.file (fun (f : file) -> f.refused))
+
+(* A run that never reaches the loop never reads the variable. *)
+let memory_unread =
+  [
+    ("a suite without --mutate", suite_exe, [], []);
+    ("an --arm run", suite_exe, [], [ "--arm"; "site" ]);
+    ( "a broadcast over a prefix that matches no site",
+      suite_exe,
+      [ ("WINDTRAP_MUTATE", scope ^ "none.ml") ],
+      [] );
+  ]
+
+let memory_not_read (_, exe, env, args) =
+  let args = List.map (fun a -> if a = "site" then site 18 else a) args in
+  let base = spawn ~exe ~env args in
+  let r = spawn ~exe ~env:((memory_var, "nope") :: env) args in
+  equal string "exited 0" base.status;
+  equal string base.status r.status;
+  equal text (masked base.out) (masked r.out);
+  equal text base.err r.err
+
+let memory_records =
+  group "Memory records"
+    [
+      test
+        "WINDTRAP_DEBUG_MEMORY changes nothing but the lines on standard error"
+        memory_unchanged;
+      test "a record is written at each point of the run, in its order"
+        memory_points;
+      test "the counts of each record are those of its point" memory_values;
+      test "the sizes, the clock and the process of the records are coherent"
+        memory_sizes;
+      test "the reach table is counted once, at the dry run" memory_reach;
+      test "a value of 2 records every second job of a pass" memory_every_second;
+      test "an empty value is off" memory_empty;
+      cases "an incorrect value refuses the run, and its file says why"
+        ~id:(strf "%S")
+        [ "0"; "-1"; "nope"; " 5" ]
+        memory_refused;
+      cases "a run that does not reach the loop does not read the variable"
+        ~id:(fun (name, _, _, _) -> name)
+        memory_unread memory_not_read;
+      test
+        "a broadcast over a prefix that matches no site runs without mutation"
+        (fun () ->
+          let r =
+            spawn
+              ~env:
+                [ ("WINDTRAP_MUTATE", scope ^ "none.ml"); (memory_var, "nope") ]
+              []
+          in
+          equal string "exited 0" r.status;
+          contains ~sub:"without mutation" r.err);
+    ]
+
 (* The fixtures' verdict files land in the real _build/_mutants, where
    [windtrap mutants] would merge them into the tree's answer, and no rule
    runs these executables but this suite. A forked child ends past
@@ -4245,4 +4497,5 @@ let () =
          forks;
          signals;
          effects;
+         memory_records;
        ])
