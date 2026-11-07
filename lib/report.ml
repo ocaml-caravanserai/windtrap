@@ -1123,10 +1123,12 @@ let mutation_finish ?note ?(lines = []) t m =
       print t [ outcome ]
   | None, _ | Some _, [] -> print t closing
 
-let mutation_refused t message =
+let mutation_say t message =
   clear_live t;
   Pp.flush t.out ();
   Os.say message
+
+let mutation_refused = mutation_say
 
 let mutation_interrupted ?lines t ~during m =
   mutation_refused t

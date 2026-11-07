@@ -370,6 +370,122 @@ budget; a child that overruns or spins is killed with its process group
 and scored killed, because a suite that hangs has noticed the change.
 Mutation needs worker processes and declines by name on Windows.
 
+### The memory of a mutation run
+
+A full `@self-mutate` can stop because the machine has no more memory.
+The variable `WINDTRAP_DEBUG_MEMORY` helps you find the cause. When you
+set it, the parent process of each mutation loop writes one line on
+standard error at each important point of the run. These three runs
+separate the causes:
+
+```
+WINDTRAP_DEBUG_MEMORY=100 WINDTRAP_MUTATE=1 dune build @self-mutate --force --instrument-with ppx_windtrap.mutate
+WINDTRAP_DEBUG_MEMORY=100 WINDTRAP_MUTATE=1 dune build -j 1 @self-mutate --force --instrument-with ppx_windtrap.mutate
+WINDTRAP_DEBUG_MEMORY=100 dune exec --instrument-with ppx_windtrap.mutate test/unit/<suite>.exe -- --mutate 2> memory.log
+```
+
+The first command is the full run. In the second command, dune runs one
+action at a time. If the second run completes and the first run does
+not, the cause is probably the loops that dune runs at the same time.
+The third command runs one large suite alone, and keeps its standard
+error in a file. Dune shows the standard error of an action only when
+the action ends. If dune or the machine stops, dune loses the lines of
+a suite that did not end, but the file keeps them.
+
+The values of the variable:
+
+- Unset or empty: off. This is the default.
+- A positive integer `N`: on. The loop writes a line after each pass,
+  and after each `N`-th job in a pass.
+- Any other value, for example `0`, `-1`, `nope` or ` 5`: the loop
+  refuses to start. It says `invalid value 'VALUE' for
+  WINDTRAP_DEBUG_MEMORY: expected a positive integer`, writes the
+  verdict file as refused, and the exit code is 1.
+
+Only the mutation loop reads the variable, once, before its dry run. A
+run without `--mutate`, an `--arm` run, a broadcast run that tests no
+mutant, and a worker do not read it, also when its value is incorrect.
+When the variable is off, the loop does not read `/proc` and does not
+count. When the variable is on, the lines on standard error are the
+only change: the standard output, the verdicts, the verdict file and
+the exit code stay the same. The variable is maintainers' tooling, as
+the aliases are. Thus the manual, `--help` and `CHANGES.md` do not name
+it, as they do not name `WINDTRAP_WORKER`.
+
+Each line has this form, on one line:
+
+```
+windtrap: memory POINT time_ms=M rss_kb=R hwm_kb=H heap_kb=G heap_peak_kb=P sites=S reaches=E cases=A rows=W verdicts=V blocks=B checks=C pid=I suite=NAME
+```
+
+The fields are always present and always in this order. Each value but
+`NAME` is a non-negative decimal integer. `suite=` is the last field,
+and its value is the remainder of the line, so a suite name with spaces
+does not break a parse. The points, in the order of a run:
+
+| Point | When |
+| --- | --- |
+| `dry-run` | After the dry run, before the checks that can refuse it. |
+| `probe` | When the probe ends, before the loop compares it with the dry run. |
+| `pass-P:K/T` | After the `K`-th of the `T` mutant jobs of pass `P`, when `K` is a multiple of `N` and `K < T`. |
+| `pass-P` | When pass `P` ends. Pass 1 is the probe and one job for each reached mutant. Passes 2 and more are the retries. |
+| `check-C:K/T` | After the `K`-th of the `T` jobs of check pass `C`, with the same rule. |
+| `check-C` | When check pass `C` ends (up to 3 passes, under `--mutate-retry`). |
+| `report` | Before the loop prints its report, so the outcome line stays the last line. |
+
+A probe that refuses gives `probe` and no `pass-1`. A loop that a signal
+stops, or that refuses, gives no `report`.
+
+The fields:
+
+| Field | Value |
+| --- | --- |
+| `time_ms` | The wall clock (`Unix.gettimeofday`), in milliseconds. |
+| `rss_kb` | `VmRSS` of the parent: its resident memory. |
+| `hwm_kb` | `VmHWM` of the parent: its peak resident memory since it started. |
+| `heap_kb` | The OCaml major heap (`heap_words` of `Gc.quick_stat`). |
+| `heap_peak_kb` | The peak of the major heap (`top_heap_words`). |
+| `sites` | The sites that a test reached in the dry run. |
+| `reaches` | The (site, reaching test) pairs of the reach table. |
+| `cases` | The test paths that the jobs of the pass hold. |
+| `rows` | The result rows that the pass gave up to this point. |
+| `verdicts` | The verdicts that the loop gave. |
+| `blocks` | The report blocks that the loop keeps: survivors, unknown and not evaluated mutants. |
+| `checks` | The checks of kills that the loop keeps. |
+| `pid` | The process of the loop. |
+
+At `dry-run`, `cases` is 0 and `rows` is the rows of the dry run. At
+`report`, `cases` and `rows` are those of the last pass. `rows` starts
+again at 0 in each pass, and does not count a job that ended but that
+the scheduler did not give yet. The reach table does not change after
+the dry run, so `sites` and `reaches` have the same values in each line.
+The loop counts with `List.length` and `Hashtbl.length`, and does not
+walk the heap. When `rss_kb` grows and `heap_kb` does not, the growth is
+outside the OCaml heap.
+
+The limits:
+
+- The loop reads `/proc/self/status`, thus the lines are for Linux
+  only. On a system without `/proc`, the loop writes no line and no
+  warning. Windows refuses mutation before the loop.
+- The loop reads `status` and not `statm`, because `statm` gives pages
+  and OCaml has no function for the page size. `status` gives kB, and
+  also gives `VmHWM`, which shows a peak between two lines.
+- `Gc.quick_stat` updates the heap fields at each minor collection.
+  Thus `heap_kb` is 0 in a small run before its first minor
+  collection.
+- The lines are for the parent only, not for the workers. A worker that
+  `fork` starts shares the pages of the parent until it writes to them.
+  I think that the major GC of a worker writes to most pages of the
+  parent heap, thus a large parent heap can make each worker large.
+- Each suite gives its own set of lines. Dune runs suites at the same
+  time, thus the memory of the machine is more than the memory of one
+  parent. All loops on one machine use the same clock, so you can sort
+  the lines of all suites by `time_ms` and add the `rss_kb` of the
+  `pid` values that run at the same time.
+- `sites` and `reaches` count all sites that a test reached, also the
+  sites outside the scope of `--mutate`.
+
 ## The conformance corpus
 
 The compatibility promise, that most ppx_expect suites run unchanged

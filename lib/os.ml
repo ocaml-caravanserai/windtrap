@@ -491,3 +491,36 @@ let die_by signal =
      else if signal = Sys.sigpipe then 13
      else 15)
      [@mutate off "reached only when the signal does not end the process"])
+
+(* Memory *)
+
+type memory = { resident_kb : int; peak_kb : int }
+
+let kb_unit = " kB"
+
+(* The value of the first line [key ^ blanks ^ digits ^ " kB"] of [lines]. *)
+let kb ~key lines =
+  match List.find_map (chop_prefix ~prefix:key) lines with
+  | Some value when String.ends_with ~suffix:kb_unit value ->
+      let stop = String.length value - String.length kb_unit in
+      let rec skip i =
+        if i < stop && (value.[i] = ' ' || value.[i] = '\t') then skip (i + 1)
+        else i
+      in
+      let start = skip 0 in
+      let digits = String.sub value start (stop - start) in
+      if digits <> "" && String.for_all (fun c -> '0' <= c && c <= '9') digits
+      then int_of_string_opt digits
+      else None
+  | Some _ | None -> None
+
+let memory_of_status text =
+  let lines = String.split_on_char '\n' text in
+  match (kb ~key:"VmRSS:" lines, kb ~key:"VmHWM:" lines) with
+  | Some resident_kb, Some peak_kb -> Some { resident_kb; peak_kb }
+  | _ -> None
+
+let memory () =
+  match In_channel.with_open_bin "/proc/self/status" In_channel.input_all with
+  | text -> memory_of_status text
+  | exception Sys_error _ -> None
