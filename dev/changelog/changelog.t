@@ -41,22 +41,31 @@ The check gives exit code 1 and a message for each type of error.
   changes/x.md:1: the fragment does not start with an area heading
   [1]
   $ ck '### Coverage\n\n### Assertions\n\n- x.\n'
-  changes/x.md:1: area "Coverage" does not start with a line "- "
+  changes/x.md:1: area "Coverage" does not start with a list item
   [1]
   $ ck '### Coverage\n\nx.\n'
-  changes/x.md:3: a line that does not start with "- " or two spaces
+  changes/x.md:3: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
   $ ck '### Coverage\n\n- x.\n## v1\n'
-  changes/x.md:4: a line that does not start with "- " or two spaces
+  changes/x.md:4: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
   $ ck '### Coverage\n\n- x:\n\n  ```sh\n# a comment\n  ```\n'
-  changes/x.md:6: a line that does not start with "- " or two spaces
+  changes/x.md:6: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
   $ ck '### Coverage\n\n- x.\n\nA note\n---\n'
-  changes/x.md:5: a line that does not start with "- " or two spaces
+  changes/x.md:5: a line that is not a list item ("- " and text) and does not start with two spaces
+  [1]
+  $ ck '### Coverage\n\n-  x.\n'
+  changes/x.md:3: a line that is not a list item ("- " and text) and does not start with two spaces
+  [1]
+  $ ck '### Coverage\n\n- x.\n- \n'
+  changes/x.md:4: a line that is not a list item ("- " and text) and does not start with two spaces
+  [1]
+  $ ck '### Coverage\n\n- x.\n- - -\n'
+  changes/x.md:4: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
   $ ck '### Coverage\n\n- x.\n\n<!-- a note\n'
-  changes/x.md:5: a line that does not start with "- " or two spaces
+  changes/x.md:5: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
 
 The check command and the join command read only the files whose names
@@ -130,7 +139,7 @@ If one fragment has an error, the join command changes no file.
   $ cp CHANGES.md before
   $ printf '### Coverage\n\nBad.\n' > changes/b.md
   $ cl join CHANGES.md changes
-  changes/b.md:3: a line that does not start with "- " or two spaces
+  changes/b.md:3: a line that is not a list item ("- " and text) and does not start with two spaces
   [1]
   $ cmp before CHANGES.md
   $ ls changes/a.md changes/b.md
