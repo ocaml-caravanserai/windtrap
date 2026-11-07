@@ -405,8 +405,8 @@ The values of the variable:
 Only the mutation loop reads the variable, once, before its dry run.
 These runs do not read the variable, also when its value is incorrect:
 
-- A run without `--mutate`
-- An `--arm` run
+- A run without `--mutate` and without `WINDTRAP_MUTATE`
+- A run with `--arm` or `WINDTRAP_MUTATE_ARM`
 - A broadcast run that runs without mutation (an empty population, or a
   selection that keeps no test)
 - A worker.
