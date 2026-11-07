@@ -628,9 +628,9 @@ let spanned name fn =
       note (Printf.sprintf "span %.6f %.6f" start (Unix.gettimeofday ())))
 
 (* The pool test reaches [sub], and the two other tests reach [widen] and
-   [orphan]. No test pins its site, so each job runs whole. A call of the
-   pool test under its mutant waits a millisecond, so that its job lasts
-   longer than the start of a worker. *)
+   [orphan]. No test pins its site, so each job runs whole. Each call waits a
+   millisecond, armed or not, so that the job lasts longer than the start of a
+   worker and the dry run pays the wait that its deadline covers. *)
 let pool_alone =
   [
     stateful ~count:1 ~steps:4 ~domains:2 "sub on two domains"
@@ -640,7 +640,7 @@ let pool_alone =
           (fun () -> true)
           (fun () ->
             let nonzero = Subject.sub 10 4 <> 0 in
-            if armed () then Unix.sleepf 0.001;
+            Unix.sleepf 0.001;
             note (Printf.sprintf "pool %.6f" (Unix.gettimeofday ()));
             nonzero);
       ];
