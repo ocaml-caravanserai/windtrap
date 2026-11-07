@@ -145,3 +145,29 @@ release.
   ## v0.1.0 2026-01-01
   
   - Released line.
+
+If the entry of the changelog has an error, the join changes no file.
+
+  $ printf '### Running tests\n\n- y.\n' > changes/a.md
+  $ printf '# Changelog\n\n## Unreleased\n\n### Coverage\n\n- x.\n\n### Bogus\n\n- z.\n' > CHANGES.md
+  $ cp CHANGES.md before
+  $ cl join CHANGES.md changes
+  CHANGES.md:9: unknown area "Bogus"; the areas are: Declaring tests, Assertions, Property testing, Stateful testing, Baselines and expect tests, Resources and process state, Running tests, Coverage, Mutation testing, Packages and libraries
+  [1]
+  $ cmp before CHANGES.md
+  $ ls changes
+  a.md
+  dune
+
+A file that does not exist gives exit code 1.
+
+  $ cl check nofile.md
+  nofile.md: No such file or directory
+  [1]
+
+With no command, the tool shows the usage and gives exit code 2.
+
+  $ cl
+  usage: changelog check FRAGMENT...
+         changelog join CHANGES DIR
+  [2]
