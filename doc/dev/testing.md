@@ -420,9 +420,8 @@ only change. These items stay the same:
 - The verdict file
 - The exit code.
 
-The variable is a tool for the development of windtrap, not for users.
-Thus the manual, `--help` and `CHANGES.md` do not name it, as they do
-not name `WINDTRAP_WORKER`.
+The variable is a tool for the development of windtrap. The manual and
+`--help` do not name it.
 
 Each line has this form, on one line:
 
@@ -457,7 +456,7 @@ The fields:
 | --- | --- |
 | `time_ms` | The wall clock (`Unix.gettimeofday`), in milliseconds. |
 | `rss_kb` | `VmRSS` of the parent: its resident memory. |
-| `hwm_kb` | `VmHWM` of the parent: the kernel count of its peak resident memory. The count is approximate (see the limits). |
+| `hwm_kb` | `VmHWM` of the parent: the kernel count of its peak resident memory. |
 | `heap_kb` | The OCaml major heap (`heap_words` of `Gc.quick_stat`). |
 | `heap_peak_kb` | The peak of the major heap (`top_heap_words`). |
 | `sites` | The sites that a test reached in the dry run. |
@@ -474,8 +473,7 @@ At `dry-run`, `cases` is 0 and `rows` is the rows of the dry run. At
 again at 0 in each pass, and does not count a job that ended but that
 the scheduler did not give yet. The reach table does not change after
 the dry run, so `sites` and `reaches` have the same values in each line.
-The loop counts with `List.length` and `Hashtbl.length`, and does not
-walk the heap. When `rss_kb` grows and `heap_kb` does not, the growth is
+When `rss_kb` grows and `heap_kb` does not, the growth is
 outside the OCaml heap.
 
 The limits:
@@ -483,22 +481,12 @@ The limits:
 - The loop reads `/proc/self/status`, thus the lines are for Linux
   only. On a system without `/proc`, the loop writes no line and no
   warning. Windows refuses mutation before the loop.
-- The loop reads `status` and not `statm`, because `statm` gives pages
-  and OCaml has no function for the page size. `status` gives kB, and
-  also gives `VmHWM`.
-- The kernel counts of `VmRSS` and `VmHWM` are approximate. Thus
-  `hwm_kb` can be some hundred kB lower than in an earlier line. In one
-  run on Linux 7.2, `hwm_kb` went from 13408 to 12980. To get the peak
-  of a run, use the maximum `hwm_kb` of all its lines, not the `hwm_kb`
-  of the last line. I think that the per-CPU memory counters of the
-  kernel cause this, but I did not examine the kernel source.
+- `hwm_kb` is probably not always monotone from line to line. To get
+  the peak of a run, use the maximum `hwm_kb` of all its lines.
 - `Gc.quick_stat` updates the heap fields at each minor collection.
   Thus `heap_kb` is 0 in a small run before its first minor
   collection.
-- The lines are for the parent only, not for the workers. A worker that
-  `fork` starts shares the pages of the parent until it writes to them.
-  I think that the major GC of a worker writes to most pages of the
-  parent heap. Thus a large parent heap can make each worker large.
+- The lines are for the parent only, not for the workers.
 - Each suite gives its own set of lines. Dune runs suites at the same
   time, thus the memory of the machine is more than the memory of one
   parent. All loops on one machine use the same clock. Thus you can sort
