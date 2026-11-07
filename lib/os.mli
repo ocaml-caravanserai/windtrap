@@ -360,7 +360,7 @@ val die_by : int -> 'a
 
 type memory = {
   resident_kb : int;  (** [VmRSS]: the resident memory, in kB. *)
-  peak_kb : int;  (** [VmHWM]: the peak resident memory, in kB. *)
+  peak_kb : int;  (** [VmHWM]: the approximate peak resident memory, in kB. *)
 }
 
 val memory_of_status : string -> memory option

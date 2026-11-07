@@ -420,9 +420,9 @@ only change. These items stay the same:
 - The verdict file
 - The exit code.
 
-The variable is maintainers' tooling, as the aliases are. Thus the
-manual, `--help` and `CHANGES.md` do not name it, as they do not name
-`WINDTRAP_WORKER`.
+The variable is a tool for the development of windtrap, not for users.
+Thus the manual, `--help` and `CHANGES.md` do not name it, as they do
+not name `WINDTRAP_WORKER`.
 
 Each line has this form, on one line:
 
@@ -457,7 +457,7 @@ The fields:
 | --- | --- |
 | `time_ms` | The wall clock (`Unix.gettimeofday`), in milliseconds. |
 | `rss_kb` | `VmRSS` of the parent: its resident memory. |
-| `hwm_kb` | `VmHWM` of the parent: its peak resident memory since it started. |
+| `hwm_kb` | `VmHWM` of the parent: the kernel count of its peak resident memory. The count is approximate (see the limits). |
 | `heap_kb` | The OCaml major heap (`heap_words` of `Gc.quick_stat`). |
 | `heap_peak_kb` | The peak of the major heap (`top_heap_words`). |
 | `sites` | The sites that a test reached in the dry run. |
@@ -485,7 +485,13 @@ The limits:
   warning. Windows refuses mutation before the loop.
 - The loop reads `status` and not `statm`, because `statm` gives pages
   and OCaml has no function for the page size. `status` gives kB, and
-  also gives `VmHWM`, which shows a peak between two lines.
+  also gives `VmHWM`.
+- The kernel counts of `VmRSS` and `VmHWM` are approximate. Thus
+  `hwm_kb` can be some hundred kB lower than in an earlier line. In one
+  run on Linux 7.2, `hwm_kb` went from 13408 to 12980. To get the peak
+  of a run, use the maximum `hwm_kb` of all its lines, not the `hwm_kb`
+  of the last line. I think that the per-CPU memory counters of the
+  kernel cause this, but I did not examine the kernel source.
 - `Gc.quick_stat` updates the heap fields at each minor collection.
   Thus `heap_kb` is 0 in a small run before its first minor
   collection.
