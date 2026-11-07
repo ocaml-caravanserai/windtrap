@@ -1,0 +1,9 @@
+; Each Markdown file in this directory is a changelog fragment
+; (doc/dev/changelog.md).
+
+(rule
+ (alias runtest)
+ (deps
+  (glob_files *.md))
+ (action
+  (run %{exe:../dev/changelog/changelog.exe} check %{deps})))
