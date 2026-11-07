@@ -90,7 +90,7 @@ let fragments dir =
   Sys.readdir dir |> Array.to_list
   |> List.filter (fun f -> Filename.check_suffix f ".md")
   |> List.sort compare
-  |> List.map (Filename.concat dir)
+  |> List.map (fun f -> dir ^ "/" ^ f)
 
 let join changes dir =
   let paths = fragments dir in

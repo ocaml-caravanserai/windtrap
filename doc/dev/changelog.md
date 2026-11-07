@@ -44,10 +44,19 @@ lines:
 ```
 
 Each area heading names an area of the list in "Lines", with the same
-spelling. A fragment has no text before its first area heading.
+spelling. A fragment has no text before its first area heading. A line
+of a fragment must not start with `#`, except an area heading. This rule
+includes a line in a code block.
+
 `dune build @runtest` does a check of each fragment (`changes/dune`).
-The check finds an unknown area, an area without lines, a first line
-that does not start with `- `, and text before the first area heading.
+The check finds these errors:
+
+- A fragment without an area heading
+- An unknown area
+- An area without lines
+- A first line of an area that does not start with `- `
+- Text before the first area heading
+- A heading that is not an area heading.
 
 The lines that `CHANGES.md` has under `## Unreleased` stay there. To
 change one of these lines, edit `CHANGES.md`. To change a line of a
@@ -76,9 +85,9 @@ A. B. for the report (#12)."
 Lines go under the area they belong to, in this order: Declaring tests,
 Assertions, Property testing, Stateful testing, Baselines and expect
 tests, Resources and process state, Running tests, Coverage, Mutation
-testing, Packages and libraries. An empty area is omitted. The tool of
-fragments has the same list (`areas` in `dev/changelog/changelog.ml`).
-If you change the list, change the two.
+testing, Packages and libraries. An empty area is omitted. The changelog
+tool has the same list (`areas` in `dev/changelog/changelog.ml`). If you
+change the list in this document, change `areas` also.
 
 ## At release
 
@@ -88,7 +97,8 @@ First, join the fragments into the open entry:
 dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
 ```
 
-The tool adds the lines of each fragment under the heading of their area.
+The changelog tool adds the lines of each fragment under the heading of
+their area.
 In an area, the lines of the fragments come after the lines that the
 entry has, in the order of the file names. The tool writes the areas in
 the order of the list, and adds the `## Unreleased` heading if the entry
