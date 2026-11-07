@@ -31,8 +31,9 @@ the same time do not both change `CHANGES.md`.
 
 A fragment is a Markdown file in `changes/`. A pull request that gives
 lines adds one fragment, with the name of its branch, for example
-`changes/mutate-retry.md`. When the pull request gives more lines, add
-them to the same fragment.
+`changes/mutate-retry.md`. If the branch name has a `/`, change each `/`
+to `-` in the name of the fragment. When the pull request gives more
+lines, add them to the same fragment.
 
 A fragment has the form of the open entry, without the `## Unreleased`
 heading. It has one or more area headings, and each area heading has its
@@ -49,9 +50,11 @@ spelling. A fragment has no text before its first area heading. A line
 of a fragment must not start with `#`, except an area heading. This rule
 includes a line in a code block.
 
-`dune build @runtest` does a check of each fragment (`changes/dune`).
+`dune build @runtest` does a check of `changes/` (`changes/dune`).
 The check finds these errors:
 
+- An entry of `changes/` that is not a file with the suffix `.md`,
+  except the `dune` file and hidden files
 - A fragment without an area heading
 - An unknown area
 - An area without lines
@@ -101,8 +104,9 @@ dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
 The changelog tool adds the lines of each fragment under the heading of
 their area.
 In an area, the lines of the fragments come after the lines that the
-entry has, in the order of the file names. The join ignores a hidden
-file, as dune does. The tool writes the areas in
+entry has, in the order of the file names. The join ignores the `dune`
+file and hidden files, as dune does. Another entry that is not a file
+with the suffix `.md` is an error. The tool writes the areas in
 the order of the list, and adds the `## Unreleased` heading if the entry
 does not exist. Then it deletes the fragments. If a fragment has an
 error, the tool changes no file. Read the result, and change the order of

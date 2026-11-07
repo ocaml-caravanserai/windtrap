@@ -4,6 +4,8 @@
 (rule
  (alias runtest)
  (deps
-  (glob_files *.md))
+  (source_tree .))
  (action
-  (run %{exe:../dev/changelog/changelog.exe} check %{deps})))
+  (chdir
+   %{workspace_root}
+   (run %{exe:../dev/changelog/changelog.exe} check changes))))
