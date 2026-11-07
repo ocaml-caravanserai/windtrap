@@ -29,61 +29,42 @@ let read_lines path =
   in
   match List.rev lines with "" :: rest -> List.rev rest | _ -> lines
 
-(* A line without the indent of at most three spaces that CommonMark
-   permits before a heading or a fence. *)
-let unindent line =
-  let n = String.length line in
-  let rec go i = if i < 3 && i < n && line.[i] = ' ' then go (i + 1) else i in
-  let i = go 0 in
-  String.sub line i (n - i)
-
-let is_heading line =
-  let s = unindent line in
-  let n = String.length s in
-  let rec hashes i = if i < n && s.[i] = '#' then hashes (i + 1) else i in
-  let h = hashes 0 in
-  h >= 1 && h <= 6 && (h = n || s.[h] = ' ' || s.[h] = '\t')
-
-let fence line =
-  let s = unindent line in
-  if String.starts_with ~prefix:"```" s then Some '`'
-  else if String.starts_with ~prefix:"~~~" s then Some '~'
-  else None
-
 let is_blank line = String.trim line = ""
 
 let rec drop_blank = function
   | l :: rest when is_blank l -> drop_blank rest
   | lines -> lines
 
-(* Each area of a fragment with its lines, in the order of the fragment. *)
+(* Each area of a fragment with its lines, in the order of the fragment.
+   Each line of an area is a list item or indented under one, so the
+   joined file keeps it in the list of its area. *)
 let parse path =
-  let sections = ref [] and open_fence = ref None in
+  let sections = ref [] in
   List.iteri
     (fun i line ->
       let n = i + 1 in
-      match (!open_fence, !sections) with
-      | Some (c, _), (_, _, body) :: _ ->
-          if fence line = Some c then open_fence := None;
-          body := line :: !body
-      | _ when String.starts_with ~prefix:"### " line ->
-          let area = String.sub line 4 (String.length line - 4) in
-          if not (List.mem area areas) then
-            error path n "unknown area %S (doc/dev/changelog.md lists them)"
-              area;
-          sections := (area, n, ref []) :: !sections
-      | _ when is_heading line ->
-          error path n "a heading that is not an area heading"
-      | _, [] ->
-          if not (is_blank line) then
-            error path n "the fragment does not start with an area heading"
-      | _, (_, _, body) :: _ ->
-          Option.iter (fun c -> open_fence := Some (c, n)) (fence line);
-          body := line :: !body)
+      if String.starts_with ~prefix:"### " line then begin
+        let area = String.sub line 4 (String.length line - 4) in
+        if not (List.mem area areas) then
+          error path n "unknown area %S (doc/dev/changelog.md lists them)" area;
+        sections := (area, n, ref []) :: !sections
+      end
+      else
+        match !sections with
+        | [] ->
+            if not (is_blank line) then
+              error path n "the fragment does not start with an area heading"
+        | (_, _, body) :: _ ->
+            if
+              not
+                (is_blank line
+                || String.starts_with ~prefix:"- " line
+                || String.starts_with ~prefix:"  " line)
+            then
+              error path n
+                "a line that does not start with \"- \" or two spaces";
+            body := line :: !body)
     (read_lines path);
-  Option.iter
-    (fun (_, n) -> error path n "a code block that does not end")
-    !open_fence;
   if !sections = [] then
     error path 1 "the fragment does not start with an area heading";
   List.rev_map
@@ -97,24 +78,25 @@ let parse path =
       (area, body))
     !sections
 
-(* The files of [dir] whose names end with .md and do not start with a dot:
-   the files that dune copies into _build for the check. *)
+(* The files of [dir] whose names end with .md and do not start with a
+   dot. A directory is an error, so no fragment is lost in one. *)
 let fragments dir =
   Sys.readdir dir |> Array.to_list
-  |> List.filter (fun f ->
-      Filename.check_suffix f ".md"
-      && f.[0] <> '.'
-      && not (Sys.is_directory (Filename.concat dir f)))
+  |> List.filter (fun f -> f.[0] <> '.')
   |> List.sort compare
-  |> List.map (fun f -> dir ^ "/" ^ f)
+  |> List.filter_map (fun f ->
+      let path = dir ^ "/" ^ f in
+      if Sys.is_directory path then
+        raise (Error (path ^ ": a directory, not a fragment"))
+      else if Filename.check_suffix f ".md" then Some path
+      else None)
 
 let join changes dir =
   let paths = fragments dir in
   let parsed = List.map parse paths in
   let lines = read_lines changes in
   if List.mem "## Unreleased" lines then
-    raise
-      (Error (changes ^ ": it has a \"## Unreleased\" entry; rename it first"));
+    raise (Error (changes ^ " has a \"## Unreleased\" entry. Rename it first."));
   if parsed <> [] then begin
     let lines_of area =
       List.concat_map
