@@ -7,5 +7,5 @@
   (source_tree .))
  (action
   (chdir
-   %{workspace_root}
+   %{project_root}
    (run %{exe:../dev/changelog/changelog.exe} check changes))))

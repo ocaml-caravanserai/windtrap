@@ -4,24 +4,24 @@
 first. While the work happens, the lines for the next release are in
 fragments in `changes/`. A pull request does not add its lines to
 `CHANGES.md`. It adds them in a fragment. At release, the changelog tool
-joins the fragments into the open entry, `## Unreleased`, at the top.
-Then you give this entry the heading of the version.
+puts the lines of the fragments into a new open entry, `## Unreleased`,
+at the top. Then you give this entry the heading of the version.
 
 ## Headings
 
 A released entry is headed `## vX.Y.Z YYYY-MM-DD`, the tag's date.
 `dune-release tag` reads the version from the first heading of the
 file, so nothing stands above it. The open entry is headed
-`## Unreleased`. It exists only during the release: the join creates it,
-and then you rename it to the heading of the version.
+`## Unreleased`. It exists only during the release: the changelog tool
+makes it, and then you rename it to the heading of the version.
 
 ## While working
 
 A change that a user can see gives a line in the changelog. Examples are
 a new or changed value, flag, variable, file format, output line, exit
 code, error message or default. A change that a user cannot see (an
-internal refactor, a test, a comment, the development process) gives no
-line.
+internal refactor, a test, a comment, a tool for the development of
+windtrap) gives no line.
 
 The line goes into a fragment, in the same commit as the change. Do not
 add the line to `CHANGES.md`. Thus, two pull requests that are open at
@@ -29,14 +29,16 @@ the same time do not both change `CHANGES.md`.
 
 ### Fragments
 
-A fragment is a Markdown file in `changes/`. A pull request that gives
-lines adds one fragment, with the name of its branch, for example
-`changes/mutate-retry.md`. If the branch name has a `/`, change each `/`
-to `-` in the name of the fragment. When the pull request gives more
-lines, add them to the same fragment.
+A fragment is a file in `changes/` whose name ends with `.md` and does
+not start with a dot. A pull request that gives lines adds one fragment
+with a name that no other fragment has, for example the name of its
+branch: `changes/mutate-retry.md`. When the pull request gives more
+lines, add them to the same fragment. The changelog tool ignores the
+other files of `changes/`, so a fragment without the suffix `.md` is
+lost.
 
 A fragment has the form of the open entry, without the `## Unreleased`
-heading. It has one or more area headings, and each area heading has its
+heading. It starts with an area heading, and each area heading has its
 lines:
 
 ```markdown
@@ -45,38 +47,27 @@ lines:
 - `--mutate-retry N` does a check of each kill that names a test.
 ```
 
-Each area heading names an area of the list in "Lines", with the same
-spelling. A fragment has no text before its first area heading. A line
-of a fragment must not start with `#`, except an area heading. This rule
-includes a line in a code block.
+An area heading is `### ` and then the name of an area of the list in
+"Lines", with the same spelling and no other space. A line in a code
+block can have any text, but the code block must end in the fragment.
 
-`dune build @runtest` does a check of `changes/` (`changes/dune`).
+`dune build @runtest` does a check of the fragments (`changes/dune`).
 The check finds these errors:
 
-- An entry of `changes/` that is not a file with the suffix `.md`,
-  except the ignored entries
-- A fragment without an area heading
+- A fragment that does not start with an area heading
 - An unknown area
-- An area without lines
-- A first line of an area that does not start with `- `
-- Text before the first area heading
-- A heading that is not an area heading.
+- An area whose first line does not start with `- `
+- A heading that is not an area heading, outside a code block
+- A code block that does not end.
 
-The check and the join ignore these entries of `changes/`:
+Dune copies the fragments into `_build` for the check, but not the files
+whose names start with a dot. Thus the check and the release find the
+same fragments.
 
-- The `dune` file
-- Hidden files and directories
-- Names that end with `~` or `.swp`, for example editor backup files
-- Directories with a name that starts with `_`.
-
-Dune does not copy these entries into `_build`, except some hidden files.
-Thus, the check of `dune build @runtest` and the join find the same
-fragments. The check and the join ignore spaces before and after the
-name of an area.
-
-To change a line, edit the fragment that has it. The lines that pull
-requests gave before the fragments are in `changes/0-open-entry.md`. Its
-name puts its lines first in each area at the join.
+To change a line, edit the fragment that has it. Until the first release
+with fragments, the lines of the pull requests before the fragments are
+in `changes/0-open-entry.md`. The name of this file sorts first, so its
+lines come first in each area.
 
 ### Lines
 
@@ -107,21 +98,19 @@ change the list in this document, change `areas` also.
 
 ## At release
 
-First, join the fragments into the open entry:
+`release.md` gives the steps of a release. Its first step runs the
+changelog tool:
 
 ```sh
 dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes
 ```
 
-The changelog tool adds the lines of each fragment under the heading of
-their area. In an area, the lines of the fragments come after the lines
-that the entry has, in the order of the file names. The join ignores the
-same entries as the check. Another entry that is not a file with the
-suffix `.md` is an error. The tool writes the areas in the order of the
-list. If the entry does not exist, the tool adds the `## Unreleased`
-heading. Then it deletes the fragments. If a fragment has an error, the
-tool changes no file. Read the result, and change the order of the lines
-if necessary.
+The tool makes the open entry above the first released entry. It writes
+the areas in the order of the list. In an area, the lines come in the
+order of the file names of the fragments. Then the tool deletes the
+fragments. If `CHANGES.md` already has a `## Unreleased` entry, or if a
+fragment has an error, the tool changes no file. Read the result, and
+change the order of the lines if necessary.
 
 The entry opens on one short paragraph saying what got better, in the
 user's terms. It lists no breaking change: each one is a `(breaking)`
