@@ -1735,7 +1735,7 @@ let pool_alone () =
       [ mutate; workers; "-j"; "4" ]
   in
   equal (pair string text) ("exited 0", "") (r.status, r.err);
-  equal string
+  equal ~msg:r.out string
     "mutants: 3 survived of 3 reached by this suite, 1 never reached, score \
      0.0% (0/3)"
     (outcome r.out);
@@ -3771,7 +3771,7 @@ let pool_alone_in_a_retry () =
       [ mutate; workers; "--mutate-retry=1"; "-j"; "4" ]
   in
   ended_well r;
-  equal string
+  equal ~msg:r.out string
     "mutants: 3 survived of 3 reached by this suite, 1 never reached, score \
      0.0% (0/3)"
     (outcome r.out);

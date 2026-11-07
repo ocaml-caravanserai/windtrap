@@ -5,7 +5,22 @@
 
 /* A pseudo-terminal, which Unix does not open: the loop draws its live
    line only when its standard output is a terminal. The two descriptors
-   close on exec. */
+   close on exec. Windows has no pseudo-terminal, and its tests do not
+   run there. */
+
+#ifdef _WIN32
+
+#include <caml/mlvalues.h>
+#include <caml/fail.h>
+
+CAMLprim value windtrap_test_openpty (value unit)
+{
+  (void) unit;
+  caml_failwith ("openpty: no pseudo-terminal on Windows");
+  return Val_unit;
+}
+
+#else
 
 #define _XOPEN_SOURCE 700
 
@@ -54,3 +69,5 @@ CAMLprim value windtrap_test_openpty (value unit)
   Store_field (pair, 1, Val_int (slave));
   CAMLreturn (pair);
 }
+
+#endif
