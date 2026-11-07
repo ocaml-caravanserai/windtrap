@@ -72,7 +72,10 @@ with the re-measured numbers (`testing.md`, "The conformance corpus").
 
 ## Cutting the release
 
-1. `CHANGES.md`: rename `## Unreleased` to `## vX.Y.Z YYYY-MM-DD` and
+1. `CHANGES.md`: join the fragments of `changes/` into the open entry
+   with `dune exec ./dev/changelog/changelog.exe -- join CHANGES.md changes`.
+   The tool deletes the fragments, so commit their removal with the
+   changelog. Then rename `## Unreleased` to `## vX.Y.Z YYYY-MM-DD` and
    write the highlights above the areas (see `changelog.md`), with a line
    for any conformance count that moved. The heading is the first line of
    the file.
