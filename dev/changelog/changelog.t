@@ -43,6 +43,15 @@ The check gives exit code 1 and a message for each type of error.
   $ cl check h2.md
   h2.md:4: a heading that is not an area heading
   [1]
+  $ printf '### Coverage\n\n- x:\n\n```sh\n# c\n```\n' > code.md
+  $ cl check code.md
+  code.md:6: a heading that is not an area heading
+  [1]
+
+The check ignores the spaces around the name of an area.
+
+  $ printf '###  Coverage \n\n- x.\n' > spaces.md
+  $ cl check spaces.md
 
 With no fragment, the check gives no error and the join does not change
 the changelog.
@@ -76,21 +85,29 @@ the changelog.
 
 The join puts the lines of each area after the lines that the entry has,
 in the order of the file names. It puts the areas in the order of the
-list. Then it deletes the fragments. It ignores the dune file and each
-hidden file, as dune does. An editor lock file is an example of a hidden
-file.
+list. Then it deletes the fragments. It ignores the dune file, each
+hidden file, each name that ends with "~" or ".swp", and each directory
+with a name that starts with "_". Dune does not copy these entries into
+_build, except some hidden files.
 
   $ printf '### Mutation testing\n\n- From b.\n' > changes/b.md
   $ printf '### Mutation testing\n\n- From a,\n  two lines.\n\n### Declaring tests\n\n- New.\n' > changes/a.md
   $ touch changes/dune
   $ printf 'junk\n' > changes/.x.md
   $ touch 'changes/.#a.md'
+  $ printf 'junk\n' > 'changes/a.md~'
+  $ printf 'junk\n' > changes/a.md.swp
+  $ mkdir changes/_old
+  $ printf 'junk\n' > changes/_old/c.md
   $ cl join CHANGES.md changes
   $ ls -A changes
   .#a.md
   .x.md
+  _old
+  a.md.swp
+  a.md~
   dune
-  $ rm changes/.x.md changes/.#a.md
+  $ rm -r changes/.x.md changes/.#a.md 'changes/a.md~' changes/a.md.swp changes/_old
   $ cat CHANGES.md
   # Changelog
   

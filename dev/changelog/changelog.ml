@@ -54,7 +54,7 @@ let split ~fragment ~path ~first lines =
         error path n "unknown area %S; the areas are: %s" area
           (String.concat ", " areas)
       in
-      match (heading "### " line, !sections) with
+      match (Option.map String.trim (heading "### " line), !sections) with
       | Some area, _ when List.mem area areas ->
           sections := (area, n, ref []) :: !sections
       | Some area, _ :: _ -> unknown area
@@ -86,9 +86,18 @@ let parse_fragment path =
     sections;
   List.map (fun (area, _, body) -> (area, body)) sections
 
+(* The dune file, hidden files and the entries that dune does not copy
+   into _build. *)
+let ignored dir f =
+  f = "dune"
+  || f.[0] = '.'
+  || String.ends_with ~suffix:"~" f
+  || String.ends_with ~suffix:".swp" f
+  || (f.[0] = '_' && Sys.is_directory (dir ^ "/" ^ f))
+
 let fragments dir =
   Sys.readdir dir |> Array.to_list
-  |> List.filter (fun f -> f <> "dune" && f.[0] <> '.')
+  |> List.filter (fun f -> not (ignored dir f))
   |> List.sort compare
   |> List.map (fun f ->
       let path = dir ^ "/" ^ f in
