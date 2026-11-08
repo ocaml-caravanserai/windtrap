@@ -13,9 +13,11 @@
 
 (** {1:verdicts Verdicts}
 
-    A verdict is one of seven cases, and never a boolean or an exit code. What a
+    A verdict is one of eight cases, and never a boolean or an exit code. What a
     run could not decide is {!Unknown}, which outranks a survivor, so a mutant
-    that no run judged never reads as survived. *)
+    that no run judged never reads as survived. A mutant that a sampled run
+    reached and did not test is {!Not_sampled}, which outranks a survivor for
+    the same reason. *)
 
 type reaching_test = string list
 (** The type for a test that evaluated a mutant, by its path: the names of its
@@ -80,6 +82,10 @@ type verdict =
           in a table or a forced lazy value. A test or a fixture release that
           failed in the child did not fail because of the mutant, and does not
           kill it. *)
+  | Not_sampled
+      (** A test reached the site, and the run tested a sample of the reached
+          mutants ([--sample]) that does not hold this mutant ({!in_sample}).
+          The loop starts no worker for the mutant. *)
   | Outside_tests
       (** No test reached the site, and the dry run evaluated it outside every
           test, at module initialization or in a fixture release. The loop
@@ -104,8 +110,21 @@ type outcome = [ `Killed | `Survived | `Not_evaluated ]
 val outcome : verdict -> outcome option
 (** [outcome v] is [Some `Killed] for {!Killed}, [Some `Survived] for
     {!Survived}, [Some `Not_evaluated] for {!Not_evaluated}, and [None] for the
-    other verdicts. A {!Killed_elsewhere} verdict is no outcome, because no test
-    of the suite ran the mutant. *)
+    other verdicts. A {!Killed_elsewhere} or a {!Not_sampled} verdict is no
+    outcome, because no test of the suite ran the mutant. *)
+
+(** {1:sample The sample} *)
+
+val in_sample : percent:float -> seed:int64 -> Mutate.id -> bool
+(** [in_sample ~percent ~seed id] is [true] when the mutant [id] is in the
+    sample of [percent] percent of a run whose root seed is [seed]. It is [true]
+    when [percent] is at least [100.]. Otherwise it is [true] when [h] is below
+    [percent /. 100. *. 2{^ 62}], truncated to an integer. [h] is the first 8
+    bytes of the MD5 of [token ^ "\000" ^ Mutate.id_to_string id], read as a
+    big-endian integer and shifted right by 2 bits. [token] is the [s1:] token
+    of [seed], as [Seed.to_string] spells it. Thus the answer depends only on
+    the three arguments: the same seed keeps the same mutants in the sample, and
+    a change to one file does not change the sample of another. *)
 
 (** {1:collections Collections} *)
 
@@ -210,13 +229,14 @@ val add : t -> record -> t
     order when both are. Otherwise it is {!Unknown} if either is, with the
     reason whose {!reason_text} is smaller in [String.compare] order when both
     are, and the smaller reason in [compare] order for two equal texts, then
-    {!Not_evaluated} if either is, then {!Survived} with the reaching tests of
-    both if either is, then {!Outside_tests} if either is, and {!Unreached} if
-    both are. The two previous outcomes combine in the same order, and a missing
-    one leaves the other unchanged. The effort and the prefix are the smallest
-    pair, in [compare] order, of the records whose verdict has the higher rank
-    in this order, or of the two records when the two ranks are equal. The
-    result is reused when each of these records is reused.
+    {!Not_evaluated} if either is, then {!Not_sampled} if either is, then
+    {!Survived} with the reaching tests of both if either is, then
+    {!Outside_tests} if either is, and {!Unreached} if both are. The two
+    previous outcomes combine in the same order, and a missing one leaves the
+    other unchanged. The effort and the prefix are the smallest pair, in
+    [compare] order, of the records whose verdict has the higher rank in this
+    order, or of the two records when the two ranks are equal. The result is
+    reused when each of these records is reused.
 
     [add] checks nothing of [r.id], of the end, of [r.source_digest], of the
     [exe] of a {!Killed_elsewhere}, of [r.effort], of [r.prefix] or of the mark.
@@ -244,14 +264,14 @@ val with_previous : prior:t -> t -> t
     [p] and [r] have the same source digest, which is not [None], the same
     renderings and the same end. The previous outcome is then {!val-outcome} of
     [p.verdict], or [p.previous] when [p.verdict] is no outcome. In all other
-    cases it is [None]. Thus a skip, an unknown verdict or an unreached mutant
-    between two outcomes hides no change. *)
+    cases it is [None]. Thus a skip, an unknown verdict, a mutant out of a
+    sample or an unreached mutant between two outcomes hides no change. *)
 
 (** {1:files Verdict files}
 
     Each suite of an executable has one verdict file, at {!output_file}.
 
-    The first line of a file is the magic line [windtrap-mutants-v15], which
+    The first line of a file is the magic line [windtrap-mutants-v16], which
     carries the version of the format. A file with another first line is
     refused, never converted, and nothing is promised from one version to the
     next. *)
@@ -295,6 +315,10 @@ type file = {
       (** [Some reason] when the writer could not mutation-test its suite, and
           [reason] says why. Its records then hold what it could not judge as
           {!Unknown}. *)
+  sample : (float * int64) option;
+      (** [Some (percent, seed)] when the writer tested a sample of [percent]
+          percent of the reached mutants, with the root seed [seed]
+          ({!in_sample}). [percent] is above [0.] and below [100.]. *)
   test_digests : (reaching_test * string) list;
       (** The lowercase hexadecimal MD5 of what the writer knew of each test of
           the suite whose source file it could read, sorted by test with
@@ -363,7 +387,10 @@ val load : string -> (file, error) result
       record for one identifier,
     - a malformed identity line, a malformed suite line, a status that is
       neither [tested] nor [refused] with its reason, or bytes after the last
-      record.
+      record,
+    - a missing sample line, a sample percent that is not a number above [0] and
+      below [100], a sample seed that is not [s1:] and 16 lowercase hexadecimal
+      digits, or a {!Not_sampled} record in a file with no sample.
 
     Nothing is repaired, and a file with one malformed record is not read at
     all. *)
@@ -372,27 +399,31 @@ val save :
   ?identity:identity ->
   ?suite:string ->
   ?refused:string ->
+  ?sample:float * int64 ->
   ?test_digests:(reaching_test * string) list ->
   string ->
   t ->
   unit
-(** [save ?identity ?suite ?refused ?test_digests path t] writes [t] to [path]
-    in the format of a verdict file, with {!Instr.write_file}. Records are
-    ordered by {!Mutate.compare_id} and reaching tests are sorted, so equal
+(** [save ?identity ?suite ?refused ?sample ?test_digests path t] writes [t] to
+    [path] in the format of a verdict file, with {!Instr.write_file}. Records
+    are ordered by {!Mutate.compare_id} and reaching tests are sorted, so equal
     collections give equal files. [identity] is recorded after the magic line
     when it is given, and then [suite] when it is given. A merged collection has
     no single writer and is written without the two. The status line follows:
-    [tested], or [refused] and [refused]'s reason. The test digests (default
-    none) follow, sorted by test.
+    [tested], or [refused] and [refused]'s reason. The sample line follows:
+    [sample none] without [sample], or the percent and the seed of [sample]. The
+    test digests (default none) follow, sorted by test.
 
     [load path] is then
-    [Ok { verdicts = t; identity; suite; refused; test_digests }], with
+    [Ok { verdicts = t; identity; suite; refused; sample; test_digests }], with
     [test_digests] sorted, for every [t] whose identifiers and records {!load}
-    accepts, and [Error (Corrupt _)] for any other (see {!add}). A collection
-    built from the mutants of {!Mutate.val-catalogue} round-trips, unless a
-    source file was registered under the name [""].
+    accepts, and [Error (Corrupt _)] for any other (see {!add}). A
+    {!Not_sampled} record without [sample] is such a record. A collection built
+    from the mutants of {!Mutate.val-catalogue} round-trips, unless a source
+    file was registered under the name [""].
 
-    Raises [Invalid_argument] before anything is written if [identity.exe] is
-    empty, if [identity.digest] or a digest of [test_digests] is not 32
-    lowercase hexadecimal digits, or if two entries of [test_digests] name one
-    test, and [Sys_error] if the file cannot be written. *)
+    Raises [Invalid_argument] before anything is written if the percent of
+    [sample] is not above [0.] and below [100.], if [identity.exe] is empty, if
+    [identity.digest] or a digest of [test_digests] is not 32 lowercase
+    hexadecimal digits, or if two entries of [test_digests] name one test, and
+    [Sys_error] if the file cannot be written. *)

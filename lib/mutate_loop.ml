@@ -591,7 +591,8 @@ let found_verdict renderer (config : Run.config) ~locations ~failed ~runs ~early
                 reason;
           } )
         :: found.unknown
-  | Killed _ | Killed_elsewhere _ | Outside_tests | Unreached -> ());
+  | Killed _ | Killed_elsewhere _ | Not_sampled | Outside_tests | Unreached ->
+      ());
   found.records <- record :: found.records
 
 (* Signals *)

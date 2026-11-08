@@ -36,6 +36,7 @@ type file = {
   invocation : Run.invocation; (* how that executable is run again *)
   verdicts : Verdicts.t;
   refused : string option; (* why it could not test its mutants *)
+  sample : (float * int64) option; (* the sample of its run *)
 }
 
 (* Dune's inline-test runner is [inline-test-runner.exe] in every library's
@@ -113,7 +114,15 @@ let remedy excluded =
 let fresh files =
   let load path =
     match Verdicts.load path with
-    | Ok { Verdicts.verdicts; identity; suite; refused; test_digests = _ } ->
+    | Ok
+        {
+          Verdicts.verdicts;
+          identity;
+          suite;
+          refused;
+          sample;
+          test_digests = _;
+        } ->
         Ok
           {
             path;
@@ -124,6 +133,7 @@ let fresh files =
             invocation = invocation identity;
             verdicts;
             refused;
+            sample;
           }
     | Error error -> Error (Pp.to_string Verdicts.pp_error error)
   in
@@ -167,7 +177,7 @@ let survived_in verdicts =
       match r.verdict with
       | Survived { first; others } ->
           Ids.add (Mutate.id_to_string r.id) (first :: others) acc
-      | Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated
+      | Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated | Not_sampled
       | Outside_tests | Unreached ->
           acc)
     Ids.empty
@@ -181,7 +191,7 @@ let killed_in verdicts =
       match r.verdict with
       | Killed { by } -> Ids.add (Mutate.id_to_string r.id) by acc
       | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated
-      | Outside_tests | Unreached ->
+      | Not_sampled | Outside_tests | Unreached ->
           acc)
     Ids.empty
     (Verdicts.records verdicts)
@@ -504,8 +514,8 @@ let disproved files =
     match Ids.find_opt id others with
     | Some (Outside_tests | Unreached) | None -> false
     | Some
-        (Killed _ | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated)
-      ->
+        ( Killed _ | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated
+        | Not_sampled ) ->
         true
   in
   let refutations = ref [] in
@@ -674,6 +684,7 @@ let verdict_name : Verdicts.verdict -> string = function
   | Killed _ | Killed_elsewhere _ -> "killed"
   | Survived _ -> "survived"
   | Not_evaluated -> "not_evaluated"
+  | Not_sampled -> "not_sampled"
   | Unknown _ -> "unknown"
   | Outside_tests -> "outside_tests"
   | Unreached -> "unreached"
@@ -734,7 +745,7 @@ let json ~crash_kills files merged (m : Sections.mutation) =
           (string (Verdicts.reason_text reason))
           (string (reason_kind reason))
           (counted_as_killed ~crash_kills f reason)
-    | Not_evaluated | Outside_tests | Unreached -> ""
+    | Not_evaluated | Not_sampled | Outside_tests | Unreached -> ""
   in
   let mutant (r : Verdicts.record) =
     strf

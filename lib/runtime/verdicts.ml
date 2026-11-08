@@ -31,6 +31,7 @@ type verdict =
   | Unknown of unknown_reason
   | Survived of { first : reaching_test; others : reaching_test list }
   | Not_evaluated
+  | Not_sampled
   | Outside_tests
   | Unreached
 
@@ -47,10 +48,11 @@ let killed by = Killed { by = List.sort_uniq (List.compare String.compare) by }
 
 (* The order in which verdicts outrank one another in a merge. *)
 let rank = function
-  | Killed _ -> 6
-  | Killed_elsewhere _ -> 5
-  | Unknown _ -> 4
-  | Not_evaluated -> 3
+  | Killed _ -> 7
+  | Killed_elsewhere _ -> 6
+  | Unknown _ -> 5
+  | Not_evaluated -> 4
+  | Not_sampled -> 3
   | Survived _ -> 2
   | Outside_tests -> 1
   | Unreached -> 0
@@ -73,10 +75,10 @@ let merge_verdict a b =
       if order <= 0 then a else b
   | Killed_elsewhere x, Killed_elsewhere y ->
       if String.compare x.exe y.exe <= 0 then a else b
-  | ( ( Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated | Survived _
-      | Outside_tests | Unreached ),
-      ( Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated | Survived _
-      | Outside_tests | Unreached ) ) ->
+  | ( ( Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated | Not_sampled
+      | Survived _ | Outside_tests | Unreached ),
+      ( Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated | Not_sampled
+      | Survived _ | Outside_tests | Unreached ) ) ->
       if rank a >= rank b then a else b
 
 type outcome = [ `Killed | `Survived | `Not_evaluated ]
@@ -85,7 +87,22 @@ let outcome = function
   | Killed _ -> Some `Killed
   | Survived _ -> Some `Survived
   | Not_evaluated -> Some `Not_evaluated
-  | Killed_elsewhere _ | Unknown _ | Outside_tests | Unreached -> None
+  | Killed_elsewhere _ | Unknown _ | Not_sampled | Outside_tests | Unreached ->
+      None
+
+(* The sample *)
+
+(* The spelling of [Seed.to_string]. *)
+let seed_token seed = Printf.sprintf "s1:%016Lx" seed
+
+let in_sample ~percent ~seed (id : Mutate.id) =
+  percent >= 100.
+  ||
+  let digest =
+    Digest.string (seed_token seed ^ "\000" ^ Mutate.id_to_string id)
+  in
+  Int64.shift_right_logical (String.get_int64_be digest 0) 2
+  < Int64.of_float (percent /. 100. *. 0x1p62)
 
 (* Collections *)
 
@@ -129,8 +146,8 @@ type record = {
 let names_a_test = function
   | Killed { by = _ :: _ } -> true
   | Killed { by = [] }
-  | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated | Outside_tests
-  | Unreached ->
+  | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated | Not_sampled
+  | Outside_tests | Unreached ->
       false
 
 let record_of_mutant ~effort ?prefix (m : Mutate.mutant) verdict =
@@ -207,8 +224,8 @@ let add t r =
     match r.verdict with
     | Survived s -> { r with verdict = survived (s.first :: s.others) }
     | Killed { by } -> { r with verdict = killed by }
-    | Killed_elsewhere _ | Unknown _ | Not_evaluated | Outside_tests | Unreached
-      ->
+    | Killed_elsewhere _ | Unknown _ | Not_evaluated | Not_sampled
+    | Outside_tests | Unreached ->
         r
   in
   (* Only a kill that names a test has a prefix. *)
@@ -247,7 +264,7 @@ let with_previous ~prior t =
 
 let format =
   {
-    Instr.magic = "windtrap-mutants-v15";
+    Instr.magic = "windtrap-mutants-v16";
     kind = "verdict";
     dir = "mutants";
     ext = "mutants";
@@ -285,6 +302,7 @@ type file = {
   identity : identity option;
   suite : string option;
   refused : string option;
+  sample : (float * int64) option;
   test_digests : (reaching_test * string) list;
 }
 
@@ -336,7 +354,7 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
                 (List.sort_uniq compare_test reaching) ->
         Some reaching
     | Killed _ | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated
-    | Outside_tests | Unreached ->
+    | Not_sampled | Outside_tests | Unreached ->
         None
   in
   match (last.refused, Id_map.find_opt m.id last.verdicts) with
@@ -357,6 +375,7 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
 
      [suite <name>]
      tested | refused <reason>
+     sample none | sample <percent> <seed>
      <test count>
      <test> <digest>
      <record count>
@@ -366,9 +385,11 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
    tests, and one record line for each record, in [Mutate.compare_id] order.
    [<source>] is a name: the digest of the source file that the instrumenter
    read, or empty when the instrumenter could not read it. A test is [<k>]
-   and then its [k] names. [<verdict>] is [unreached], [outside_tests],
-   [killed <n>] and then [n] killing tests, [killed_elsewhere <exe>] with a
-   name that is not empty, [not_evaluated], [unknown <reason>], or
+   and then its [k] names. [<percent>] is a hexadecimal float above 0 and
+   below 100, and [<seed>] is [s1:] and 16 lowercase hexadecimal digits.
+   [<verdict>] is [unreached], [outside_tests], [killed <n>] and then [n]
+   killing tests, [killed_elsewhere <exe>] with a name that is not empty,
+   [not_evaluated], [not_sampled] in a file with a sample, [unknown <reason>], or
    [survived <n>] and then [n] reaching tests, with [n] above 0. [<reason>]
    is [deadline <seconds>] with a hexadecimal float, [crashed <signal>
    <status> <how>] where each of the two is [none] or an integer,
@@ -420,7 +441,7 @@ let load path =
     | "other" -> Other (Instr.read_name c "reason")
     | word -> Instr.parse_fail "unknown reason %S" word
   in
-  let read_verdict c =
+  let read_verdict ~sampled c =
     match Instr.read_word c "verdict" with
     | "unreached" -> Unreached
     | "killed" ->
@@ -431,6 +452,10 @@ let load path =
         if exe = "" then Instr.parse_fail "empty killing executable";
         Killed_elsewhere { exe }
     | "not_evaluated" -> Not_evaluated
+    | "not_sampled" ->
+        if not sampled then
+          Instr.parse_fail "a not_sampled record in a file with no sample";
+        Not_sampled
     | "outside_tests" -> Outside_tests
     | "unknown" -> Unknown (read_reason c)
     | "survived" ->
@@ -452,7 +477,28 @@ let load path =
         | word -> Instr.parse_fail "unknown previous outcome %S" word)
     | word -> Instr.parse_fail "unknown previous outcome %S" word
   in
-  let read_record c =
+  let read_sample c =
+    (match Instr.read_word c "sample line" with
+    | "sample" -> ()
+    | word -> Instr.parse_fail "expected the sample line, found %S" word);
+    match Instr.read_word c "sample" with
+    | "none" -> None
+    | word ->
+        let percent =
+          match float_of_string_opt word with
+          | Some p when p > 0. && p < 100. -> p
+          | Some _ | None -> Instr.parse_fail "invalid sample percent %S" word
+        in
+        let token = Instr.read_word c "sample seed" in
+        let hex = function '0' .. '9' | 'a' .. 'f' -> true | _ -> false in
+        if
+          String.length token = 19
+          && String.starts_with ~prefix:"s1:" token
+          && String.for_all hex (String.sub token 3 16)
+        then Some (percent, Int64.of_string ("0x" ^ String.sub token 3 16))
+        else Instr.parse_fail "invalid sample seed %S" token
+  in
+  let read_record ~sampled c =
     let file = Instr.read_name c "file name" in
     if file = "" then Instr.parse_fail "empty file name";
     let line = Instr.read_nat c "line" in
@@ -474,7 +520,7 @@ let load path =
       | digest when Instr.is_digest digest -> Some digest
       | digest -> Instr.parse_fail "%S is not a source digest" digest
     in
-    let verdict = read_verdict c in
+    let verdict = read_verdict ~sampled c in
     let previous = read_previous c in
     let retries = Instr.read_nat c "retries" in
     let pass = Instr.read_nat c "pass" in
@@ -524,13 +570,13 @@ let load path =
       | _ -> ());
       read_digests c ((test, read_digest c "test digest") :: acc) (n - 1)
   in
-  let rec read_records c t n =
+  let rec read_records ~sampled c t n =
     if n = 0 then t
     else
-      let r = read_record c in
+      let r = read_record ~sampled c in
       if Id_map.mem r.id t then
         Instr.parse_fail "duplicate record for %s" (Mutate.id_to_string r.id);
-      read_records c (add t r) (n - 1)
+      read_records ~sampled c (add t r) (n - 1)
   in
   match Result.bind (Instr.read_file path) (Instr.start format ~path) with
   | Error e -> Error e
@@ -550,17 +596,25 @@ let load path =
           | "refused" -> Some (Instr.read_name c "refusal")
           | word -> Instr.parse_fail "unknown status %S" word
         in
+        let sample = read_sample c in
         let test_digests =
           read_digests c [] (Instr.read_count c "test count")
         in
         let verdicts =
-          read_records c empty (Instr.read_count c "record count")
+          read_records ~sampled:(Option.is_some sample) c empty
+            (Instr.read_count c "record count")
         in
         Instr.finish c;
-        Ok { verdicts; identity; suite; refused; test_digests }
+        Ok { verdicts; identity; suite; refused; sample; test_digests }
       with Instr.Parse_error reason -> Error (Corrupt { path; reason }))
 
-let save ?identity ?suite ?refused ?(test_digests = []) path t =
+let save ?identity ?suite ?refused ?sample ?(test_digests = []) path t =
+  (match sample with
+  | Some (percent, _) when not (percent > 0. && percent < 100.) ->
+      invalid_arg
+        "Windtrap_runtime.Verdicts.save: a sample percent is not above 0 and \
+         below 100"
+  | Some _ | None -> ());
   let test_digests =
     List.sort (fun (a, _) (b, _) -> compare_test a b) test_digests
   in
@@ -598,6 +652,7 @@ let save ?identity ?suite ?refused ?(test_digests = []) path t =
     | Killed_elsewhere { exe } ->
         Printf.bprintf b "killed_elsewhere %a" add_name exe
     | Not_evaluated -> Buffer.add_string b "not_evaluated"
+    | Not_sampled -> Buffer.add_string b "not_sampled"
     | Outside_tests -> Buffer.add_string b "outside_tests"
     | Unknown reason -> Printf.bprintf b "unknown %a" add_reason reason
     | Survived s ->
@@ -617,6 +672,10 @@ let save ?identity ?suite ?refused ?(test_digests = []) path t =
   (match refused with
   | None -> Buffer.add_string b "tested\n"
   | Some reason -> Printf.bprintf b "refused %a\n" add_name reason);
+  (match sample with
+  | None -> Buffer.add_string b "sample none\n"
+  | Some (percent, seed) ->
+      Printf.bprintf b "sample %h %s\n" percent (seed_token seed));
   Printf.bprintf b "%d\n" (List.length test_digests);
   List.iter
     (fun (test, digest) -> Printf.bprintf b "%a %s\n" add_test test digest)

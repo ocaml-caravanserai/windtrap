@@ -259,8 +259,8 @@
     - ["before"] is the source text of the original expression.
     - ["after"] is the source text of the armed expression.
     - ["verdict"] is one of ["killed"], ["survived"], ["not_evaluated"],
-      ["unknown"], ["outside_tests"] and ["unreached"]. A mutant killed
-      elsewhere ({{!section-merge}the merge}) is ["killed"].
+      ["not_sampled"], ["unknown"], ["outside_tests"] and ["unreached"]. A
+      mutant killed elsewhere ({{!section-merge}the merge}) is ["killed"].
     - ["reused"] is [true], directly after ["verdict"], in the object of a
       reused mutant only ({{!section-merge}the merge}). The other objects do not
       have the key.

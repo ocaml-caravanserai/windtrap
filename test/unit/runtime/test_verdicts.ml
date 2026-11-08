@@ -61,6 +61,7 @@ let verdict_row = function
   | Unknown reason -> "unknown: " ^ reason_row reason
   | Survived { first; others } -> "survived by " ^ tests_row (first :: others)
   | Not_evaluated -> "not evaluated"
+  | Not_sampled -> "not sampled"
   | Outside_tests -> "outside tests"
   | Unreached -> "unreached"
 
@@ -97,8 +98,15 @@ let error_row = function
   | Corrupt { path; reason } -> strf "corrupt %s: %s" path reason
 
 let load_rows = function
-  | Ok { Verdicts.verdicts; identity; suite = _; refused = _; test_digests = _ }
-    ->
+  | Ok
+      {
+        Verdicts.verdicts;
+        identity;
+        suite = _;
+        refused = _;
+        sample = _;
+        test_digests = _;
+      } ->
       Ok (rows verdicts, Option.map identity_row identity)
   | Error e -> Error (error_row e)
 
@@ -152,6 +160,7 @@ let small_verdict =
                     Flaky_kill { test = [ "u" ]; failure = "x" };
                   ]) );
          (1, Gen.constant Verdicts.Not_evaluated);
+         (1, Gen.constant Verdicts.Not_sampled);
          (3, Gen.map Verdicts.survived (Gen.list ~size:(Gen.int_range 1 3) path));
          (1, Gen.constant Verdicts.Outside_tests);
          (1, Gen.constant Verdicts.Unreached);
@@ -221,7 +230,8 @@ let any_record =
   let verdict =
     Gen.one_of
       [
-        Gen.of_list Verdicts.[ Not_evaluated; Outside_tests; Unreached ];
+        Gen.of_list
+          Verdicts.[ Not_evaluated; Not_sampled; Outside_tests; Unreached ];
         Gen.map Verdicts.killed (Gen.list ~size:(Gen.int_range 0 3) path);
         Gen.map (fun e -> Verdicts.Killed_elsewhere { exe = "e" ^ e }) name;
         Gen.map (fun r -> Verdicts.Unknown r) reason;
@@ -288,19 +298,32 @@ let any_test_digests =
     (Gen.list ~size:(Gen.int_range 0 3)
        (Gen.pair (Gen.list ~size:(Gen.int_range 0 2) Gen.string) hex_digest))
 
+let any_sample =
+  Gen.option
+    (Gen.pair
+       (Gen.one_of
+          [
+            Gen.of_list [ Float.succ 0.; 0.5; 50.; Float.pred 100. ];
+            Gen.float_range 0.001 99.999;
+          ])
+       Gen.int64)
+
 let any_file =
-  Gen.quad any_identity (Gen.option Gen.string)
-    (Gen.with_pp pp_records
-       (Gen.map collection (Gen.list ~size:(Gen.int_range 0 5) any_record)))
-    any_test_digests
+  Gen.pair
+    (Gen.quad any_identity (Gen.option Gen.string)
+       (Gen.with_pp pp_records
+          (Gen.map collection (Gen.list ~size:(Gen.int_range 0 5) any_record)))
+       any_test_digests)
+    any_sample
 
 (* Verdicts *)
 
 let rank = function
-  | Verdicts.Killed _ -> 6
-  | Killed_elsewhere _ -> 5
-  | Unknown _ -> 4
-  | Not_evaluated -> 3
+  | Verdicts.Killed _ -> 7
+  | Killed_elsewhere _ -> 6
+  | Unknown _ -> 5
+  | Not_evaluated -> 4
+  | Not_sampled -> 3
   | Survived _ -> 2
   | Outside_tests -> 1
   | Unreached -> 0
@@ -366,6 +389,13 @@ let lattice_examples =
       (Outside_tests, s [ [ "a" ] ]);
       (Not_evaluated, Outside_tests);
       (Unreached, Outside_tests);
+      (Not_sampled, s [ [ "a" ] ]);
+      (Not_evaluated, Not_sampled);
+      (Unknown (Other "crashed"), Not_sampled);
+      (Not_sampled, killed []);
+      (Not_sampled, Outside_tests);
+      (Unreached, Not_sampled);
+      (Not_sampled, Not_sampled);
       (s [ [ "b" ]; [ "a" ] ], s [ [ "c" ]; [ "b" ] ]);
     ]
 
@@ -378,6 +408,7 @@ let outcome_cases =
     ("Unknown", Verdicts.Unknown (Other "crashed"), None);
     ("Survived", Verdicts.survived [ [ "t" ] ], Some "survived");
     ("Not_evaluated", Verdicts.Not_evaluated, Some "not evaluated");
+    ("Not_sampled", Verdicts.Not_sampled, None);
     ("Outside_tests", Verdicts.Outside_tests, None);
     ("Unreached", Verdicts.Unreached, None);
   ]
@@ -402,6 +433,72 @@ let verdicts =
             (Invalid_argument
                "Windtrap_runtime.Verdicts.survived: a survivor names at least \
                 one test") (fun () -> Verdicts.survived []));
+    ]
+
+(* The sample *)
+
+let a1 = id "lib/a.ml" 1 0 "lt"
+let a2 = id "lib/a.ml" 2 0 "lt"
+
+(* The hash of [a1] under the seed 42 is 2.4013% of 2^62, and that of [a2]
+   is 74.8967%. *)
+let fixed_answers () =
+  equal (list bool)
+    [ false; true; false; true; false ]
+    [
+      Verdicts.in_sample ~percent:2.4 ~seed:42L a1;
+      Verdicts.in_sample ~percent:2.5 ~seed:42L a1;
+      Verdicts.in_sample ~percent:74.8 ~seed:42L a2;
+      Verdicts.in_sample ~percent:74.9 ~seed:42L a2;
+      Verdicts.in_sample ~percent:2.5 ~seed:43L a1;
+    ]
+
+let any_id =
+  Gen.map
+    (fun (file, line) -> id file line 0 "lt")
+    (Gen.pair Gen.string (Gen.int_range 1 1000))
+
+let all_at_100 (seed, id) = is_true (Verdicts.in_sample ~percent:100. ~seed id)
+
+let monotone ((seed, id), (a, b)) =
+  let lo = Float.min a b and hi = Float.max a b in
+  is_true
+    ((not (Verdicts.in_sample ~percent:lo ~seed id))
+    || Verdicts.in_sample ~percent:hi ~seed id)
+
+(* 10000 draws of a fair coin of p = 0.3 are 30% within 1.2 points, at about
+   4 standard deviations. *)
+let near_the_percent () =
+  List.iter
+    (fun (percent, seed) ->
+      let n = 10_000 in
+      let k =
+        List.length
+          (List.filter
+             (fun line ->
+               Verdicts.in_sample ~percent ~seed (id "lib/b.ml" line 4 "add"))
+             (List.init n succ))
+      in
+      let got = 100. *. float_of_int k /. float_of_int n in
+      if Float.abs (got -. percent) > 1.2 then
+        failwith (strf "%g%% of the seed %Ld: %g%%" percent seed got))
+    [ (30., 0L); (30., -1L); (5., 42L); (50., 0x6d7574616e747321L) ]
+
+let samples =
+  group "The sample"
+    [
+      test "in_sample of a fixed seed and identifier is a fixed answer"
+        fixed_answers;
+      prop "in_sample at 100 holds each mutant"
+        (Gen.pair Gen.int64 any_id)
+        all_at_100;
+      prop
+        "a mutant in the sample of a percent is in the sample of a higher one"
+        (Gen.pair
+           (Gen.pair Gen.int64 any_id)
+           (Gen.pair (Gen.float_range 0. 100.) (Gen.float_range 0. 100.)))
+        monotone;
+      test "the sample holds about its percent of the mutants" near_the_percent;
     ]
 
 (* Collections *)
@@ -790,8 +887,8 @@ let collections =
           equal (list string) [] (rows Verdicts.empty));
       prop
         "add combines two verdicts by Killed > Killed_elsewhere > Unknown > \
-         Not_evaluated > Survived > Outside_tests > Unreached, keeps the \
-         smaller killing executable, and unites the reaching tests"
+         Not_evaluated > Not_sampled > Survived > Outside_tests > Unreached, \
+         keeps the smaller killing executable, and unites the reaching tests"
         ~examples:lattice_examples
         (Gen.pair small_verdict small_verdict)
         combined;
@@ -919,6 +1016,7 @@ let last ?refused ?(test_digests = digests) records =
     identity = None;
     suite = Some "s";
     refused;
+    sample = None;
     test_digests;
   }
 
@@ -1177,10 +1275,26 @@ let reason_texts =
       | _ -> None)
     (Verdicts.records kills_and_reasons)
 
-let round_trip (identity, suite, t, test_digests) =
+(* Only a file with a sample holds a Not_sampled record. *)
+let round_trip ((identity, suite, t, test_digests), sample) =
+  let t =
+    if Option.is_some sample then t
+    else
+      collection
+        (List.filter
+           (fun (r : Verdicts.record) -> r.verdict <> Verdicts.Not_sampled)
+           (Verdicts.records t))
+  in
   let path = Filename.concat (temp_dir ()) "saved.mutants" in
-  Verdicts.save ?identity ?suite ~test_digests path t;
+  Verdicts.save ?identity ?suite ?sample ~test_digests path t;
   let loaded = Verdicts.load path in
+  equal
+    (option (pair float_exact int64))
+    sample
+    (Result.fold
+       ~ok:(fun (f : Verdicts.file) -> f.sample)
+       ~error:(fun _ -> None)
+       loaded);
   equal
     (result (pair (list string) (option string)) string)
     (Ok (rows t, Option.map identity_row identity))
@@ -1252,6 +1366,37 @@ let refused_test_digests (_, test_digests) =
         Verdicts.empty);
   equal (list string) [] (Array.to_list (Sys.readdir dir))
 
+let bad_samples =
+  [
+    ("0%", 0.);
+    ("100%", 100.);
+    ("150%", 150.);
+    ("a negative percent", -1.);
+    ("NaN", Float.nan);
+    ("infinity", Float.infinity);
+  ]
+
+let refused_sample (_, percent) =
+  let dir = temp_dir () in
+  raises_match (Exn.invalid_arg ~sub:"Windtrap_runtime.Verdicts") (fun () ->
+      Verdicts.save ~sample:(percent, 42L)
+        (Filename.concat dir "unwritten.mutants")
+        Verdicts.empty);
+  equal (list string) [] (Array.to_list (Sys.readdir dir))
+
+(* The seed of the sample line is the token of Seed.to_string. *)
+let sample_line () =
+  let line seed =
+    let path = Filename.concat (temp_dir ()) "saved.mutants" in
+    Verdicts.save ~sample:(12.5, seed) path Verdicts.empty;
+    List.nth (String.split_on_char '\n' (read path)) 2
+  in
+  equal (list string)
+    (List.map
+       (fun seed -> "sample 0x1.9p+3 " ^ Private.Seed.to_string seed)
+       [ 0L; 42L; -1L; Int64.min_int ])
+    (List.map line [ 0L; 42L; -1L; Int64.min_int ])
+
 let order_free records =
   let dir = temp_dir () in
   let saved name t =
@@ -1271,7 +1416,7 @@ let refusal () =
     (String.concat "\n"
        (List.filteri (fun i _ -> i < 3) (String.split_on_char '\n' (read path))))
   @@ __POS_OF__
-       {|windtrap-mutants-v15
+       {|windtrap-mutants-v16
 refused 44 the suite is not deterministic:
 failed twice|};
   equal (option string) (Some reason)
@@ -1311,13 +1456,14 @@ let headers =
     ("the empty file", "");
     ("a coverage file", "windtrap-coverage-v3\n1\n");
     ("the upstream version before", "windtrap-mutants-v5\ntested\n0\n");
-    ("the version before", "windtrap-mutants-v14\ntested\n0\n");
-    ("two versions before", "windtrap-mutants-v13\ntested\n0\n");
-    ("three versions before", "windtrap-mutants-v12\ntested\n0\n");
+    ("the version before", "windtrap-mutants-v15\ntested\n0\n0\n");
+    ("two versions before", "windtrap-mutants-v14\ntested\n0\n");
+    ("three versions before", "windtrap-mutants-v13\ntested\n0\n");
+    ("four versions before", "windtrap-mutants-v12\ntested\n0\n");
     ("a fork version before", "windtrap-mutants-v11\ntested\n0\n");
-    ("a later version", "windtrap-mutants-v16\ntested\n0\n0\n");
+    ("a later version", "windtrap-mutants-v17\ntested\nsample none\n0\n0\n");
     ("the magic in uppercase", "WINDTRAP-MUTANTS-V1\n0\n");
-    ("the magic and a digit", "windtrap-mutants-v150\ntested\n0\n0\n");
+    ("the magic and a digit", "windtrap-mutants-v160\ntested\n0\n0\n");
     ("plain text", "hello\nworld\n");
   ]
 
@@ -1329,7 +1475,8 @@ let unknown_format (_, text) =
          | Error (Verdicts.Unknown_format { path; _ }) -> Some path | _ -> None)
        loaded)
 
-let record_prefix = "windtrap-mutants-v15\ntested\n0\n1\n8 lib/a.ml "
+let record_prefix =
+  "windtrap-mutants-v16\ntested\nsample none\n0\n1\n8 lib/a.ml "
 
 (* The fields after the previous outcome of a valid record. *)
 let tail = " 0 1 " ^ zeros ^ " none fresh"
@@ -1345,29 +1492,56 @@ let effort_prefix =
   record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 1 1 1 t none "
 
 (* A file with the test count and digest lines [lines], and no record. *)
-let with_digests lines = "windtrap-mutants-v15\ntested\n" ^ lines ^ "0\n"
+let with_digests lines =
+  "windtrap-mutants-v16\ntested\nsample none\n" ^ lines ^ "0\n"
+
+(* A file with the sample line [line] and no record. *)
+let with_sample line = "windtrap-mutants-v16\ntested\n" ^ line ^ "\n0\n0\n"
+let seed_42 = "s1:000000000000002a"
 
 let corrupt_files =
   [
-    ("the magic line alone", "windtrap-mutants-v15");
-    ("a negative record count", "windtrap-mutants-v15\ntested\n0\n-1\n");
+    ("no sample line", "windtrap-mutants-v16\ntested\n0\n0\n");
+    ("a sample line with no percent", "windtrap-mutants-v16\ntested\nsample");
+    ("a sample of 0%", with_sample ("sample 0 " ^ seed_42));
+    ("a sample of 100%", with_sample ("sample 100 " ^ seed_42));
+    ("a negative sample", with_sample ("sample -1 " ^ seed_42));
+    ("a sample that is not a number", with_sample ("sample nan " ^ seed_42));
+    ("a sample word", with_sample ("sample half " ^ seed_42));
+    ("no sample seed", "windtrap-mutants-v16\ntested\nsample 50");
+    ("a short sample seed", with_sample "sample 50 s1:2a");
+    ("an uppercase sample seed", with_sample "sample 50 s1:00000000000000AA");
+    ( "a sample seed of another version",
+      with_sample "sample 50 s2:000000000000002a" );
+    ("a decimal sample seed", with_sample "sample 50 42");
+    ("a not_sampled record with no sample", with_tail "not_sampled");
+    ( "a reused mutant that was not sampled",
+      "windtrap-mutants-v16\ntested\nsample 50 " ^ seed_42
+      ^ "\n0\n1\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  not_sampled none 0 1 "
+      ^ zeros ^ " none reused\n" );
+    ("the magic line alone", "windtrap-mutants-v16");
+    ( "a negative record count",
+      "windtrap-mutants-v16\ntested\nsample none\n0\n-1\n" );
     ( "a record count past the input",
-      "windtrap-mutants-v15\ntested\n0\n99999999\n" );
+      "windtrap-mutants-v16\ntested\nsample none\n0\n99999999\n" );
     ( "fewer records than the count",
-      "windtrap-mutants-v15\n\
+      "windtrap-mutants-v16\n\
        tested\n\
+       sample none\n\
        0\n\
        2\n\
        8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none" ^ tail ^ "\n" );
     ( "an empty file name",
-      "windtrap-mutants-v15\n\
+      "windtrap-mutants-v16\n\
        tested\n\
+       sample none\n\
        0\n\
        1\n\
        0  1 2 1 5 3 add 0 0 1 b 1 a 0  unreached\n" );
     ( "a file name past the input",
-      "windtrap-mutants-v15\n\
+      "windtrap-mutants-v16\n\
        tested\n\
+       sample none\n\
        0\n\
        1\n\
        80 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached\n" );
@@ -1442,15 +1616,17 @@ let corrupt_files =
     ( "a flaky kill with no failure",
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown flaky_kill 1 1 t\n" );
     ( "two records of one identifier",
-      "windtrap-mutants-v15\n\
+      "windtrap-mutants-v16\n\
        tested\n\
+       sample none\n\
        0\n\
        2\n\
        8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none" ^ tail
       ^ "\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed 0 none" ^ tail ^ "\n" );
     ( "a malformed record after a valid one",
-      "windtrap-mutants-v15\n\
+      "windtrap-mutants-v16\n\
        tested\n\
+       sample none\n\
        0\n\
        2\n\
        8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed 0 none" ^ tail
@@ -1463,22 +1639,22 @@ let corrupt_files =
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 was\n" );
     ( "a previous verdict that is no outcome",
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 was unreached\n" );
-    ("a short identity digest", "windtrap-mutants-v15\nexe abcd 1 a\n0\n");
-    ("an empty identity exe", "windtrap-mutants-v15\nexe " ^ digest ^ " 0 \n0\n");
-    ("no status", "windtrap-mutants-v15\n0\n");
-    ("an unknown status", "windtrap-mutants-v15\nwhole\n0\n");
-    ("a refusal past the input", "windtrap-mutants-v15\nrefused 80 r\n0\n");
-    ("a suite past the input", "windtrap-mutants-v15\nsuite 80 s\ntested\n0\n");
-    ("a suite and no status", "windtrap-mutants-v15\nsuite 1 s\n0\n");
+    ("a short identity digest", "windtrap-mutants-v16\nexe abcd 1 a\n0\n");
+    ("an empty identity exe", "windtrap-mutants-v16\nexe " ^ digest ^ " 0 \n0\n");
+    ("no status", "windtrap-mutants-v16\n0\n");
+    ("an unknown status", "windtrap-mutants-v16\nwhole\n0\n");
+    ("a refusal past the input", "windtrap-mutants-v16\nrefused 80 r\n0\n");
+    ("a suite past the input", "windtrap-mutants-v16\nsuite 80 s\ntested\n0\n");
+    ("a suite and no status", "windtrap-mutants-v16\nsuite 1 s\n0\n");
     ( "two suite lines",
-      "windtrap-mutants-v15\nsuite 1 s\nsuite 1 t\ntested\n0\n" );
+      "windtrap-mutants-v16\nsuite 1 s\nsuite 1 t\ntested\n0\n" );
     ( "a suite before the identity",
-      "windtrap-mutants-v15\nsuite 1 s\nexe " ^ digest ^ " 1 a\ntested\n0\n" );
+      "windtrap-mutants-v16\nsuite 1 s\nexe " ^ digest ^ " 1 a\ntested\n0\n" );
     ( "bytes after the last record",
-      "windtrap-mutants-v15\ntested\n0\n0\nextra\n" );
+      "windtrap-mutants-v16\ntested\nsample none\n0\n0\nextra\n" );
     ("a negative test count", with_digests "-1\n");
     ("a test count past the input", with_digests "99999999\n");
-    ("no test count", "windtrap-mutants-v15\ntested\n");
+    ("no test count", "windtrap-mutants-v16\ntested\nsample none\n");
     ("a short test digest", with_digests "1\n1 1 t abc\n");
     ( "an uppercase test digest",
       with_digests ("1\n1 1 t " ^ String.make 32 'A' ^ "\n") );
@@ -1525,16 +1701,30 @@ let corrupt_reasons () =
   expect (String.concat "\n" (List.map reason corrupt_files))
   @@ __POS_OF__
        {|
+    no sample line: expected the sample line, found "0"
+    a sample line with no percent: expected sample at offset 34
+    a sample of 0%: invalid sample percent "0"
+    a sample of 100%: invalid sample percent "100"
+    a negative sample: invalid sample percent "-1"
+    a sample that is not a number: invalid sample percent "nan"
+    a sample word: invalid sample percent "half"
+    no sample seed: expected sample seed at offset 37
+    a short sample seed: invalid sample seed "s1:2a"
+    an uppercase sample seed: invalid sample seed "s1:00000000000000AA"
+    a sample seed of another version: invalid sample seed "s2:000000000000002a"
+    a decimal sample seed: invalid sample seed "42"
+    a not_sampled record with no sample: a not_sampled record in a file with no sample
+    a reused mutant that was not sampled: a reused verdict that cannot be reused
     the magic line alone: expected status at offset 20
     a negative record count: negative record count
     a record count past the input: record count exceeds data
-    fewer records than the count: expected file name length at offset 131
+    fewer records than the count: expected file name length at offset 143
     an empty file name: empty file name
     a file name past the input: truncated file name
     line 0: line 0 is not 1-based
     a negative line: negative line
     a negative column: negative column
-    no end: expected end column at offset 49
+    no end: expected end column at offset 61
     an end column before the start: end 1:1 before start 1:2
     an end line before the start: end 1:5 before start 2:2
     a negative end column: negative end column
@@ -1542,19 +1732,19 @@ let corrupt_reasons () =
     an unknown rewrite: unknown rewrite "plus"
     drop, which no instrumenter emits: unknown rewrite "drop"
     a before past the input: truncated before
-    no rendering: expected before length at offset 57
+    no rendering: expected before length at offset 69
     an after past the input: truncated after
     an unknown verdict: unknown verdict "errored"
-    no verdict: expected verdict at offset 68
-    no source digest: expected source digest length at offset 65
+    no verdict: expected verdict at offset 80
+    no source digest: expected source digest length at offset 77
     a short source digest: "abc" is not a source digest
     an uppercase source digest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" is not a source digest
     a killing executable that is empty: empty killing executable
-    no killing executable: expected killing executable length at offset 85
+    no killing executable: expected killing executable length at offset 97
     a survivor with no reaching test: a survivor names no test (survived is not unreached)
     a reaching test count past the input: reaching test count exceeds data
     a negative test path length: negative test path length
-    a test path shorter than its length: expected test path length at offset 85
+    a test path shorter than its length: expected test path length at offset 97
     a test name past the input: truncated test name
     a killing test count past the input: killing test count exceeds data
     a killing test name past the input: truncated test name
@@ -1565,14 +1755,14 @@ let corrupt_reasons () =
     a deadline that is not finite: invalid deadline "nan"
     a signal that is no number: invalid signal "x"
     an exit status that is no number: invalid exit status "x"
-    a crash with no phrase: expected crash length at offset 94
+    a crash with no phrase: expected crash length at offset 106
     a negative memory limit: negative memory limit
-    a flaky kill with no failure: expected failure length at offset 93
+    a flaky kill with no failure: expected failure length at offset 105
     two records of one identifier: duplicate record for lib/a.ml:1:2:add
     a malformed record after a valid one: line 0 is not 1-based
-    no previous outcome: expected previous outcome at offset 77
+    no previous outcome: expected previous outcome at offset 89
     an unknown previous outcome: unknown previous outcome "maybe"
-    was and no outcome: expected previous outcome at offset 81
+    was and no outcome: expected previous outcome at offset 93
     a previous verdict that is no outcome: unknown previous outcome "unreached"
     a short identity digest: identity digest is not 32 hex characters at offset 25
     an empty identity exe: empty executable identity
@@ -1583,27 +1773,27 @@ let corrupt_reasons () =
     a suite and no status: unknown status "0"
     two suite lines: unknown status "suite"
     a suite before the identity: unknown status "exe"
-    bytes after the last record: trailing data at offset 32
+    bytes after the last record: trailing data at offset 44
     a negative test count: negative test count
     a test count past the input: test count exceeds data
-    no test count: expected test count at offset 28
+    no test count: expected test count at offset 40
     a short test digest: "abc" is not a test digest
     an uppercase test digest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" is not a test digest
     no test digest: "0" is not a test digest
     test digests out of order: test digests out of order or repeated
     two digests of one test: test digests out of order or repeated
-    no retries: expected retries at offset 89
+    no retries: expected retries at offset 101
     a negative retries count: negative retries
     pass 0: pass 0 is not from 1 to 1
     a pass above the retries count plus 1: pass 3 is not from 1 to 2
-    no settings: expected settings digest at offset 92
+    no settings: expected settings digest at offset 104
     a short settings word: "abc" is not a settings digest
     an uppercase settings word: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" is not a settings digest
-    no prefix: expected prefix at offset 125
+    no prefix: expected prefix at offset 137
     a short prefix: "abc" is not a prefix
     a prefix on a kill that names no test: a prefix on a verdict that names no killing test
     a prefix on a survivor: a prefix on a verdict that names no killing test
-    no mark: expected mark at offset 130
+    no mark: expected mark at offset 142
     an unknown mark: unknown mark "maybe"
     a reused kill that names no test: a reused verdict that cannot be reused
     a reused unknown verdict: a reused verdict that cannot be reused
@@ -1627,7 +1817,7 @@ let error_messages () =
        ])
   @@ __POS_OF__
        {|
-    f.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v15", found "junk"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+    f.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v16", found "junk"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
     f.mutants: cannot read verdict file: No such file or directory
     f.mutants: corrupt verdict file: unknown verdict "errored"
     |}
@@ -1650,15 +1840,16 @@ let files =
         "format is the magic line, the mutants directory and extension, and \
          the verdict kind" (fun () ->
           equal (list string)
-            [ "windtrap-mutants-v15"; "mutants"; "mutants"; "verdict" ]
+            [ "windtrap-mutants-v16"; "mutants"; "mutants"; "verdict" ]
             Verdicts.[ format.magic; format.dir; format.ext; format.kind ]);
       test
         "save writes the magic line, the count, then the records by identifier"
         (fun () ->
           expect_exact (saved sample)
           @@ __POS_OF__
-               {|windtrap-mutants-v15
+               {|windtrap-mutants-v16
 tested
+sample none
 0
 7
 8 lib/a.ml 1 2 1 7 3 add 5 a - b 5 a + b 0  unreached none 0 1 00000000000000000000000000000000 none fresh
@@ -1672,8 +1863,9 @@ tested
       test "save writes each kill and each reason" (fun () ->
           expect_exact (saved kills_and_reasons)
           @@ __POS_OF__
-               {|windtrap-mutants-v15
+               {|windtrap-mutants-v16
 tested
+sample none
 0
 11
 8 lib/k.ml 1 0 1 5 3 add 5 a - b 5 a + b 0  killed 0 none 0 1 00000000000000000000000000000000 none fresh
@@ -1712,9 +1904,10 @@ tested
           expect_exact
             (saved ~identity:{ exe = "test/a.exe"; digest } Verdicts.empty)
           @@ __POS_OF__
-               {|windtrap-mutants-v15
+               {|windtrap-mutants-v16
 exe aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 10 test/a.exe
 tested
+sample none
 0
 0
 |});
@@ -1724,11 +1917,12 @@ tested
                ~identity:{ exe = "test/a.exe"; digest }
                ~suite:"lib/a b.ml\n" Verdicts.empty)
           @@ __POS_OF__
-               {|windtrap-mutants-v15
+               {|windtrap-mutants-v16
 exe aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 10 test/a.exe
 suite 11 lib/a b.ml
 
 tested
+sample none
 0
 0
 |});
@@ -1759,6 +1953,12 @@ tested
         "load reads back what save wrote, identity, suite and sorted test \
          digests included"
         any_file round_trip;
+      test "save writes the seed of a sample as Seed.to_string spells it"
+        sample_line;
+      cases
+        "save raises Invalid_argument on a sample percent that is not above 0 \
+         and below 100, and writes nothing"
+        ~id:fst bad_samples refused_sample;
       test
         "load reads back each mark, prefix and effort, and the test digests \
          sorted"
@@ -1813,4 +2013,4 @@ tested
                ~exe:(Filename.concat (temp_dir ()) "no-such.exe")));
     ]
 
-let () = exit (run "verdicts" [ verdicts; collections; reuse; files ])
+let () = exit (run "verdicts" [ verdicts; samples; collections; reuse; files ])
