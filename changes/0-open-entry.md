@@ -68,8 +68,8 @@
   Before, an `--arm` run in which only a forked process evaluated the
   site ended on `mutant not evaluated`. Under `-x`, an `--arm` run stops
   at the first failure that kills the mutant.
-- The outcome line of a mutation run and of `windtrap mutants` ends
-  with the mutation score, as `score 66.7% (6/9)`. The score is the
+- The outcome line of a mutation run and of `windtrap mutants` gives
+  the mutation score, as `score 66.7% (6/9)`. The score is the
   percentage of killed mutants among those killed, survived and not
   evaluated. An unknown mutant does not count
   (doc/manual/mutation.md#gating-on-the-score).

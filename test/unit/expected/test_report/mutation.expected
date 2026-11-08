@@ -27,7 +27,7 @@ File "lib/calc.ml", line 21, characters 16-21:
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate test/test_calc.exe -- --arm lib/calc.ml:13:11:add
-mutants: 2 survived of 5 reached by this suite, 3 killed, 2 never reached, score 60.0% (3/5)
+mutants: 2 survived of 5 reached by this suite, 3 killed, 2 never reached, score 60.0% (3/5), reach 71.4% (5/7), total 42.9% (3/7)
 
 === and styled
 --- mutation_testing 1
@@ -58,7 +58,7 @@ File "lib/calc.ml", line 21, characters 16-21:
 «d|──────────────────────────────────────────────────────────»
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate test/test_calc.exe -- --arm lib/calc.ml:13:11:add
-mutants: «r|2 survived» of 5 reached by this suite, «g|3 killed», «y|2 never reached», score 60.0% (3/5)
+mutants: «r|2 survived» of 5 reached by this suite, «g|3 killed», «y|2 never reached», score 60.0% (3/5), reach 71.4% (5/7), total 42.9% (3/7)
 
 === the live line names the mutant, and is erased before a block
 --- mutation_testing 1
@@ -76,7 +76,7 @@ File "lib/calc.ml", line 13, characters 11-16:
 «d|──────────────────────────────────────────────────────────»
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate test/test_calc.exe -- --arm lib/calc.ml:13:11:add
-mutants: «r|1 survived» of 4 reached by this suite, «g|3 killed», score 75.0% (3/4)
+mutants: «r|1 survived» of 4 reached by this suite, «g|3 killed», score 75.0% (3/4), reach 100.0% (4/4), total 75.0% (3/4)
 
 === a killed mutant leaves nothing, the next line draws over it
 --- mutation_testing 1
@@ -86,7 +86,7 @@ mutants: «r|1 survived» of 4 reached by this suite, «g|3 killed», score 75.0
 
 === every mutant killed: the outcome alone
 --- mutation_finish
-mutants: 3 reached by this suite, «g|3 killed», score 100.0% (3/3)
+mutants: 3 reached by this suite, «g|3 killed», score 100.0% (3/3), reach 100.0% (3/3), total 100.0% (3/3)
 
 === an interrupted loop closes over the children that ended
 ──────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ mutants: 3 reached by this suite, «g|3 killed», score 100.0% (3/3)
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate test/test_calc.exe -- --arm lib/calc.ml:13:11:add
-mutants: 1 survived of 3 reached by this suite, 2 never reached, 2 not tested, score 0.0% (0/1)
+mutants: 1 survived of 3 reached by this suite, 2 never reached, 2 not tested, score 0.0% (0/1), reach 60.0% (3/5), total 0.0% (0/3)
 
 === the lines print in order above the reproduce line
 ──────────────────────────────────────────────────────────
@@ -108,15 +108,15 @@ mutants: 1 survived of 3 reached by this suite, 2 never reached, 2 not tested, s
 first line
 killed elsewhere: 1 mutant, not tested, from the verdict file of default/a.exe (1)
 reproduce: dune exec --instrument-with ppx_windtrap.mutate test/test_calc.exe -- --arm lib/calc.ml:13:11:add
-mutants: 1 survived of 5 reached by this suite, 3 killed, 2 never reached, 1 not tested, score 75.0% (3/4)
+mutants: 1 survived of 5 reached by this suite, 3 killed, 2 never reached, 1 not tested, score 75.0% (3/4), reach 71.4% (5/7), total 50.0% (3/6)
 
 === the lines print above a lone outcome line, and a note follows them
 killed elsewhere: 1 mutant, not tested, from the verdict file of default/a.exe (1)
-mutants: 4 reached by this suite, 3 killed, 1 not tested, score 100.0% (3/3)
+mutants: 4 reached by this suite, 3 killed, 1 not tested, score 100.0% (3/3), reach 100.0% (4/4), total 100.0% (3/3)
 
 === an interrupted loop prints its lines
 killed elsewhere: 1 mutant, not tested, from the verdict file of default/a.exe (1)
-mutants: 5 reached by this suite, 3 killed, 2 not tested, score 100.0% (3/3)
+mutants: 5 reached by this suite, 3 killed, 2 not tested, score 100.0% (3/3), reach 100.0% (5/5), total 100.0% (3/3)
 
 === stopped before a child ended
-mutants: 5 reached by this suite, 5 not tested
+mutants: 5 reached by this suite, 5 not tested, reach 100.0% (5/5)

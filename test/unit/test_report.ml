@@ -2179,7 +2179,8 @@ let interrupted_loop (_, (during, expected)) =
   in
   equal (pair string string)
     ( expected,
-      "mutants: 3 reached by this suite, 3 killed, score 100.0% (3/3)\n" )
+      "mutants: 3 reached by this suite, 3 killed, score 100.0% (3/3), reach \
+       100.0% (3/3), total 100.0% (3/3)\n" )
     (output (), t)
 
 let mutation =
