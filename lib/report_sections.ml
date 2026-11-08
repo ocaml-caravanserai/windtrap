@@ -1697,11 +1697,11 @@ let unreached_count (m : mutation) =
 
 let mutation_score m = percent ~visited:m.killed ~total:(scored m)
 
-let mutation_reach m =
-  percent ~visited:(reached m) ~total:(reached m + unreached_count m)
-
-let mutation_total m =
-  percent ~visited:m.killed ~total:(scored m + unreached_count m)
+(* The denominators of the reach and of the total. *)
+let reach_base m = reached m + unreached_count m
+let total_base m = scored m + unreached_count m
+let mutation_reach m = percent ~visited:(reached m) ~total:(reach_base m)
+let mutation_total m = percent ~visited:m.killed ~total:(total_base m)
 
 type gates = {
   min : float option;
@@ -1713,13 +1713,13 @@ type gates = {
 let no_gates =
   { min = None; min_reach = None; min_total = None; max_survivors = None }
 
-let gated g =
-  g.min <> None || g.min_reach <> None || g.min_total <> None
-  || g.max_survivors <> None
+let gated g = g <> no_gates
 
-(* Each gate as whether it is met, in the order of the line. A merge without
-   the verdicts of a refused suite is not the project's, so it fails each
-   gate. *)
+(* A merge without the verdicts of a refused suite is not the project's, so
+   it fails each gate. *)
+let met (m : mutation) ok = ok && m.refused = []
+
+(* Each gate as whether it is met, in the order of the line. *)
 let gate_results g (m : mutation) =
   let at_least measure = Option.map (fun min -> measure m >= min) in
   [
@@ -1728,7 +1728,7 @@ let gate_results g (m : mutation) =
     at_least mutation_total g.min_total;
     Option.map (fun max -> List.length m.survivors <= max) g.max_survivors;
   ]
-  |> List.filter_map (Option.map (fun met -> met && m.refused = []))
+  |> List.filter_map (Option.map (met m))
 
 let mutation_gates_met g m = List.for_all Fun.id (gate_results g m)
 
@@ -1753,8 +1753,8 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
   let minimum min =
     plain (strf ", minimum %s%%: " (Pp.to_string Pp.decimal min))
   in
-  let measure ~name ~value ~visited ~total ~min ~none =
-    let pct = value m in
+  let measure ~name ~visited ~total ~min ~none =
+    let pct = percent ~visited ~total in
     let text =
       match none with
       | Some none when total = 0 -> none
@@ -1767,7 +1767,7 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
           [
             (if pct < min then styled `Red text else plain text);
             minimum min;
-            verdict (pct >= min && m.refused = []);
+            verdict (met m (pct >= min));
           ];
         ]
   in
@@ -1795,13 +1795,11 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
           :: term (List.length m.refused) (fun n ->
               [ styled `Red (counted n "suite" ^ " not mutation-tested") ])
       | Suite | Selected _ -> [])
-    @ measure ~name:"score" ~value:mutation_score ~visited:m.killed
-        ~total:(scored m) ~min:g.min ~none:(Some "no scored mutant")
-    @ measure ~name:"reach" ~value:mutation_reach ~visited:(reached m)
-        ~total:(reached m + unreached_count m)
+    @ measure ~name:"score" ~visited:m.killed ~total:(scored m) ~min:g.min
+        ~none:(Some "no scored mutant")
+    @ measure ~name:"reach" ~visited:(reached m) ~total:(reach_base m)
         ~min:g.min_reach ~none:None
-    @ measure ~name:"total" ~value:mutation_total ~visited:m.killed
-        ~total:(scored m + unreached_count m)
+    @ measure ~name:"total" ~visited:m.killed ~total:(total_base m)
         ~min:g.min_total ~none:None
     @
     match g.max_survivors with
@@ -1810,7 +1808,7 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
         [
           [
             plain (strf "maximum %s: " (counted max "survivor"));
-            verdict (survived <= max && m.refused = []);
+            verdict (met m (survived <= max));
           ];
         ]
   in

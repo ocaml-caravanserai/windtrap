@@ -836,6 +836,18 @@ type options = {
 
 (* The flags are the options. Any other argument that starts with [-] is
    refused, and the rest are PATHs. *)
+(* The flags that take a value. *)
+let value_flags =
+  [
+    "--min";
+    "--min-reach";
+    "--min-total";
+    "--max-survivors";
+    "--color";
+    "--lines";
+    "--diff";
+  ]
+
 let options args =
   let usage_error message =
     Os.say message;
@@ -891,10 +903,7 @@ let options args =
         | text -> parse (add_lines o (Lines.of_diff text)) args
         | exception Sys_error reason ->
             usage_error (strf "cannot read --diff %s: %s" file reason))
-    | [
-        (( "--min" | "--min-reach" | "--min-total" | "--max-survivors"
-         | "--lines" | "--diff" | "--color" ) as flag);
-      ] ->
+    | [ flag ] when List.mem flag value_flags ->
         usage_error (strf "option '%s' requires an argument" flag)
     | ("-h" | "--help" | "-help") :: _ ->
         print_endline help;
@@ -910,17 +919,7 @@ let options args =
   (* [--flag=VALUE] is [--flag VALUE]. *)
   let split arg =
     match String.index_opt arg '=' with
-    | Some i
-      when List.mem (String.sub arg 0 i)
-             [
-               "--min";
-               "--min-reach";
-               "--min-total";
-               "--max-survivors";
-               "--color";
-               "--lines";
-               "--diff";
-             ] ->
+    | Some i when List.mem (String.sub arg 0 i) value_flags ->
         [
           String.sub arg 0 i; String.sub arg (i + 1) (String.length arg - i - 1);
         ]
