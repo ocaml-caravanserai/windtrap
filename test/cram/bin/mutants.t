@@ -1999,23 +1999,27 @@ The command line
   not evaluated. The reach is the percentage of reached mutants among those
   reached, never reached and evaluated outside tests. The total is the percentage
   of killed mutants among those scored, never reached and evaluated outside
-  tests. Runs no tests and drives no build. Exits 1 when an executable could not
-  mutation-test its suite. Without a gate, exits 1 also when any mutant survived
-  every executable that reached it. With a gate, exits 1 when a gate fails, and
-  not for a survivor alone.
+  tests. When the suites tested a sample (--sample), the score and the total are
+  estimates with a 95% interval. Runs no tests and drives no build. Exits 1 when
+  an executable could not mutation-test its suite. Without a gate, exits 1 also
+  when any mutant survived every executable that reached it. With a gate, exits 1
+  when a gate fails, and not for a survivor alone.
   
   OPTIONS:
     --min=PCT
-        Gate: exit 1 when the score is below PCT.
+        Gate: exit 1 when the score is below PCT. Under a sample, the lower
+        bound of the score.
   
     --min-reach=PCT
         Gate: exit 1 when the reach is below PCT.
   
     --min-total=PCT
-        Gate: exit 1 when the total is below PCT.
+        Gate: exit 1 when the total is below PCT. Under a sample, the lower
+        bound of the total.
   
     --max-survivors=N
-        Gate: exit 1 when more than N mutants survived.
+        Gate: exit 1 when more than N mutants survived. Refused (exit 2) when
+        a suite tested a sample.
   
     --crash-kills
         Count a mutant whose run passed its deadline, crashed or passed its

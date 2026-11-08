@@ -137,6 +137,19 @@
     [reproduce:] line, or above the outcome line. A merge with no reused record
     has no line.
 
+    {b Samples.} A mutant that a sampled run did not test is
+    [Windtrap_runtime.Verdicts.Not_sampled], and the merge counts it as reached
+    and not sampled. The sample of the merge comes from the files whose writer
+    tested its suite. When no such file records a sample, the merge has none.
+    When each of them records the same percent and seed, the sample is [Uniform]
+    ({!Windtrap.Private.Report_sections.type-sample}), and the outcome line
+    gives the score and the total with their intervals. One line above the
+    [reproduce:] line, or above the outcome line, gives the percent and the seed
+    ({!Windtrap.Private.Report_sections.sample_line}). In each other case the
+    sample is [Mixed], the outcome line gives no interval, and a note on
+    standard error tells why. For the two, [judged] is the merged reached
+    mutants, and [sampled] is those that are not [Not_sampled].
+
     {b Reaching tests.} The reaching tests of a survivor are the union of those
     of every file in which the mutant survived. Each is paired with the label of
     its file, and the pairs are sorted by label and then by test, without
@@ -179,7 +192,9 @@
     the reached mutants among those reached, never reached and evaluated outside
     tests. The total ({!Windtrap.Private.Report_sections.mutation_total}) is the
     percentage of the killed mutants among those scored, never reached and
-    evaluated outside tests. Each is [100.] when its denominator is [0].
+    evaluated outside tests. Each is [100.] when its denominator is [0]. Under a
+    sample, the total is an estimate
+    ({!Windtrap.Private.Report_sections.mutation_total}).
 
     [--crash-kills] counts an unknown mutant as killed when a file whose writer
     tested its suite holds it with a deadline, a crash or a memory limit
@@ -196,11 +211,16 @@
     {!Windtrap.Private.Report_sections.mutation_gates_met} is [true]: each
     measure is at least its minimum, at most [N] mutants survived, and no file
     is refused. A survivor then does not fail the merge. A refused file fails
-    the merge with a gate or without one. The gates run after the report or the
-    document is printed, and do not run when the write fails. The outcome line
-    of the report then gives each gate and its result
-    ({!Windtrap.Private.Report_sections.mutation_line}), and each measure with
-    its two counts beside its rounding. *)
+    the merge with a gate or without one. Under a sample, [--min] and
+    [--min-total] compare the lower bound of the interval, and under mixed
+    samples the bound that counts each mutant that is not sampled as survived
+    ({!Windtrap.Private.Report_sections.mutation_lower}). [--min-reach] compares
+    the exact reach. [--max-survivors] with a file that tested its suite and
+    records a sample is a usage error, because the sample does not count each
+    survivor. The gates run after the report or the document is printed, and do
+    not run when the write fails. The outcome line of the report then gives each
+    gate and its result ({!Windtrap.Private.Report_sections.mutation_line}), and
+    each measure with its two counts beside its rounding. *)
 
 (** {1:format Machine format}
 
@@ -221,8 +241,8 @@
     [1].
 
     ["summary"] is an object with these keys:
-    - ["reached"] is the sum of ["killed"], ["survived"], ["not_evaluated"] and
-      ["unknown"].
+    - ["reached"] is the sum of ["killed"], ["survived"], ["not_evaluated"],
+      ["unknown"] and ["not_sampled"].
     - ["killed"], ["survived"], ["not_evaluated"], ["unknown"],
       ["outside_tests"] and ["unreached"] are each the count of the merged
       mutants that have that verdict. Under [--crash-kills], ["killed"] also
@@ -235,6 +255,15 @@
     - ["reach_percent"] and ["total_percent"] are the reach and the total of the
       {{!section-gate}gates}, with two decimals. Each is [100.00] when its
       denominator is [0].
+    - ["not_sampled"] is the count of the merged mutants that are not sampled.
+      It is in the object only when the merge has a sample
+      ({{!section-merge}the merge}) or such a mutant.
+    - ["sample_percent"] and ["sample_seed"] are the percent and the [s1:] token
+      of the seed of a [Uniform] sample. ["score_low"], ["score_high"],
+      ["total_low"] and ["total_high"] are the bounds of its intervals, with two
+      decimals ({!Windtrap.Private.Report_sections.mutation_bounds}). The six
+      keys are in the object only under a [Uniform] sample whose [judged] is
+      above [0].
 
     ["executables"] is an array with one object for each file that is kept, in
     path order. Two files can have the same name, and the files of the suites of
@@ -247,6 +276,9 @@
     - ["suite"] is the suite that the file records, or [null].
     - ["refused"] is the reason why the writer of the file could not test its
       mutants, or [null] when it tested them.
+    - ["sample"] is an object with the keys ["percent"] and ["seed"], the
+      percent and the [s1:] token of the seed of the sample of the file. It is
+      in the object only when the file records a sample.
 
     ["mutants"] is an array with one object for each merged mutant, in the order
     of [Windtrap_runtime.Mutate.compare_id]. The object has these keys:
@@ -316,11 +348,11 @@
       mutant that [--crash-kills] counts as killed gives no result.
     - A mutant that was not evaluated, at the level [note].
 
-    A killed mutant, a mutant killed elsewhere, a mutant that no test reached
-    and a mutant evaluated outside tests give no result. An unknown mutant that
-    only refused files hold as unknown gives no result either. The driver gives
-    {!Windtrap.Private.version} when it is known.
-    {!Windtrap.Private.Report_sarif} gives the fields of the document. *)
+    A killed mutant, a mutant killed elsewhere, a mutant that is not sampled, a
+    mutant that no test reached and a mutant evaluated outside tests give no
+    result. An unknown mutant that only refused files hold as unknown gives no
+    result either. The driver gives {!Windtrap.Private.version} when it is
+    known. {!Windtrap.Private.Report_sarif} gives the fields of the document. *)
 
 (** {1:running Running} *)
 
@@ -355,8 +387,11 @@ val run : string list -> int
     - It parses the arguments.
     - It reads [WINDTRAP_COLOR] for the report when [--color] is absent.
     - It finds the {{!section-files}files}, judges them and loads them.
+    - It refuses [--max-survivors] when a file that tested its suite records a
+      sample ({{!section-gate}the gates}).
     - It judges the skips and says the notes of the mutants killed elsewhere
-      ({{!section-merge}the merge}) on standard error.
+      ({{!section-merge}the merge}) on standard error, and then the note of
+      mixed samples.
     - It prints the report, the document or the SARIF document of the
       {{!section-merge}merge} on standard output.
     - It runs the gate.
@@ -393,7 +428,9 @@ val run : string list -> int
     - [2] for a usage error. A usage error is an unknown option, a flag that
       does not have its value, a [--min] that is not in the interval
       \[[0];[100]\], a malformed [--lines], an unreadable [--diff], a [--color]
-      value that the flag refuses, or [--json] with [--sarif].
+      value that the flag refuses, or [--json] with [--sarif]. It is also
+      [--max-survivors] with a file that tested a sample, after the files are
+      loaded.
     - [2] also for a [WINDTRAP_COLOR] that the flag would refuse, when [--color]
       is absent and the report is printed. A document reads no [WINDTRAP_COLOR].
 *)

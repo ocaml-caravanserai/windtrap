@@ -405,6 +405,33 @@ let merge ~crash_kills ~source files merged =
         compare (List.length b.witnesses) (List.length a.witnesses))
       survivors
   in
+  let not_sampled =
+    List.length
+      (pick (fun r -> match r.verdict with Not_sampled -> Some () | _ -> None))
+  in
+  let judged =
+    List.length
+      (pick (fun r ->
+           match r.verdict with
+           | Killed _ | Killed_elsewhere _ | Unknown _ | Survived _
+           | Not_evaluated | Not_sampled ->
+               Some ()
+           | Outside_tests | Unreached -> None))
+  in
+  (* The samples of the files that tested their suite. *)
+  let sample =
+    let sampled = judged - not_sampled in
+    match
+      List.sort_uniq compare
+        (List.filter_map
+           (fun f -> if Option.is_none f.refused then Some f.sample else None)
+           files)
+    with
+    | [] | [ None ] -> None
+    | [ Some (percent, seed) ] ->
+        Some (Sections.Uniform { percent; seed; judged; sampled })
+    | _ :: _ :: _ -> Some (Sections.Mixed { judged; sampled })
+  in
   (* Only dune runs an inline-test runner, and it runs every suite. *)
   let invocation =
     match survivors with
@@ -446,11 +473,8 @@ let merge ~crash_kills ~source files merged =
       outside_tests;
       killed;
       not_tested = 0;
-      not_sampled =
-        List.length
-          (pick (fun r ->
-               match r.verdict with Not_sampled -> Some () | _ -> None));
-      sample = None;
+      not_sampled;
+      sample;
       scope =
         Executables
           (List.length
@@ -715,9 +739,17 @@ let json ~crash_kills files merged (m : Sections.mutation) =
   in
   let kills = List.map (fun (i, f) -> (i, killed_in f.verdicts)) indexed in
   let verdict_in = verdict_in files in
+  let percent p = Pp.to_string Pp.decimal p in
+  let seed s = string (Windtrap.Private.Seed.to_string s) in
   let executable f =
-    strf "\n    { \"name\": %s, \"path\": %s, \"suite\": %s, \"refused\": %s }"
+    strf
+      "\n    { \"name\": %s, \"path\": %s, \"suite\": %s, \"refused\": %s%s }"
       (string f.label) (nullable f.exe) (nullable f.suite) (nullable f.refused)
+      (match f.sample with
+      | None -> ""
+      | Some (p, s) ->
+          strf ",\n      \"sample\": { \"percent\": %s, \"seed\": %s }"
+            (percent p) (seed s))
   in
   let test (i, path) =
     strf "\n        { \"executable\": %d, \"test\": [%s] }" i
@@ -777,7 +809,25 @@ let json ~crash_kills files merged (m : Sections.mutation) =
   let crash_killed = Sections.crash_killed m in
   let killed = count "killed" + crash_killed and survived = count "survived" in
   let not_evaluated = count "not_evaluated" in
+  let not_sampled = count "not_sampled" in
   let unknown = count "unknown" - crash_killed in
+  (* The keys of a sample, after the measures. *)
+  let sampled =
+    (if Option.is_some m.sample || not_sampled > 0 then
+       strf ",\n    \"not_sampled\": %d" not_sampled
+     else "")
+    ^
+    match (m.sample, Sections.mutation_bounds m) with
+    | ( Some (Uniform { percent = p; seed = s; _ }),
+        Some ((low, high), (total_low, total_high)) ) ->
+        strf
+          ",\n\
+          \    \"sample_percent\": %s, \"sample_seed\": %s,\n\
+          \    \"score_low\": %.2f, \"score_high\": %.2f,\n\
+          \    \"total_low\": %.2f, \"total_high\": %.2f"
+          (percent p) (seed s) low high total_low total_high
+    | Some (Uniform _ | Mixed _), _ | None, _ -> ""
+  in
   let outcome = function
     | `Killed -> "killed"
     | `Survived -> "survived"
@@ -798,16 +848,17 @@ let json ~crash_kills files merged (m : Sections.mutation) =
     \  \"summary\": { \"reached\": %d, \"killed\": %d, \"survived\": %d,\n\
     \    \"not_evaluated\": %d, \"unknown\": %d, \"outside_tests\": %d,\n\
     \    \"unreached\": %d, \"refused\": %d, \"score\": %.2f,\n\
-    \    \"reach_percent\": %.2f, \"total_percent\": %.2f },\n\
+    \    \"reach_percent\": %.2f, \"total_percent\": %.2f%s },\n\
     \  \"executables\": [%s ],\n\
     \  \"mutants\": [%s ],\n\
     \  \"unstable\": [%s ] }\n"
-    (killed + survived + not_evaluated + unknown)
+    (killed + survived + not_evaluated + unknown + not_sampled)
     killed survived not_evaluated unknown (count "outside_tests")
     (count "unreached") (List.length m.refused)
     (Sections.mutation_score m)
     (Sections.mutation_reach m)
     (Sections.mutation_total m)
+    sampled
     (String.concat "," (List.map executable files))
     (String.concat "," (List.map mutant records))
     (String.concat "," (List.map change (unstable files)))
@@ -862,23 +913,27 @@ The score is the percentage of killed mutants among those killed, survived and
 not evaluated. The reach is the percentage of reached mutants among those
 reached, never reached and evaluated outside tests. The total is the percentage
 of killed mutants among those scored, never reached and evaluated outside
-tests. Runs no tests and drives no build. Exits 1 when an executable could not
-mutation-test its suite. Without a gate, exits 1 also when any mutant survived
-every executable that reached it. With a gate, exits 1 when a gate fails, and
-not for a survivor alone.
+tests. When the suites tested a sample (--sample), the score and the total are
+estimates with a 95% interval. Runs no tests and drives no build. Exits 1 when
+an executable could not mutation-test its suite. Without a gate, exits 1 also
+when any mutant survived every executable that reached it. With a gate, exits 1
+when a gate fails, and not for a survivor alone.
 
 OPTIONS:
   --min=PCT
-      Gate: exit 1 when the score is below PCT.
+      Gate: exit 1 when the score is below PCT. Under a sample, the lower
+      bound of the score.
 
   --min-reach=PCT
       Gate: exit 1 when the reach is below PCT.
 
   --min-total=PCT
-      Gate: exit 1 when the total is below PCT.
+      Gate: exit 1 when the total is below PCT. Under a sample, the lower
+      bound of the total.
 
   --max-survivors=N
-      Gate: exit 1 when more than N mutants survived.
+      Gate: exit 1 when more than N mutants survived. Refused (exit 2) when
+      a suite tested a sample.
 
   --crash-kills
       Count a mutant whose run passed its deadline, crashed or passed its
@@ -1045,17 +1100,40 @@ let ansi o =
           (Os.resolve_color color ~tty:(Os.is_tty_stdout ())
              ~inside_dune:(Os.inside_dune ()) ~term_dumb:(Os.term_dumb ()))
 
-(* The line of the reused verdicts, when there are some. *)
-let reused_lines merged =
+(* The line of the reused verdicts, when there are some, and the line of a
+   sample. *)
+let lines merged (m : Sections.mutation) =
+  (match
+     List.length
+       (List.filter
+          (fun (r : Verdicts.record) -> r.reused)
+          (Verdicts.records merged))
+   with
+    | 0 -> []
+    | 1 -> [ "reused: 1 verdict from earlier runs" ]
+    | n -> [ strf "reused: %d verdicts from earlier runs" n ])
+  @ Option.to_list (Option.bind m.sample Sections.sample_line)
+
+let mixed_note =
+  "the verdict files that tested their suite have different samples, so the \
+   score and the total have no interval: --min and --min-total count each \
+   mutant that is not sampled as survived"
+
+(* A sample does not count each survivor. *)
+let sampled_survivors o files =
   match
-    List.length
-      (List.filter
-         (fun (r : Verdicts.record) -> r.reused)
-         (Verdicts.records merged))
+    ( o.gates.max_survivors,
+      List.find_opt
+        (fun f -> Option.is_none f.refused && Option.is_some f.sample)
+        files )
   with
-  | 0 -> []
-  | 1 -> [ "reused: 1 verdict from earlier runs" ]
-  | n -> [ strf "reused: %d verdicts from earlier runs" n ]
+  | Some _, Some f ->
+      fail ~code:2
+        (strf
+           "--max-survivors cannot gate a sample: %s tested only a sample of \
+            its reached mutants, so the merge does not count each survivor"
+           f.path)
+  | Some _, None | None, _ -> Ok ()
 
 (* A refused file fails the merge, with a gate or without. A document leaves
    the outcome line out, so the gate gives it. *)
@@ -1090,6 +1168,7 @@ let run args =
       | Error message -> fail ~code:1 message
     in
     let* files = fresh files in
+    let* () = sampled_survivors o files in
     let files = Option.fold ~none:files ~some:(on_lines files) o.lines in
     let files, refutations = disproved files in
     let merged = merged files in
@@ -1098,6 +1177,9 @@ let run args =
     let mutation, invocation =
       merge ~crash_kills:o.crash_kills ~source:(source ~roots) files merged
     in
+    (match mutation.sample with
+    | Some (Mixed _) -> Os.say mixed_note
+    | Some (Uniform _) | None -> ());
     let* () =
       write
         (match o.format with
@@ -1106,8 +1188,8 @@ let run args =
         | `Report ->
             Pp.str "%a"
               (fun out -> Sections.print ~out ~ansi)
-              (Sections.mutation_report ~lines:(reused_lines merged) ~invocation
-                 ~gates:o.gates mutation))
+              (Sections.mutation_report ~lines:(lines merged mutation)
+                 ~invocation ~gates:o.gates mutation))
     in
     Ok (gate o mutation)
   in
