@@ -17,7 +17,8 @@
   lower bound. With different samples, the command gives no interval
   and a note, and the gates count each mutant out of a sample as
   survived. A mutant killed elsewhere is an exact kill beside the
-  estimate of the sample. Without a gate, a merge with a mutant that is
+  estimate of the sample. With exact kills and no scored mutant in the
+  sample, the gates compare the lower bound of these kills. Without a gate, a merge with a mutant that is
   not sampled exits 1. `--max-survivors` with a sampled file is a usage
   error. The `--json` document gives the verdict `not_sampled`, and the
   sample and the bounds in `summary`. It gives `null` for the score and

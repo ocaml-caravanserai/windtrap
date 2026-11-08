@@ -484,11 +484,11 @@ these rewrites, and `--skip-rewrites=NAME,...`
 no new build. Each narrows `--mutate` as `--lines` does.
 
 `--sample=PCT` (`WINDTRAP_SAMPLE`) tests only a fixed part of PCT
-percent of the reached mutants. The seed of the run selects the part,
-so one seed keeps one sample. The report gives the score and the total
-with a 95% interval, and `windtrap mutants --min` compares the lower
-bound. Without a gate, a sampled merge exits 1. Use a sample in each
-pull request and a full run each night.
+percent of the reached mutants. The seed of the run selects the part, so
+one seed keeps one sample. The report gives the score and the total with
+a 95% interval, and `windtrap mutants --min` compares the lower bound.
+Without a gate, a merge with a mutant that is not sampled exits 1. Use a
+sample in each pull request and a full run each night.
 
 `--mutate-workers` (`WINDTRAP_MUTATE_WORKERS=1`) lets a stateful test on
 several domains spawn its worker domains under `--mutate` and `--arm`.

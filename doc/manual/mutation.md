@@ -314,9 +314,10 @@ $ WINDTRAP_MUTATE=1 WINDTRAP_SAMPLE=20 dune runtest --force --instrument-with pp
 that OCaml's `float_of_string` reads, hexadecimal included, for example
 `20`, `12.5`, `1e1` or `0x1p4`. A run with `--sample=100` tests all the
 reached mutants, as a run with no sample. Another value is a usage
-error, from the command line or from the mirror. If neither the command line
-nor a mirror gives `--mutate`, the flag on the command line is a usage
-error. The mirror alone has no effect on a suite that does not mutate.
+error, from the command line or from the mirror. If neither the command
+line nor a mirror gives `--mutate`, the flag on the command line is a
+usage error. The mirror alone has no effect on a suite that does not
+mutate.
 
 ### Which mutants the sample holds
 
@@ -328,10 +329,10 @@ each run with the same seed tests the same mutants. A change to one
 file does not change the sample of another file.
 
 The run selects the sample after the dry run, from the reached mutants
-of its scope. `--skip-killed` first skips the mutants that another
-suite killed, and the sample holds a part of the rest. `--incremental` then uses verdicts again only
-in the sample. The job of a mutant in the sample is the job of a run
-with no sample.
+of its scope. `--skip-killed` first skips the mutants that another suite
+killed, and the sample holds a part of the rest. `--incremental` then
+uses verdicts again only in the sample. The job of a mutant in the
+sample is the job of a run with no sample.
 
 The verdict file records a reached mutant out of the sample as
 `not sampled`. The dry run reached this mutant, so the reach counts it
@@ -371,11 +372,20 @@ kills after the counts of the sample, as
 The total of the sample is `(X + p * N) / (X + N + U)`. `U` is the
 mutants that no test reached and those that ran outside every test,
 which are exact counts. The interval of the total maps each bound of
-`p` in the same way. When the sample has no scored mutant, the line
-gives `no scored mutant` for the score, and the total has no estimate.
-With `--min-total`, the line gives `total: no scored mutant`. The
-interval of the score is then 0% to 100%. Thus `--min` and
-`--min-total` fail unless the minimum is 0.
+`p` in the same way.
+
+When the sample has no scored mutant, the line gives `no scored mutant`
+for the score, and the total has no estimate. With `--min-total`, the
+line gives `total: no scored mutant`. Each mutant that the hash judged
+can then be killed or not. With no exact kill, the interval of the
+score is 0% to 100%, and `--min` and `--min-total` fail unless the
+minimum is 0. With `X` exact kills, the lower bound of the score is
+`X / (X + E)`, and that of the total is `X / (X + E + U)`.
+
+The gates compare these lower bounds, and the line gives them, as
+`score: no scored mutant in the sample (50 killed elsewhere, at least 96.2%)`
+and `total: no scored mutant in the sample (at least 96.2%)`. The upper
+bound is the value with each judged mutant killed.
 
 ### Gates on a sample
 
@@ -409,10 +419,10 @@ sample does not count each survivor.
 
 In the document of `--json`, a mutant out of the sample has the verdict
 `not_sampled`. When the merge has a sample, `summary` gives their count
-in `not_sampled`. Under one sample that holds a reached mutant, it also
-gives the sample and the bounds. With no scored mutant, `score` and
-`total_percent` are `null`. `--sarif` gives no result for a mutant that
-is not sampled.
+in `not_sampled`. Under one sample, when the hash judged a reached
+mutant that was not killed elsewhere, it also gives the sample and the
+bounds. With no scored mutant, `score` and `total_percent` are `null`.
+`--sarif` gives no result for a mutant that is not sampled.
 
 ### Samples and the last run
 
@@ -1243,13 +1253,14 @@ not count it. The `verdict` of such a mutant stays `unknown`. A mutant
 whose verdict a run used again under `--incremental` has
 `"reused": true` after its verdict, and the other mutants do not have
 the key. A test names its verdict file by its index in `executables`,
-because two files can have the same name. Under `--lines` or `--diff`, the verdict counts,
-the three measures and `mutants` hold only the mutants on the lines. But
-`executables` still lists every verdict file, and `refused` still counts
-every refused file. Under a gate, the outcome line goes to standard
-error, and the exit code is that of the gates. A later version can add
-keys. A change to the meaning of a key increments `version`.
-[`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each key:
+because two files can have the same name. Under `--lines` or `--diff`,
+the verdict counts, the three measures and `mutants` hold only the
+mutants on the lines. But `executables` still lists every verdict file,
+and `refused` still counts every refused file. Under a gate, the outcome
+line goes to standard error, and the exit code is that of the gates. A
+later version can add keys. A change to the meaning of a key increments
+`version`. [`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each
+key:
 
 ```
 $ dune exec windtrap -- mutants --json --lines=calc.ml:10
@@ -1308,10 +1319,11 @@ $ dune exec windtrap -- mutants --json --lines=calc.ml:10
 
 A mutant out of a sample has the verdict `not_sampled`. When the merge
 has a sample, `summary` gives `not_sampled`, their count, which
-`reached` adds. Under one sample that holds a reached mutant, `summary`
-also gives `sample_percent`, `sample_seed`, `score_low`, `score_high`,
-`total_low` and `total_high`. A verdict file of a sample has `sample`,
-its percent and seed, in its object of `executables`.
+`reached` adds. Under one sample, when the hash judged a reached mutant
+that was not killed elsewhere, `summary` also gives `sample_percent`,
+`sample_seed`, `score_low`, `score_high`, `total_low` and `total_high`.
+A verdict file of a sample has `sample`, its percent and seed, in its
+object of `executables`.
 
 ## Exporting SARIF
 
@@ -1375,8 +1387,9 @@ gate, it exits 1 when a gate fails. Thus the `windtrap` step has
 remove `continue-on-error` and to give the upload step
 `if: ${{ !cancelled() }}`. Then the job fails, but the upload occurs.
 The upload uses the `security-events: write` permission. On a private
-repository, it uses `actions: read` too. GitHub Code Security is probably also
-necessary on a private repository. We did not do a test of this.
+repository, it uses `actions: read` too. GitHub Code Security is
+probably also necessary on a private repository. We did not do a test of
+this.
 
 ## Killing a survivor
 

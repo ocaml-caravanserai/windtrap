@@ -147,9 +147,11 @@
     [reproduce:] line, or above the outcome line, gives the percent and the seed
     ({!Windtrap.Private.Report_sections.sample_line}). In each other case the
     sample is [Mixed], the outcome line gives no interval, and a note on
-    standard error tells why. For the two, [judged] is the merged reached
-    mutants less the mutants killed elsewhere. A mutant killed elsewhere is an
-    exact kill, which the hash did not judge, and [exact] is their count
+    standard error tells why.
+
+    For the two, [judged] is the merged reached mutants less the mutants killed
+    elsewhere. A mutant killed elsewhere is an exact kill, which the hash did
+    not judge, and [exact] is their count
     ({!Windtrap.Private.Report_sections.mutation_estimate}). A refused file
     counts its unknown mutants in [judged], and the merge fails anyway.
 
