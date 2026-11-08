@@ -2343,6 +2343,7 @@ let hung =
         "lib/spin.ml:9:8:le" 9 "i < n" "i <= n";
     reason = "test_spin.exe: its run passed its deadline of 1.5s";
     invocation = `Exe "./test_spin.exe";
+    counted_as_killed = false;
   }
 
 let property_refused =

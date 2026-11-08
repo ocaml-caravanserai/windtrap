@@ -1567,7 +1567,17 @@ type not_evaluated = {
   failed : string option;
 }
 
-type unknown = { mutant : mutant; reason : string; invocation : Run.invocation }
+type unknown = {
+  mutant : mutant;
+  reason : string;
+  invocation : Run.invocation;
+  counted_as_killed : bool;
+}
+
+let counted_as_killed ~crash_kills :
+    Windtrap_runtime.Verdicts.unknown_reason -> bool = function
+  | Deadline _ | Crashed _ | Memory _ -> crash_kills
+  | Flaky_kill _ | Other _ -> false
 
 type refused = {
   executable : string;
@@ -1679,29 +1689,36 @@ let survivor_block ?(runs = 1) ?(early = []) ~exe_width (s : survivor) =
   in
   (Line [ plain (diagnostic m) ] :: title :: source) @ reaching @ early
 
+let crash_killed (m : mutation) =
+  List.length (List.filter (fun (u : unknown) -> u.counted_as_killed) m.unknown)
+
+(* The killed count of every measure and of the line. *)
+let killed (m : mutation) = m.killed + crash_killed m
+
 let scored (m : mutation) =
-  m.killed + List.length m.survivors + List.length m.not_evaluated
+  killed m + List.length m.survivors + List.length m.not_evaluated
 
 let unknown_count (m : mutation) =
   List.fold_left
     (fun n (r : refused) -> n + r.mutants)
-    (List.length m.unknown) m.refused
+    (List.length m.unknown - crash_killed m)
+    m.refused
 
 let reached (m : mutation) =
-  m.killed + List.length m.survivors
+  killed m + List.length m.survivors
   + List.length m.not_evaluated
   + unknown_count m + m.not_tested
 
 let unreached_count (m : mutation) =
   List.length m.unreached + List.length m.outside_tests
 
-let mutation_score m = percent ~visited:m.killed ~total:(scored m)
+let mutation_score m = percent ~visited:(killed m) ~total:(scored m)
 
 (* The denominators of the reach and of the total. *)
 let reach_base m = reached m + unreached_count m
 let total_base m = scored m + unreached_count m
 let mutation_reach m = percent ~visited:(reached m) ~total:(reach_base m)
-let mutation_total m = percent ~visited:m.killed ~total:(total_base m)
+let mutation_total m = percent ~visited:(killed m) ~total:(total_base m)
 
 type gates = {
   min : float option;
@@ -1780,7 +1797,13 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
          ];
        ]
      else [ [ plain reached_text ] ])
-    @ term m.killed (fun n -> [ styled `Green (strf "%d killed" n) ])
+    @ term (killed m) (fun n ->
+        let by =
+          match crash_killed m with
+          | 0 -> ""
+          | c -> strf " (%d by --crash-kills)" c
+        in
+        [ styled `Green (strf "%d killed%s" n by) ])
     @ term (List.length m.not_evaluated) (fun n ->
         [ styled `Yellow (strf "%d not evaluated" n) ])
     @ term unknown (fun n -> [ styled `Yellow (strf "%d unknown" n) ])
@@ -1795,11 +1818,11 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
           :: term (List.length m.refused) (fun n ->
               [ styled `Red (counted n "suite" ^ " not mutation-tested") ])
       | Suite | Selected _ -> [])
-    @ measure ~name:"score" ~visited:m.killed ~total:(scored m) ~min:g.min
+    @ measure ~name:"score" ~visited:(killed m) ~total:(scored m) ~min:g.min
         ~none:(Some "no scored mutant")
     @ measure ~name:"reach" ~visited:(reached m) ~total:(reach_base m)
         ~min:g.min_reach ~none:None
-    @ measure ~name:"total" ~visited:m.killed ~total:(total_base m)
+    @ measure ~name:"total" ~visited:(killed m) ~total:(total_base m)
         ~min:g.min_total ~none:None
     @
     match g.max_survivors with
@@ -1885,7 +1908,12 @@ let unknown_section ~tests = function
               styled `Bold u.mutant.id;
               plain (strf "  %s \u{2192} %s" u.mutant.before u.mutant.after);
             ];
-          Line [ plain ("    " ^ u.reason) ];
+          Line
+            [
+              plain
+                ("    " ^ u.reason
+                ^ if u.counted_as_killed then " (counted as killed)" else "");
+            ];
           Hint
             ("    arm: "
             ^ arm_command ~invocation:u.invocation ~tests u.mutant.id);

@@ -170,6 +170,15 @@
     percentage of the killed mutants among those scored, never reached and
     evaluated outside tests. Each is [100.] when its denominator is [0].
 
+    [--crash-kills] counts an unknown mutant as killed when the file that names
+    it ({{!section-merge}the merge}) tested its suite and its reason is a
+    deadline, a crash or a memory limit
+    ({!Windtrap.Private.Report_sections.counted_as_killed}). The score, the
+    total, each gate and the outcome line then count it with the killed mutants,
+    and the unknown section marks it [(counted as killed)]. The reach does not
+    change. A flaky kill and each other reason stay unknown. A repeated
+    [--crash-kills] is the same as one.
+
     [--min PCT], [--min-reach PCT], [--min-total PCT] and [--max-survivors N]
     are the gates. With a gate, the merge passes when
     {!Windtrap.Private.Report_sections.mutation_gates_met} is [true]: each
@@ -204,7 +213,9 @@
       ["unknown"].
     - ["killed"], ["survived"], ["not_evaluated"], ["unknown"],
       ["outside_tests"] and ["unreached"] are each the count of the merged
-      mutants that have that verdict.
+      mutants that have that verdict. Under [--crash-kills], ["killed"] also
+      counts the unknown mutants counted as killed, and ["unknown"] does not
+      count them.
     - ["refused"] is the count of the refused files.
     - ["score"] is the score of the {{!section-gate}gate}, with two decimals. It
       is [100.00] when no mutant is scored, as the ["percentage"] of
@@ -253,6 +264,10 @@
       ["crashed"] when its worker ended first, ["memory"] when it passed its
       memory limit, ["flaky_kill"] when the killing test also fails with no
       mutant, and ["other"] for each other reason.
+    - ["counted_as_killed"] is in the object of an unknown mutant only. It is
+      [true] when the counts and the measures count the mutant as killed
+      ({{!section-gate}the gates}), and [false] otherwise. The ["verdict"] of
+      the mutant stays ["unknown"].
 
     ["tests"] and ["killed_by"] have one object for each test of the mutant in
     each file that records it. The objects are sorted by file, and then by the

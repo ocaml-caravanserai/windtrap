@@ -489,6 +489,9 @@ let found_verdict renderer (config : Run.config) ~locations ~failed ~runs ~early
             mutant = shown mutant;
             reason = Verdicts.reason_text reason;
             invocation = config.invocation;
+            counted_as_killed =
+              Report_sections.counted_as_killed ~crash_kills:config.crash_kills
+                reason;
           } )
         :: found.unknown
   | Killed _ | Killed_elsewhere _ | Outside_tests | Unreached -> ());

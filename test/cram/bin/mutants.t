@@ -1018,7 +1018,8 @@ why its suite was refused, or null:
         "end_line": 3, "end_col": 19,
         "before": "a < b", "after": "a <= b",
         "verdict": "unknown", "executable": 1,
-        "reason": "the suite is not deterministic", "reason_kind": "other" },
+        "reason": "the suite is not deterministic", "reason_kind": "other",
+        "counted_as_killed": false },
       { "id": "lib/util.ml:1:13:or",
         "file": "lib/util.ml", "line": 1, "col": 13, "rewrite": "or",
         "end_line": 1, "end_col": 19,
@@ -1033,7 +1034,8 @@ why its suite was refused, or null:
         "end_line": 3, "end_col": 28,
         "before": "p && q", "after": "p || q",
         "verdict": "unknown", "executable": 0,
-        "reason": "its run was killed by SIGSEGV", "reason_kind": "crashed" } ],
+        "reason": "its run was killed by SIGSEGV", "reason_kind": "crashed",
+        "counted_as_killed": false } ],
     "unstable": [ ] }
   [1]
 
@@ -1613,6 +1615,10 @@ The command line
   
     --max-survivors=N
         Gate: exit 1 when more than N mutants survived.
+  
+    --crash-kills
+        Count a mutant whose run passed its deadline, crashed or passed its
+        memory limit as killed, in the score, the total and each gate.
   
     --json
         Machine-readable report on standard output.

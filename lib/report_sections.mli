@@ -489,9 +489,19 @@ type unknown = {
           ["its run passed its deadline of 2.1s"]. *)
   invocation : Run.invocation;
       (** How to run again an executable that armed it. *)
+  counted_as_killed : bool;
+      (** [true] when the report counts the mutant as killed, under
+          [--crash-kills] ({!counted_as_killed}). The unknown section gives it
+          with the mark [(counted as killed)] after its reason. *)
 }
 (** The type for a reached mutant whose run ended before its tests did, which is
     no survivor. *)
+
+val counted_as_killed :
+  crash_kills:bool -> Windtrap_runtime.Verdicts.unknown_reason -> bool
+(** [counted_as_killed ~crash_kills r] is [true] iff [crash_kills] is [true] and
+    [r] is a deadline, a crash or a memory limit. A flaky kill and each other
+    reason stay unknown. *)
 
 type refused = {
   executable : string;
@@ -557,7 +567,9 @@ type mutation = {
       (** The file and the one-based line of each mutant that no test evaluated
           and that the dry run evaluated outside every test, one pair per
           mutant. *)
-  killed : int;  (** The number of mutants killed. *)
+  killed : int;
+      (** The number of mutants killed. An unknown mutant counted as killed is
+          not in it. *)
   not_tested : int;
       (** The number of reached mutants that no worker of the loop tested: those
           that an interrupted loop did not finish, and those that the loop
@@ -567,14 +579,19 @@ type mutation = {
 (** The type for a whole mutation report. Its reached count is
     [killed + List.length survivors + List.length not_evaluated + unknown +
      not_tested], where [unknown] is [List.length unknown] plus the [mutants] of
-    each of [refused]. *)
+    each of [refused].
+
+    Each measure, gate and line counts an unknown mutant counted as killed with
+    the killed mutants, and not with the unknown mutants. The reached count does
+    not change. *)
 
 val mutation_score : mutation -> float
 (** [mutation_score m] is the percentage of killed mutants among the scored
     mutants of [m], unrounded. The scored mutants are those killed, those that
-    survived and those not evaluated. An unknown mutant, a mutant that no test
-    reached and a mutant that no worker tested do not count. It is {!percent} of
-    [m.killed] in their number, and thus [100.] when [m] has none. *)
+    survived and those not evaluated. An unknown mutant that is not counted as
+    killed, a mutant that no test reached and a mutant that no worker tested do
+    not count. It is {!percent} of the killed mutants in their number, and thus
+    [100.] when [m] has none. *)
 
 val mutation_reach : mutation -> float
 (** [mutation_reach m] is the percentage of reached mutants among the reached
@@ -610,16 +627,18 @@ val mutation_gates_met : gates -> mutation -> bool
 
 val mutation_line : gates:gates -> mutation -> span list
 (** [mutation_line ~gates m] is the outcome line of a mutation report. It gives
-    the reached count and each other count of [m] that is not zero. Then it
-    gives {!mutation_score}, {!mutation_reach} and {!mutation_total}, each with
-    one decimal, followed by its two counts, as in [score 60.0% (3/5)]. It gives
-    a measure only when its denominator is not zero. Under a gate on a measure
-    it always gives the measure, and the score of no scored mutant is
-    [no scored mutant]. After the measure comes its minimum as {!Pp.decimal}
-    prints it, and [ok] or [FAILED]. Under [max_survivors] the line ends with
-    the maximum, as in [maximum 2 survivors: ok]. A gate is [FAILED] when [m]
-    does not meet it or [m.refused] is not empty. A measure is styled as failing
-    only when it is below its minimum. *)
+    the reached count and each other count of [m] that is not zero. The killed
+    count names the unknown mutants counted as killed, when there are some, as
+    in [8 killed (2 by --crash-kills)]. Then it gives {!mutation_score},
+    {!mutation_reach} and {!mutation_total}, each with one decimal, followed by
+    its two counts, as in [score 60.0% (3/5)]. It gives a measure only when its
+    denominator is not zero. Under a gate on a measure it always gives the
+    measure, and the score of no scored mutant is [no scored mutant]. After the
+    measure comes its minimum as {!Pp.decimal} prints it, and [ok] or [FAILED].
+    Under [max_survivors] the line ends with the maximum, as in
+    [maximum 2 survivors: ok]. A gate is [FAILED] when [m] does not meet it or
+    [m.refused] is not empty. A measure is styled as failing only when it is
+    below its minimum. *)
 
 val survivor_block :
   ?runs:int ->
@@ -658,7 +677,8 @@ val mutation_closing : config:Run.config -> mutation -> section list
       [reproduce:] command below does.
     - when [m.unknown] is not empty, the unknown section, laid out as the
       not-evaluated one with the {!diagnostic} of each mutant above it and its
-      reason on a line under it.
+      reason on a line under it. The reason of a mutant counted as killed ends
+      with [(counted as killed)].
     - when [m.unstable] is not empty, the unstable section, between an opening
       rule that carries their number and a closing rule. It says in one line
       that the source did not change and the verdict did. Then it gives one row

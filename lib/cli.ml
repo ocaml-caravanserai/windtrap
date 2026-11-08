@@ -330,6 +330,11 @@ let entries =
       "Kill the worker of a mutant whose resident memory is above MB \
        megabytes, and give the mutant as unknown (with --mutate, Linux only, \
        default 1024).";
+    row "--crash-kills"
+      (switch (fun c -> { c with crash_kills = true }))
+      ~mirror:(mirrored "WINDTRAP_CRASH_KILLS")
+      "Count a mutant whose run passed its deadline, crashed or passed its \
+       memory limit as killed in the report (with --mutate).";
     row "--mutate-workers"
       (switch (fun c -> { c with mutate_workers = true }))
       ~mirror:(mirrored "WINDTRAP_MUTATE_WORKERS")
@@ -606,6 +611,11 @@ let settings cli =
     else Ok ()
   in
   let* () =
+    if gave cli "--crash-kills" && not (gave layered "--mutate") then
+      Error (Requires_any ("--crash-kills", [ "--mutate" ]))
+    else Ok ()
+  in
+  let* () =
     if gave layered "--mutate" && gave layered "--arm" then
       Error (Incompatible_flags ("--mutate", "--arm"))
     else Ok ()
@@ -631,6 +641,7 @@ let settings cli =
       mutate_memory =
         (if gave layered "--mutate" then c.mutate_memory
          else (Run.default_config ()).mutate_memory);
+      crash_kills = c.crash_kills && gave layered "--mutate";
       case_file;
       log_dir = path "--output" c.log_dir;
       junit = Option.map (path "--junit") c.junit;

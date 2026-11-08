@@ -200,6 +200,11 @@ let verdict_in files =
   let by_id = List.map (fun f -> (f, verdicts_by_id f)) files in
   fun f id -> Ids.find_opt id (List.assq f by_id)
 
+(* A refused suite counts in no measure, so none of its mutants counts as
+   killed. *)
+let counted_as_killed ~crash_kills f reason =
+  Option.is_none f.refused && Sections.counted_as_killed ~crash_kills reason
+
 (* A merge is [Unknown] only when a file is. The first file that tested its
    suite and holds the mutant as unknown names it, with its reason. A mutant
    that only refused files hold is named by the first of them. *)
@@ -240,7 +245,7 @@ let unstable files =
 
 (* [Verdicts.merge] folds away which executable ran a reaching test, so a
    survivor's reaching tests are read from the files in which it survived. *)
-let merge ~source files merged =
+let merge ~crash_kills ~source files merged =
   let survivals = List.map (fun f -> (f, survived_in f.verdicts)) files in
   let verdict_in = verdict_in files in
   let mutant (r : Verdicts.record) : Sections.mutant =
@@ -307,6 +312,7 @@ let merge ~source files merged =
             Sections.mutant = mutant r;
             reason = strf "%s: %s" (with_suite f) (Verdicts.reason_text reason);
             invocation = f.invocation;
+            counted_as_killed = counted_as_killed ~crash_kills f reason;
           }
     | f, _ -> Either.Right (id, f)
   in
@@ -668,7 +674,7 @@ let reason_kind : Verdicts.unknown_reason -> string = function
    have one label. [survived_in] and [killed_in] give the tests of a file
    sorted and without duplicates, so the tests of a survivor or of a kill are
    sorted by file, then by test. *)
-let json files merged (m : Sections.mutation) =
+let json ~crash_kills files merged (m : Sections.mutation) =
   let string = Json.string in
   let nullable = function Some s -> string s | None -> "null" in
   let indexed = List.mapi (fun i f -> (i, f)) files in
@@ -705,10 +711,14 @@ let json files merged (m : Sections.mutation) =
     | Killed _ | Killed_elsewhere _ -> tests "killed_by" kills id
     | Unknown _ ->
         let f, reason = unknown_in files ~verdict_in id in
-        strf ", \"executable\": %d,\n      \"reason\": %s, \"reason_kind\": %s"
+        strf
+          ", \"executable\": %d,\n\
+          \      \"reason\": %s, \"reason_kind\": %s,\n\
+          \      \"counted_as_killed\": %b"
           (index f)
           (string (Verdicts.reason_text reason))
           (string (reason_kind reason))
+          (counted_as_killed ~crash_kills f reason)
     | Not_evaluated | Outside_tests | Unreached -> ""
   in
   let mutant (r : Verdicts.record) =
@@ -732,8 +742,15 @@ let json files merged (m : Sections.mutation) =
          (fun (r : Verdicts.record) -> verdict_name r.verdict = verdict)
          records)
   in
-  let killed = count "killed" and survived = count "survived" in
-  let not_evaluated = count "not_evaluated" and unknown = count "unknown" in
+  let crash_killed =
+    List.length
+      (List.filter
+         (fun (u : Sections.unknown) -> u.counted_as_killed)
+         m.unknown)
+  in
+  let killed = count "killed" + crash_killed and survived = count "survived" in
+  let not_evaluated = count "not_evaluated" in
+  let unknown = count "unknown" - crash_killed in
   let outcome = function
     | `Killed -> "killed"
     | `Survived -> "survived"
@@ -806,6 +823,10 @@ OPTIONS:
   --max-survivors=N
       Gate: exit 1 when more than N mutants survived.
 
+  --crash-kills
+      Count a mutant whose run passed its deadline, crashed or passed its
+      memory limit as killed, in the score, the total and each gate.
+
   --json
       Machine-readable report on standard output.
 
@@ -828,6 +849,7 @@ ENVIRONMENT (no flag):
 
 type options = {
   gates : Sections.gates;
+  crash_kills : bool;
   json : bool;
   color : Os.color_mode option; (* [--color], which hides [WINDTRAP_COLOR] *)
   lines : Lines.t option; (* [--lines] and [--diff], added up *)
@@ -891,6 +913,7 @@ let options args =
                   non-negative integer"
                  value))
     | "--json" :: args -> parse { o with json = true } args
+    | "--crash-kills" :: args -> parse { o with crash_kills = true } args
     | "--lines" :: value :: args -> (
         match Lines.of_spec value with
         | Ok more -> parse (add_lines o more) args
@@ -928,6 +951,7 @@ let options args =
   parse
     {
       gates = Sections.no_gates;
+      crash_kills = false;
       json = false;
       color = None;
       lines = None;
@@ -989,10 +1013,12 @@ let run args =
     let merged = merged files in
     List.iter Os.say
       (refuted_notes refutations merged @ unconfirmed files merged);
-    let mutation, invocation = merge ~source:(source ~roots) files merged in
+    let mutation, invocation =
+      merge ~crash_kills:o.crash_kills ~source:(source ~roots) files merged
+    in
     let* () =
       write
-        (if o.json then json files merged mutation
+        (if o.json then json ~crash_kills:o.crash_kills files merged mutation
          else
            Pp.str "%a"
              (fun out -> Sections.print ~out ~ansi)

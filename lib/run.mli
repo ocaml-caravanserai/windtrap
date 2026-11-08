@@ -172,6 +172,11 @@ type config = {
           each worker of a mutant, in MB, from 1 to 1048576. On Linux, the loop
           kills a worker above the limit ({!Supervisor.fresh}). Default [1024].
       *)
+  crash_kills : bool;
+      (** [--crash-kills]: under {!Loop}, the report counts a mutant whose run
+          passed its deadline, crashed or passed its memory limit as killed
+          ({!Report_sections.counted_as_killed}). The verdict file does not
+          change. *)
   github : bool;
       (** Whether the report is written for GitHub Actions, with its group and
           its annotations (see {!Report}). *)

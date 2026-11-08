@@ -104,6 +104,10 @@ OPTIONS:
       Kill the worker of a mutant whose resident memory is above MB megabytes,
       and give the mutant as unknown (with --mutate, Linux only, default 1024).
 
+  --crash-kills (env WINDTRAP_CRASH_KILLS)
+      Count a mutant whose run passed its deadline, crashed or passed its memory
+      limit as killed in the report (with --mutate).
+
   --mutate-workers (env WINDTRAP_MUTATE_WORKERS)
       Let a stateful test on several domains spawn its worker domains (with
       --mutate or --arm).
