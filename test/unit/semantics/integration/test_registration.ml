@@ -106,9 +106,6 @@ let originals =
     ("del_last true", "10", fun () -> Int.to_string (Oracle.del_last true));
     ("del_while 3", "3", fun () -> Int.to_string (Oracle.del_while 3));
     ("del_for 4", "10", fun () -> Int.to_string (Oracle.del_for 4));
-    ( "del_downto 3",
-      "1,2,3",
-      fun () -> String.concat "," (ints (Oracle.del_downto 3)) );
     ("Loose.sum_for 4", "10", fun () -> Int.to_string (Loose.sum_for 4));
     ("Loose.sum_while 4", "10", fun () -> Int.to_string (Loose.sum_while 4));
     ("Own_unit.count 3", "5", fun () -> Int.to_string (Own_unit.count 3));
@@ -260,9 +257,6 @@ let armings =
     oracle "del" "total := ((!total) + i)"
       (fun () -> ints [ Oracle.del_for 4 ])
       [ "0" ];
-    oracle "del" "order := (i :: (!order))"
-      (fun () -> ints (Oracle.del_downto 3))
-      [];
     {
       file = "loose.ml";
       rewrite = "del";

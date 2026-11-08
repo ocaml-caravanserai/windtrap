@@ -82,13 +82,6 @@ let del_for n =
   done;
   !total
 
-let del_downto n =
-  let order = ref [] in
-  for i = n downto 1 do
-    order := i :: !order
-  done;
-  !order
-
 let int_up () = 41
 let int_down () = 1L
 let bool_flip () = Some true

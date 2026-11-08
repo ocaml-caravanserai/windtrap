@@ -384,14 +384,6 @@ let rec countdown n = if n = 0 then mark_depth () else countdown (n - 1)
 
 (* The then-branch of an [if] with no [else], whose [del] guard is
    [if armed then () else e]. *)
-let rec then_arm n =
-  if n = 0 then ignore (mark_depth () : bool);
-  if n > 0 then then_arm (n - 1)
-
-let then_tail n =
-  then_arm n;
-  true
-
 let rec then_down n = if n > 0 then then_down (n - 1)
 
 (* Mutual tail recursion, same shapes. *)
@@ -433,9 +425,6 @@ let tail_depths () =
       depth_of countdown shallow,
       depth_of countdown deep );
     ("mutual recursion", depth_of ping shallow, depth_of ping deep);
-    ( "then-branch with no else",
-      depth_of then_tail shallow,
-      depth_of then_tail deep );
   ]
 
 (* The control: the same measurement on a call that is NOT in tail

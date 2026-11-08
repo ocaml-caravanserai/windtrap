@@ -40,7 +40,6 @@
   inline/runner_main.exe
   inline/inline_armed.ml
   runaway/runaway_main.exe
-  runaway/looper_main.exe
   ../../../bin/main.exe
   (glob_files ../../support/preload/*.so))
  (action

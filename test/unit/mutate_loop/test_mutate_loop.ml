@@ -23,7 +23,6 @@ let exe_dir = Filename.dirname Windtrap_runtime.Instr.executable
 let suite_exe = Filename.concat exe_dir "suite_main.exe"
 let plain_exe = Filename.concat exe_dir "plain_main.exe"
 let runaway_exe = Filename.concat exe_dir "runaway/runaway_main.exe"
-let looper_exe = Filename.concat exe_dir "runaway/looper_main.exe"
 let inline_exe = Filename.concat exe_dir "inline/runner_main.exe"
 let windtrap_exe = Filename.concat exe_dir "../../../bin/main.exe"
 
@@ -126,7 +125,6 @@ let verdicts_path ?(exe = suite_exe) () =
   let suite =
     if exe = plain_exe then "plain"
     else if exe = runaway_exe then "spin"
-    else if exe = looper_exe then "loop"
     else if exe = inline_exe then "inline_armed"
     else "calc"
   in
@@ -1201,10 +1199,11 @@ let budget (k, over) =
         100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)")
     (outcome r.out)
 
-(* The runaway fixture's mutant spins; the hit budget stops it within
-   microseconds, where a kill by the deadline waits out its one-second
-   floor. The first launch of a newly built executable can take seconds of
-   the system's own, so an untimed run comes first. *)
+(* The two mutants of the runaway fixture spin: a recursion that does not
+   end, and a loop whose body [del] empties. The hit budget stops each
+   within microseconds, where a kill by the deadline waits out its
+   one-second floor. The first launch of a newly built executable can take
+   seconds of the system's own, so an untimed run comes first. *)
 let runaway () =
   ignore (spawn ~exe:runaway_exe []);
   let began = Unix.gettimeofday () in
@@ -1214,19 +1213,8 @@ let runaway () =
   equal text "" r.err;
   equal
     (option (list string))
-    (Some [ "runaway/spinner.ml:15 killed" ]) (rows r);
-  less float_exact ~than:1.0 elapsed
-
-(* A loop whose body [del] empties no longer ends, and the hit budget stops
-   it as it stops the spin of the recursion above. *)
-let runaway_loop () =
-  ignore (spawn ~exe:looper_exe []);
-  let began = Unix.gettimeofday () in
-  let r = spawn ~exe:looper_exe [ mutate ] in
-  let elapsed = Unix.gettimeofday () -. began in
-  equal string "exited 0" r.status;
-  equal text "" r.err;
-  equal (option (list string)) (Some [ "runaway/looper.ml:12 killed" ]) (rows r);
+    (Some [ "runaway/looper.ml:12 killed"; "runaway/spinner.ml:15 killed" ])
+    (rows r);
   less float_exact ~than:1.0 elapsed
 
 (* [block]'s child blocks on a pipe read until its deadline, after starting
@@ -1438,8 +1426,6 @@ let limits =
         [ (5, 0); (5, 1); (50, 0); (50, 1) ]
         budget;
       test "a mutant that never terminates is killed by its hit budget" runaway;
-      test "a loop body that del empties is killed by its hit budget"
-        runaway_loop;
       test "a mutant whose run hangs is unknown at its job's deadline"
         deadline_kill;
       test
@@ -2070,7 +2056,7 @@ let stale () =
 let uncatalogued () =
   let r = spawn ~exe:runaway_exe ~env:[ ("WINDTRAP_MUTATE_ARM", site 15) ] [] in
   equal string "exited 0" r.status;
-  equal text "spin: 1 passed in <time>.\n" (masked r.out);
+  equal text "spin: 2 passed in <time>.\n" (masked r.out);
   contains ~sub:"not this executable's mutant" r.err;
   contains ~sub:(site 15) r.err;
   equal int 1 (List.length (List.filter (fun l -> l <> "") (lines r.err)))
@@ -4838,7 +4824,7 @@ let () =
   at_exit (fun () ->
       List.iter
         (fun exe -> remove (verdicts_path ~exe ()))
-        [ suite_exe; inline_exe; runaway_exe; looper_exe; plain_exe ])
+        [ suite_exe; inline_exe; runaway_exe; plain_exe ])
 
 let () =
   exit
