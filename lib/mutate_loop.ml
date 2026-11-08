@@ -223,9 +223,9 @@ let recorded verdict = List.map (fun m -> Verdicts.record_of_mutant m verdict)
    reached. *)
 let unknown_records ?reach population reason =
   match reach with
-  | None -> recorded (Verdicts.Unknown reason) population
+  | None -> recorded (Verdicts.Unknown (Other reason)) population
   | Some (reached, unreached, outside) ->
-      recorded (Verdicts.Unknown reason) (List.map fst reached)
+      recorded (Verdicts.Unknown (Other reason)) (List.map fst reached)
       @ recorded Verdicts.Unreached unreached
       @ recorded Verdicts.Outside_tests outside
 
@@ -296,7 +296,7 @@ let probe ~dry_run (ran : Supervisor.ran) =
       Error
         ("the determinism probe exceeded its deadline: the dry run completed \
           and its unarmed re-run did not. " ^ not_a_number)
-  | Lost how ->
+  | Lost { how; _ } ->
       Error
         (strf "the determinism probe's run %s, where the dry run's did not. %s"
            how not_a_number)
@@ -344,16 +344,21 @@ let caused (ran : Supervisor.ran) =
   | None -> None
   | Some first -> Some (List.filteri (fun i _ -> i >= first) ran.results)
 
-let killed_by (ran : Supervisor.ran) =
-  match caused ran with
-  | None -> false
-  | Some results -> ran.release_failures <> [] || List.exists kills results
-
 (* The first test that the mutant made fail. *)
 let killing_test ran =
   Option.map
     (fun (r : Run.result) -> r.path)
     (Option.bind (caused ran) (List.find_opt kills))
+
+(* [Some by] when the mutant was killed, where [by] is its killing test, or
+   [[]] for a kill by a fixture release. *)
+let killed_by (ran : Supervisor.ran) =
+  match caused ran with
+  | None -> None
+  | Some results ->
+      if ran.release_failures <> [] || List.exists kills results then
+        Some (Option.to_list (killing_test ran))
+      else None
 
 (* The runs of the check of a kill, at most. *)
 let check_runs = 3
@@ -387,23 +392,21 @@ let uncaused (ran : Supervisor.ran) =
   | None when ran.release_failures <> [] -> Some "a fixture release"
   | None -> None
 
-let seconds s = if s < 10. then strf "%.1fs" s else strf "%.0fs" s
-
 (* A run that ended before its tests did judged nothing, and tests that did
    not evaluate the armed site tested nothing: neither is a survivor. *)
 let verdict ~deadline paths (ran : Supervisor.ran) =
   match ran.ended with
-  | Supervisor.Expired ->
-      Verdicts.Unknown ("its run passed its deadline of " ^ seconds deadline)
-  | Lost how -> Verdicts.Unknown ("its run " ^ how)
-  | Outgrown mb ->
-      Verdicts.Unknown (strf "its run passed its memory limit of %d MB" mb)
+  | Supervisor.Expired -> Verdicts.Unknown (Deadline { seconds = deadline })
+  | Lost { signal; status; how } ->
+      Verdicts.Unknown (Crashed { signal; status; how })
+  | Outgrown mb -> Verdicts.Unknown (Memory { mb })
   | Ran -> (
-      if killed_by ran then Verdicts.Killed
-      else
-        match ran.evaluated with
-        | None -> Verdicts.Not_evaluated
-        | Some _ -> Verdicts.survived paths)
+      match killed_by ran with
+      | Some by -> Verdicts.killed by
+      | None -> (
+          match ran.evaluated with
+          | None -> Verdicts.Not_evaluated
+          | Some _ -> Verdicts.survived paths))
 
 (* Recorded paths are relative to the project root; under [dune runtest] the
    working directory is inside [_build], where they do not open. *)
@@ -483,9 +486,13 @@ let found_verdict renderer (config : Run.config) ~locations ~failed ~runs ~early
   | Unknown reason ->
       found.unknown <-
         ( index,
-          { mutant = shown mutant; reason; invocation = config.invocation } )
+          {
+            mutant = shown mutant;
+            reason = Verdicts.reason_text reason;
+            invocation = config.invocation;
+          } )
         :: found.unknown
-  | Killed | Killed_elsewhere _ | Outside_tests | Unreached -> ());
+  | Killed _ | Killed_elsewhere _ | Outside_tests | Unreached -> ());
   found.records <- Verdicts.record_of_mutant mutant verdict :: found.records
 
 (* Signals *)
@@ -739,9 +746,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) tests ~dry_run
     in
     let verdict =
       match verdict ~deadline:(deadline paths) paths ran with
-      | Verdicts.Killed -> Verdicts.Killed
+      | Verdicts.Killed _ as killed -> killed
       | verdict when run = 1 -> verdict
-      | Verdicts.Unknown reason -> ended_early reason
+      | Verdicts.Unknown reason -> ended_early (Verdicts.reason_text reason)
       | Verdicts.Not_evaluated ->
           ended_early
             (match uncaused ran with
@@ -755,7 +762,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) tests ~dry_run
     in
     match (verdict, killing_test ran) with
     | Verdicts.Survived _, _ when run < last -> `Again
-    | Verdicts.Killed, Some test when config.mutate_retry > 0 ->
+    | Verdicts.Killed _, Some test when config.mutate_retry > 0 ->
         await_check ~run i test;
         `Done
     | verdict, _ ->
@@ -768,9 +775,10 @@ let test_mutants renderer ~meter ~suite (config : Run.config) tests ~dry_run
     List.iter
       (fun (i, run) ->
         match failure with
-        | None -> commit ~failed:None ~run i Verdicts.Killed
-        | Some reason when run = 1 ->
-            commit ~failed:None ~run i (Verdicts.Unknown reason)
+        | None -> commit ~failed:None ~run i (Verdicts.killed [ check.test ])
+        | Some failure when run = 1 ->
+            commit ~failed:None ~run i
+              (Verdicts.Unknown (Flaky_kill { test = check.test; failure }))
         | Some reason ->
             early.(i) <- (run, reason) :: early.(i);
             commit ~failed:None ~run i (Verdicts.survived (paths i)))
@@ -918,7 +926,8 @@ let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside found
     killed =
       List.length
         (List.filter
-           (fun (r : Verdicts.record) -> r.verdict = Verdicts.Killed)
+           (fun (r : Verdicts.record) ->
+             match r.verdict with Verdicts.Killed _ -> true | _ -> false)
            found.records);
     not_tested = List.length reached - List.length found.records;
     scope =
@@ -965,7 +974,7 @@ let killed_elsewhere ~suite reached =
           && String.equal r.after m.after
         in
         match (r.verdict, Hashtbl.find_opt wanted r.id) with
-        | Verdicts.Killed, Some m when same m -> (
+        | Verdicts.Killed _, Some m when same m -> (
             match Hashtbl.find_opt killers r.id with
             | Some prior when String.compare prior exe <= 0 -> ()
             | Some _ | None -> Hashtbl.replace killers r.id exe)

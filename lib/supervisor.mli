@@ -141,10 +141,14 @@ type job = {
 (** The type for how a job ended. *)
 type ended =
   | Ran  (** It ran its cases, up to its stop, and released its fixtures. *)
-  | Lost of string
-      (** Its worker ended first, which the phrase says, such as
+  | Lost of { signal : int option; status : int option; how : string }
+      (** Its worker ended first, which the phrase [how] says, such as
           ["was killed by SIGSEGV"] or
-          ["ended when code under test called exit"]. *)
+          ["ended when code under test called exit"]. [signal] is the OCaml
+          number of the signal that killed or stopped the worker, and [status]
+          is the code of its exit. A worker that ends on a call to [exit] by
+          code under test exits with code [0]. The two are [None] when no status
+          was read. *)
   | Expired  (** It passed its deadline. *)
   | Outgrown of int
       (** Its worker passed the memory limit of this many MB

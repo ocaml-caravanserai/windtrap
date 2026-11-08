@@ -166,8 +166,8 @@ let survived_in verdicts =
       match r.verdict with
       | Survived { first; others } ->
           Ids.add (Mutate.id_to_string r.id) (first :: others) acc
-      | Killed | Killed_elsewhere _ | Unknown _ | Not_evaluated | Outside_tests
-      | Unreached ->
+      | Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated
+      | Outside_tests | Unreached ->
           acc)
     Ids.empty
     (Verdicts.records verdicts)
@@ -292,7 +292,7 @@ let merge ~source files merged =
         Either.Left
           {
             Sections.mutant = mutant r;
-            reason = strf "%s: %s" (with_suite f) reason;
+            reason = strf "%s: %s" (with_suite f) (Verdicts.reason_text reason);
             invocation = f.invocation;
           }
     | f, _ -> Either.Right (id, f)
@@ -327,7 +327,7 @@ let merge ~source files merged =
     List.length
       (pick (fun r ->
            match r.verdict with
-           | Killed | Killed_elsewhere _ -> Some ()
+           | Killed _ | Killed_elsewhere _ -> Some ()
            | _ -> None))
   in
   let refused =
@@ -449,7 +449,11 @@ let disproved files =
               if g != f && g.exe = Some exe then Ids.find_opt id ids else None)
             held_by
         in
-        held <> [] && not (List.mem Verdicts.Killed held)
+        held <> []
+        && not
+             (List.exists
+                (function Verdicts.Killed _ -> true | _ -> false)
+                held)
     | _ -> false
   in
   let others =
@@ -465,7 +469,8 @@ let disproved files =
   let decided id =
     match Ids.find_opt id others with
     | Some (Outside_tests | Unreached) | None -> false
-    | Some (Killed | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated)
+    | Some
+        (Killed _ | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated)
       ->
         true
   in
@@ -483,10 +488,11 @@ let disproved files =
                 r with
                 verdict =
                   Unknown
-                    (strf
-                       "it skipped the mutant as killed by %s, which does not \
-                        kill it in this merge"
-                       exe);
+                    (Other
+                       (strf
+                          "it skipped the mutant as killed by %s, which does \
+                           not kill it in this merge"
+                          exe));
               }
       | _ -> Some r
     in
@@ -508,7 +514,7 @@ let refuted_notes refutations merged =
   let merged = by_id merged in
   let open_ (f, killer, id) =
     match Ids.find_opt id merged with
-    | Some Verdicts.Killed -> None
+    | Some (Verdicts.Killed _) -> None
     | Some _ | None -> Some ((name f, killer), (id, f.suite))
   in
   let groups =
@@ -631,7 +637,7 @@ let unconfirmed files merged =
 (* The document *)
 
 let verdict_name : Verdicts.verdict -> string = function
-  | Killed | Killed_elsewhere _ -> "killed"
+  | Killed _ | Killed_elsewhere _ -> "killed"
   | Survived _ -> "survived"
   | Not_evaluated -> "not_evaluated"
   | Unknown _ -> "unknown"
@@ -675,8 +681,9 @@ let json files merged (m : Sections.mutation) =
     | Unknown _ ->
         let f, reason = unknown_in files ~verdict_in id in
         strf ", \"executable\": %d,\n      \"reason\": %s" (index f)
-          (string reason)
-    | Killed | Killed_elsewhere _ | Not_evaluated | Outside_tests | Unreached ->
+          (string (Verdicts.reason_text reason))
+    | Killed _ | Killed_elsewhere _ | Not_evaluated | Outside_tests | Unreached
+      ->
         ""
   in
   let mutant (r : Verdicts.record) =
