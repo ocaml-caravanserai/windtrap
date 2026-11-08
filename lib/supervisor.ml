@@ -1197,6 +1197,7 @@ type state = {
   mutable witnessed : bool;
   mutable restarted : Os.counter option; (* a new start, until it serves *)
   mutable left_out : float; (* the seconds left out for the new starts *)
+  mutable memory_read : Os.counter; (* the last read of its memory *)
 }
 
 let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
@@ -1259,6 +1260,7 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
           witnessed = true;
           restarted = None;
           left_out = 0.;
+          memory_read = Os.counter ();
         }
       in
       incr next;
@@ -1336,20 +1338,22 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
     ignore (reap st.w);
     settle st ended
   in
-  (* The memory of the workers is read at most once each [memory_step]
-     seconds. A worker with a report to read, or one that finishes its job,
-     is not stopped: its reports are read, and its deadline bounds it. *)
-  let memory_step = 0.25 and memory_read = ref (Os.counter ()) in
+  (* The memory of a worker is read at most once each [memory_step]
+     seconds, and the read waits while the worker has a report to read. A
+     worker that finishes its job is not stopped: its deadline bounds it. *)
+  let memory_step = 0.25 in
   let limit_kb = config.mutate_memory * 1024 in
   let outgrown st =
-    (not (st.finishing && st.pending = []))
+    Os.count_s st.memory_read >= memory_step
+    && (not (st.finishing && st.pending = []))
     && (match Unix.select [ st.w.reports ] [] [] 0. with
       | [], _, _ -> true
       | _ :: _, _, _ | (exception Unix.Unix_error _) -> false)
     &&
-    match Os.memory_of_pid st.w.pid with
-    | Some m -> m.resident_kb > limit_kb
-    | None -> false
+    (st.memory_read <- Os.counter ();
+     match Os.memory_of_pid st.w.pid with
+     | Some m -> m.resident_kb > limit_kb
+     | None -> false)
   in
   let rec deliver () =
     if !delivered < n then
@@ -1389,7 +1393,7 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
               (* A new start is checked once a step until it serves. *)
               if Option.is_some st.restarted then acc
               else Float.min acc (Float.max 0. (remaining st)))
-            0.25 running'
+            memory_step running'
         in
         let ready =
           match
@@ -1398,19 +1402,21 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
           | ready, _, _ -> ready
           | exception Unix.Unix_error (Unix.EINTR, _, _) -> []
         in
-        let memory = Os.count_s !memory_read >= memory_step in
-        if memory then memory_read := Os.counter ();
         List.iter
           (fun st ->
             if Option.is_none !signal then
               if remaining st <= 0. then cut st Expired
-              else if List.mem st.w.reports ready then handle st
-              else if memory && outgrown st then
-                cut st (Outgrown config.mutate_memory)
-              else if ready = [] then
-                match reap ~flags:[ Unix.WNOHANG ] st.w with
-                | Some _ -> dead st
-                | None -> ())
+              else begin
+                let reported = List.mem st.w.reports ready in
+                if reported then handle st;
+                (* A worker that reports at each turn gets its read too. *)
+                if List.memq st !running && outgrown st then
+                  cut st (Outgrown config.mutate_memory)
+                else if (not reported) && ready = [] then
+                  match reap ~flags:[ Unix.WNOHANG ] st.w with
+                  | Some _ -> dead st
+                  | None -> ()
+              end)
           running';
         loop ()
   in

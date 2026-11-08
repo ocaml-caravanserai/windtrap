@@ -282,12 +282,11 @@ given, a mutation run draws its property cases from one fixed seed,
 `s1:6d7574616e747321`, so a verdict is the same on every run of one
 binary.
 
-A mutant whose run ends before its tests do, because the process
-crashed or exited, or passed a deadline taken from the dry run or a
-memory limit, is
-unknown, and so is no survivor. The report lists it under `unknown`
-with the reason and an `arm:` command, which runs the suite with it
-armed and shows what happens. A mutant whose run does not evaluate
+A mutant whose run ends before its tests do is unknown, and so is no
+survivor. The run ends early when the process crashes or exits, or
+passes its deadline (taken from the dry run) or its memory limit. The
+report lists it under `unknown` with the reason and an `arm:` command,
+which runs the suite with it armed and shows what happens. A mutant whose run does not evaluate
 its site, as when an earlier test that its run leaves out
 decided whether the site runs, is not evaluated and is no survivor
 either, listed under `not evaluated` with its `arm:` command.
@@ -427,10 +426,10 @@ check does this run up to 3 times:
 - If the killing test does not fail in the 3 runs, the kill stays.
 
 A run that ends before the killing test ends, at its deadline, at its
-memory limit or with its worker, does not give a failure of the test. A failure of the test
-counts also when the run then ends early, for example in a fixture
-release that hangs. A kill that names no test gets no check,
-for example a kill by a fixture release. An `--arm` run does no check.
+memory limit or with its worker, does not give a failure of the test.
+A failure of the test counts also when the run then ends early, for
+example in a fixture release that hangs. A kill that names no test gets
+no check, for example a kill by a fixture release. An `--arm` run does no check.
 
 When the check of a kill in the first run fails, the mutant is unknown.
 The report lists it under `unknown`, with the killing test, its failure

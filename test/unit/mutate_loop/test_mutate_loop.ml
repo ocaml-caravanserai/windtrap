@@ -1195,9 +1195,12 @@ let deadline_kill () =
        ])
     (rows b.run)
 
-let hog_run args =
+let need_proc () =
   if not (Sys.file_exists "/proc/self/status") then
-    skip ~reason:"the limit reads /proc/<pid>/status" ();
+    skip ~reason:"the limit reads /proc/<pid>/status" ()
+
+let hog_run args =
+  need_proc ();
   remove (verdicts_path ());
   finish_within ~what:"the hog's run"
     (start ~env:[ suite "hog" ] (mutate :: args))
@@ -1221,8 +1224,7 @@ let memory_default () =
 (* Each worker takes more than 1 MB, so the unarmed worker of the probe
    passes the limit too. *)
 let memory_probe () =
-  if not (Sys.file_exists "/proc/self/status") then
-    skip ~reason:"the limit reads /proc/<pid>/status" ();
+  need_proc ();
   let r =
     finish_within ~what:"the lasting run"
       (start ~env:[ suite "lasting" ] [ mutate; "--mutate-memory=1" ])
@@ -1241,6 +1243,25 @@ let memory_limit () =
   equal text "" r.err;
   equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
     (outcome r.out);
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 unknown: its run passed its memory limit of 64 MB";
+         "subject.ml:18 unreached";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r)
+
+let memory_reports () =
+  need_proc ();
+  remove (verdicts_path ());
+  let r =
+    finish_within ~what:"the streaming run"
+      (start ~env:[ suite "streaming" ] [ mutate; "--mutate-memory=64" ])
+  in
+  equal string "exited 0" r.status;
   equal
     (option (list string))
     (Some
@@ -1323,6 +1344,8 @@ let limits =
         memory_default;
       test "a probe whose worker passes the memory limit refuses the run"
         memory_probe;
+      test "a worker that reports at each turn passes its memory limit"
+        memory_reports;
       test "a child's deadline is at least one second" (fun () ->
           let b = Lazy.force blocked in
           equal string "exited 0" b.run.status;

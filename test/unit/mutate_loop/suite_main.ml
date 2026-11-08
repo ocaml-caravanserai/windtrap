@@ -216,6 +216,18 @@ let lasting =
         is_true (Subject.sub 10 4 < 100));
   ]
 
+(* Under the mutant, each test keeps 8 MB, and the worker reports more
+   often than the parent reads its memory. *)
+let kept = ref []
+
+let streaming =
+  List.init 40 (fun i ->
+      test (Printf.sprintf "keeps memory %d" i) (fun () ->
+          if Subject.sub 10 4 <> 6 then
+            kept := Bytes.make (8 * 1024 * 1024) 'x' :: !kept;
+          Unix.sleepf 0.05;
+          is_true (Subject.sub 10 4 < 100)))
+
 let block =
   [
     test "watches sub without pinning it" (fun () ->
@@ -839,6 +851,7 @@ let () =
   | "block" -> exit @@ run "calc" [ group "block" block ]
   | "hog" -> exit @@ run "calc" [ group "hog" hog ]
   | "lasting" -> exit @@ run "calc" [ group "lasting" lasting ]
+  | "streaming" -> exit @@ run "calc" [ group "streaming" streaming ]
   | "held" -> exit @@ run "calc" [ group "held" held ]
   | "interrupted" -> exit @@ run "calc" [ group "held" interrupted ]
   | "pinned" ->

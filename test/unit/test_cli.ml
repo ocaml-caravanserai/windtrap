@@ -583,6 +583,7 @@ let parsing =
           ([ "--mutate-retry=100" ], "mutate_retry 100");
           ([ "--mutate-memory"; "64" ], "mutate_memory 64");
           ([ "--mutate-memory=4096" ], "mutate_memory 4096");
+          ([ "--mutate-memory=1048576" ], "mutate_memory 1048576");
           ([ "-h" ], "help");
           ([ "--help" ], "help");
           ([ "-V" ], "version");
@@ -684,6 +685,7 @@ let parsing =
           ("--mutate-memory", "0");
           ("--mutate-memory", "-5");
           ("--mutate-memory", "lots");
+          ("--mutate-memory", "1048577");
         ]
         refused_value;
       parse_rows "parse is the first error from the left"

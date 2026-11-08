@@ -37,9 +37,10 @@ type verdict =
           [--skip-killed] gives it. *)
   | Unknown of string
       (** No verdict, and the string says why: the run that armed the mutant
-          ended before its tests did, by a crash, an exit or its deadline, or
-          the executable could not be mutation-tested, as when its dry run is
-          red, its suite is not deterministic or its selection narrows it. *)
+          ended before its tests did, by a crash, an exit, its deadline or its
+          memory limit, or the executable could not be mutation-tested, as when
+          its dry run is red, its suite is not deterministic or its selection
+          narrows it. *)
   | Survived of { first : reaching_test; others : reaching_test list }
       (** The armed site was evaluated, no reaching test failed after its first
           evaluation, and no fixture release failed. A test that failed before
