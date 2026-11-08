@@ -146,7 +146,7 @@ boolean:
   windtrap: option '--incremental' requires '--mutate'
   usage: pins_add.exe [OPTIONS] [PATTERN...]
   [2]
-  $ run env WINDTRAP_INCREMENTAL=1 $exe
-  pins_add: 5 passed in 2.3ms.
+  $ run env WINDTRAP_INCREMENTAL=1 $exe | sed -E 's/ in [0-9.]+[mµ]?s\././'
+  pins_add: 5 passed.
   $ run env WINDTRAP_INCREMENTAL=maybe $exe $scope > /dev/null; head -n 1 "$bin/err"
   windtrap: invalid value 'maybe' for WINDTRAP_INCREMENTAL: expected a boolean: 1/0, true/false, yes/no or on/off
