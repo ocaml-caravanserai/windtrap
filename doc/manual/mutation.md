@@ -842,11 +842,11 @@ the counts and the score, the verdict files, and each mutant with its
 verdict. A survivor also has the tests that ran it. A killed mutant
 has the tests that killed it in `killed_by`: in each run that killed
 it, the first test that failed. The array is empty when a kill names
-no test, as a kill by a fixture release does, and for a mutant killed
-elsewhere. An unknown mutant has its reason, and the kind of the reason
-in `reason_kind`: `deadline`, `crashed`, `memory`, `flaky_kill` or
-`other`. A test names its verdict file by its index in `executables`,
-because two files can have the same name. Under
+no test, as for a kill by a fixture release. It is also empty for a
+mutant killed elsewhere. An unknown mutant has its reason, and the kind
+of the reason in `reason_kind`: `deadline`, `crashed`, `memory`,
+`flaky_kill` or `other`. A test names its verdict file by its index in
+`executables`, because two files can have the same name. Under
 `--lines` or `--diff`, the verdict counts, the score and `mutants` hold
 only the mutants on the lines. But `executables` still lists every
 verdict file, and `refused` still counts every refused file. Under
