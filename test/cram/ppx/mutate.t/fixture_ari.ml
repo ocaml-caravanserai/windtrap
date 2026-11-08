@@ -1,5 +1,5 @@
-(* [ari]: the one operator whose armed arm names an operator the source
-   did not write, and the only one that reaches pure computation with no
+(* [ari]: as [mul], [fmul] and [bit], an operator whose armed arm names an
+   operator the source did not write. It reaches pure computation with no
    branch and no comparison. *)
 
 let sum a b = a + b

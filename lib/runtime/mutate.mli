@@ -32,13 +32,15 @@ type id = { file : string; line : int; col : int; rewrite : string }
 val rewrites : string list
 (** [rewrites] is the closed vocabulary of rewrite names, in this order:
     ["not"], the comparisons ["lt"], ["le"], ["gt"], ["ge"], ["eq"] and ["neq"],
-    the arithmetic ["add"], ["sub"], ["fadd"] and ["fsub"], the connectives
-    ["and"] and ["or"], then ["del"], which drops a statement, ["int"], which
-    nudges an integer literal, ["bool"], which flips a boolean one, ["none"],
-    which replaces [Some e] with [None], and ["tail"], which replaces [h :: t]
-    with [t]. A name is that of the replacement, never that of the operator in
-    the source, but for ["del"], ["int"] and ["bool"], which name what they
-    change. *)
+    the arithmetic ["add"], ["sub"], ["fadd"] and ["fsub"], the multiplicative
+    ["div"], ["mul"], ["mod"], ["fdiv"] and ["fmul"], the bitwise ["lor"],
+    ["land"], ["xor"], ["lsr"], ["lsl"] and ["asr"], the connectives ["and"] and
+    ["or"], then ["del"], which drops a statement, ["int"], which nudges an
+    integer literal, ["bool"], which flips a boolean one, ["none"], which
+    replaces [Some e] with [None], and ["tail"], which replaces [h :: t] with
+    [t]. A name is that of the replacement, but for ["mod"], ["xor"] and
+    ["asr"], which name the operator in the source, and ["del"], ["int"] and
+    ["bool"], which name what they change. *)
 
 val id_to_string : id -> string
 (** [id_to_string id] is [<file>:<line>:<col>:<rewrite>], as

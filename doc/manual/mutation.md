@@ -149,7 +149,7 @@ File "calc.ml", line 10, characters 37-42:
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:10:16:ge
-mutants: 3 survived of 9 reached by this suite, 6 killed, 1 never reached, score 66.7% (6/9), reach 90.0% (9/10), total 60.0% (6/10)
+mutants: 3 survived of 11 reached by this suite, 8 killed, 1 never reached, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
 ```
 
 ## Reproducing a survivor
@@ -221,13 +221,13 @@ File "calc.ml", line 6, characters 11-16:
       subtraction › stays positive  test_calc.ml:11
 ──────────────────────────────────────────────────────────
 
-─────────────────── never reached (9) ────────────────────
-  9  calc.ml   lines 5, 8, 10
+─────────────────── never reached (11) ───────────────────
+  11  calc.ml   lines 5, 7-8, 10
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:6:11:add -f 'stays positive'
 windtrap: verdicts not saved: this run's selection narrows the suite, and a partial run's verdicts would stand in the project merge as the whole.
-mutants: 1 survived of 1 reached by the 1 selected test, 9 never reached, score 0.0% (0/1), reach 10.0% (1/10), total 0.0% (0/10)
+mutants: 1 survived of 1 reached by the 1 selected test, 11 never reached, score 0.0% (0/1), reach 8.3% (1/12), total 0.0% (0/12)
 ```
 
 ## Testing a change's mutants
@@ -668,7 +668,7 @@ File "calc.ml", line 10, characters 37-42:
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:10:16:ge
-mutants: 3 survived of 9 reached by this suite, 6 killed, 1 never reached, score 66.7% (6/9), reach 90.0% (9/10), total 60.0% (6/10)
+mutants: 3 survived of 11 reached by this suite, 8 killed, 1 never reached, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
 $ dune exec windtrap -- mutants
 ───────────────────── survivors (3) ──────────────────────
 File "calc.ml", line 10, characters 16-21:
@@ -700,7 +700,7 @@ File "calc.ml", line 10, characters 37-42:
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:10:16:ge
-mutants: 3 survived of 9 reached, 6 killed, 1 never reached, 1 executable, score 66.7% (6/9), reach 90.0% (9/10), total 60.0% (6/10)
+mutants: 3 survived of 11 reached, 8 killed, 1 never reached, 1 executable, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
 ```
 
 Only code that a suite's own process runs reaches a mutant. A binary
@@ -994,7 +994,7 @@ that were not evaluated. These mutants do not count in the score:
   not a survivor.
 
 The line gives the score with the killed and the counted mutants, as
-`score 66.7% (6/9)`. When no mutant counts and no gate is given, the
+`score 72.7% (8/11)`. When no mutant counts and no gate is given, the
 line gives no score.
 
 After the score, the line gives two more measures in the same form:
@@ -1033,9 +1033,9 @@ measure is that of the mutants on the lines:
 
 ```
 $ dune exec windtrap -- mutants --min 60 --min-reach 95 | tail -n 1
-mutants: 3 survived of 9 reached, 6 killed, 1 never reached, 1 executable, score 66.7% (6/9), minimum 60%: ok, reach 90.0% (9/10), minimum 95%: FAILED, total 60.0% (6/10)
+mutants: 3 survived of 11 reached, 8 killed, 1 never reached, 1 executable, score 72.7% (8/11), minimum 60%: ok, reach 91.7% (11/12), minimum 95%: FAILED, total 66.7% (8/12)
 $ dune exec windtrap -- mutants --max-survivors 3 | tail -n 1
-mutants: 3 survived of 9 reached, 6 killed, 1 never reached, 1 executable, score 66.7% (6/9), reach 90.0% (9/10), total 60.0% (6/10), maximum 3 survivors: ok
+mutants: 3 survived of 11 reached, 8 killed, 1 never reached, 1 executable, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12), maximum 3 survivors: ok
 ```
 
 A suite that was not mutation-tested fails the merge also under a gate,
@@ -1069,7 +1069,7 @@ crashed:
 
 ```
 $ dune exec windtrap -- mutants --crash-kills | tail -n 1
-mutants: 3 survived of 11 reached, 8 killed (2 by --crash-kills), 1 never reached, 1 executable, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
+mutants: 3 survived of 13 reached, 10 killed (2 by --crash-kills), 1 never reached, 1 executable, score 76.9% (10/13), reach 92.9% (13/14), total 71.4% (10/14)
 ```
 
 The verdict of a suite that was not mutation-tested never counts a
@@ -1250,9 +1250,9 @@ project's merge passes:
 ```
 $ dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --mutate
 calc: 12 passed in 2.7ms.
-mutants: 10 reached by this suite, 10 killed, score 100.0% (10/10), reach 100.0% (10/10), total 100.0% (10/10)
+mutants: 12 reached by this suite, 12 killed, score 100.0% (12/12), reach 100.0% (12/12), total 100.0% (12/12)
 $ dune exec windtrap -- mutants
-mutants: 10 reached, 10 killed, 1 executable, score 100.0% (10/10), reach 100.0% (10/10), total 100.0% (10/10)
+mutants: 12 reached, 12 killed, 1 executable, score 100.0% (12/12), reach 100.0% (12/12), total 100.0% (12/12)
 ```
 
 ## What is mutated
@@ -1270,6 +1270,15 @@ these names (see
 - `&&` becomes `||` (`or`), and `||` becomes `&&` (`and`).
 - `+` becomes `-` (`sub`) and `-` becomes `+` (`add`); `+.` and `-.`
   swap likewise (`fsub`, `fadd`).
+- `*` becomes `/` (`div`), `/` becomes `*` (`mul`), and `mod` becomes
+  `*` (`mod`). `*.` becomes `/.` (`fdiv`), and `/.` becomes `*.`
+  (`fmul`). The `div` mutant of `a * b` raises `Division_by_zero` when
+  `b` is `0`, and a test that then fails kills it.
+- `land` becomes `lor` (`lor`), `lor` becomes `land` (`land`), and
+  `lxor` becomes `land` (`xor`). `lsl` becomes `lsr` (`lsr`), `lsr`
+  becomes `lsl` (`lsl`), and `asr` becomes `lsl` (`asr`). `mod`, `xor`
+  and `asr` name the operator in the source. Thus the two mutants of
+  `a / b mod c`, which start at one byte, have two names.
 - `del` drops a statement, and the statement does not run. A statement
   is `e1` in `e1; e2`, the branch `e` of `if c then e` with no `else`,
   or the body of a `while` or a `for` loop. In such a branch or body,
@@ -1292,7 +1301,8 @@ Some code carries no mutant, because no test should pin it or none can
 run it. `del` leaves a resource release alone: a call of `close`,
 `close_in`, `close_out`, their `_noerr` forms or `closedir`. `int`
 leaves alone an operand of `+` or `-`, which `add` and `sub` move
-already; an argument of a function whose name ends in `create`, as the
+already; an operand of `*`, `/` or `mod` where the operator can have a
+mutant; an argument of a function whose name ends in `create`, as the
 capacity of `Hashtbl.create 16`; the constant of a comparison in a
 condition when the nudge is the comparison's own boundary move, as the
 `0` of `x < 0`, since `x < 1` is `x <= 0`. `bool` leaves alone the
@@ -1312,6 +1322,13 @@ equivalent to the original. It gives none where the mutant changes a
 log message or a failure message alone. These cases are:
 
 - `x + 0` and `x - 0`, with an integer `0`. `0 + x` keeps its mutant.
+- `x * 1`, `x / 1`, `x * -1` and `x / -1`, with an integer literal, and
+  the same forms of `*.` and `/.` with a float literal. `1 * x` keeps
+  its mutant.
+- A shift by `0`, as `x lsl 0`, and a shift of `0`, as `0 lsr n`. The
+  `0` keeps its `int` mutant.
+- `a land a` and `a lor a`, under the rule of `a && a`. `a lxor a`
+  keeps its mutant.
 - `a && a` and `a || a`, when `a` is a name, a constructor without an
   argument or a field.
 - The condition of `if c then e else e`, when the two branches are the
@@ -1351,11 +1368,22 @@ mutant, and neither does an `assert`. In a chain of one operator, as
 `a + b + c`, the outermost application alone is a site. Inline tests
 (`let%test`, `let%expect_test` and `module%test` with its helpers)
 carry no mutant, and the rest of their file is mutated. A file that
-rebinds an operator loses the rewrites of its family: the four
-arithmetic operators, the six comparisons or the two connectives. A
-binding is a name or an alias pattern, as `(_ as ( + ))`. A file
+rebinds an operator loses the rewrites of its family: `+`, `-`, `+.`
+and `-.`, or `*`, `/` and `mod`, or `*.` and `/.`, or the six bit
+operators, or the six comparisons, or the two connectives. A binding is
+a name or an alias pattern, as `(_ as ( + ))`. A file
 that declares a constructor `Some`, `None` or `::` loses `none` and
 `tail`.
+
+The rewrites of `*`, `/`, `mod`, `*.`, `/.` and the bit operators give
+no mutant where an `open`, a `let open`, an `M.( ... )` or an `include`
+of another module is in scope, as in `Float.(a * b)`. A `struct ... end`
+of the file, as the `include struct ... end` of a deriver, keeps them.
+The rewriter does not see a `-open` flag of the compiler. If such a flag
+gives one of these operators, or `+`, `-`, `+.` or `-.`, another type,
+the mutant does not compile.
+The compiler shows the error at the expression, and
+`[@mutate off "reason"]` or `[@@@mutate exclude_file]` removes it.
 
 The `none` mutant names `None` without a module, and the `tail` mutant
 gives `t` the type of `h :: t`. The rewriter does not see a `Some` or a

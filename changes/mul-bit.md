@@ -1,5 +1,15 @@
 ### Mutation testing
 
+- Eleven rewrites join the catalogue. `*` and `/` swap (`div`, `mul`),
+  and `mod` becomes `*` (`mod`). `*.` and `/.` swap (`fdiv`, `fmul`).
+  `land` and `lor` swap (`lor`, `land`), and `lxor` becomes `land`
+  (`xor`). `lsl` and `lsr` swap (`lsr`, `lsl`), and `asr` becomes `lsl`
+  (`asr`). A file that binds an operator of a family loses the family.
+  The rewrites give no mutant under an `open` or an `include` of
+  another module. `x * 1`, `x / -1`, their float forms, a shift by or
+  of `0`, `a land a` and `a lor a` give no mutant. A literal operand of
+  `*`, `/` or `mod` gives no `int` mutant where the operator has a
+  site (doc/manual/mutation.md#what-is-mutated).
 - A file that binds an operator by an alias pattern, as
   `(_ as ( + ))`, loses the rewrites of that operator's family, as a
   file that binds it by name does. Before, the instrumented file could
