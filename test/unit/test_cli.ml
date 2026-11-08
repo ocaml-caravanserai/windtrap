@@ -462,9 +462,9 @@ let rewrite_messages () =
   expect (String.concat "\n" (List.map Cli.error_message refused))
   @@ __POS_OF__
        {|
-    invalid value 'dell' for --rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
-    invalid value '' for --skip-rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
-    invalid value 'add,x' for WINDTRAP_REWRITES: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+    invalid value 'dell' for --rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail, keep
+    invalid value '' for --skip-rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail, keep
+    invalid value 'add,x' for WINDTRAP_REWRITES: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail, keep
     options '--rewrites' and '--skip-rewrites' cannot be combined
     option '--rewrites' scopes '--mutate', which is not given
     |}
@@ -749,7 +749,7 @@ let parsing =
           ("--rewrites", "dell");
           ("--rewrites", "del,Del");
           ("--skip-rewrites", "");
-          ("--skip-rewrites", "keep");
+          ("--skip-rewrites", "nosuch");
         ]
         refused_value;
       parse_rows "parse is the first error from the left"
