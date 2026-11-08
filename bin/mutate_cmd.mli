@@ -171,14 +171,15 @@
     percentage of the killed mutants among those scored, never reached and
     evaluated outside tests. Each is [100.] when its denominator is [0].
 
-    [--crash-kills] counts an unknown mutant as killed when a file that tested
-    its suite holds it with a deadline, a crash or a memory limit
+    [--crash-kills] counts an unknown mutant as killed when a file whose writer
+    tested its suite holds it with a deadline, a crash or a memory limit
     ({!Windtrap.Private.Report_sections.val-counted_as_killed}). The first such
     file names it ({{!section-merge}the merge}). The order of the files does not
     change the count. The score, the total, each gate and the outcome line then
     count it with the killed mutants, and the unknown section marks it
-    [(counted as killed)]. The reach does not change. A flaky kill and each
-    other reason stay unknown. A repeated [--crash-kills] is the same as one.
+    [(counted as killed)]. The reach does not change. A mutant with a flaky kill
+    or with another reason stays unknown. A repeated [--crash-kills] is the same
+    as one.
 
     [--min PCT], [--min-reach PCT], [--min-total PCT] and [--max-survivors N]
     are the gates. With a gate, the merge passes when

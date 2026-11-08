@@ -807,8 +807,8 @@ Crash kills
 
 By default, an unknown mutant is not scored. --crash-kills counts an
 unknown mutant as killed when its run passed its deadline, crashed or
-passed its memory limit. A flaky kill and each other reason stay
-unknown. A mutant counted as killed stays in the unknown section, with
+passed its memory limit. A mutant with a flaky kill or with another
+reason stays unknown. A mutant counted as killed stays in the unknown section, with
 a mark:
 
   $ plant "$scratch/crash" && cd "$scratch/crash"
@@ -912,7 +912,7 @@ whatever its reason:
 
 When two tested suites hold a mutant as unknown, a deadline, a crash or a
 memory limit in one of them counts it as killed. The order of the files
-does not change the count, and the survivor gate does not change:
+does not change the count, and the survivor gate gives the same result:
 
   $ for order in 'flaky:t/x deadline:1.5' 'deadline:1.5 flaky:t/x'; do
   >   set -- $order

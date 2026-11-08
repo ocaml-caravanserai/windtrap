@@ -868,7 +868,7 @@ measures too, and has no gate.
 By default, an unknown mutant does not count in the score. PIT counts a
 timeout and a memory error as detected. To count the same mutants as
 killed, give `--crash-kills` to `windtrap mutants`. The option counts an
-unknown mutant as killed when its run passed its deadline, crashed, or
+unknown mutant as killed when its run passed its deadline, crashed or
 passed its memory limit. When more than one suite holds the mutant as
 unknown, one such reason in a mutation-tested suite is sufficient. A
 flaky kill stays unknown, because the test that killed it also fails
@@ -888,35 +888,34 @@ mutants: 3 survived of 11 reached, 8 killed (2 by --crash-kills), 1 never reache
 ```
 
 The verdict of a suite that was not mutation-tested never counts a
-mutant as killed. Each gate fails when such a suite exists. The option does not change the
-verdict files. A suite run takes `--crash-kills` with `--mutate`, and
-its mirror is `WINDTRAP_CRASH_KILLS=1`. The option changes the outcome
-line and the unknown section of the run. The flag without `--mutate` is
-a usage error, and its mirror alone has no effect.
+mutant as killed. Each gate fails when such a suite exists. The option
+does not change the verdict files. A suite run takes `--crash-kills`
+with `--mutate`, and its mirror is `WINDTRAP_CRASH_KILLS=1`. The option
+changes the outcome line and the unknown section of the run. The flag
+without `--mutate` is a usage error, and its mirror alone has no effect.
 
 ## Exporting the verdicts
 
 For other tools, `--json` prints the merge as one JSON document on
 standard output, in place of the report. The document has its version,
 the counts, the score, the reach and the total, the verdict files, and
-each mutant with its verdict. A survivor also has the tests that ran
-it. A killed mutant has the tests that killed it in `killed_by`: in
-each run that killed it, the first test that failed. The array is empty
-when a kill names no test, as for a kill by a fixture release. It is
-also empty for a mutant killed elsewhere. An unknown mutant has its
-reason, and the kind of the reason in `reason_kind`: `deadline`,
-`crashed`, `memory`, `flaky_kill` or `other`. Its `counted_as_killed`
-is `true` when `--crash-kills` counts it as killed, and `false` if not.
-Under the option, `killed` in `summary` counts such a mutant, and
-`unknown` does not count it. The `verdict` of such a mutant stays
-`unknown`. A test names its
-verdict file by its index in `executables`, because two files can have
-the same name. Under `--lines` or `--diff`, the verdict counts, the three
-measures and `mutants` hold only the mutants on the lines. But
-`executables` still lists every verdict file, and `refused` still
-counts every refused file. Under a gate, the outcome line goes to
-standard error, and the exit code is that of the gates. A later version
-can add keys. A change to the meaning of a key increments `version`.
+each mutant with its verdict. A survivor also has the tests that ran it.
+A killed mutant has the tests that killed it in `killed_by`: in each run
+that killed it, the first test that failed. The array is empty when a
+kill names no test, as for a kill by a fixture release. It is also empty
+for a mutant killed elsewhere. An unknown mutant has its reason, and the
+kind of the reason in `reason_kind`: `deadline`, `crashed`, `memory`,
+`flaky_kill` or `other`. Its `counted_as_killed` is `true` when
+`--crash-kills` counts it as killed, and `false` if not. Under the
+option, `killed` in `summary` counts such a mutant, and `unknown` does
+not count it. The `verdict` of such a mutant stays `unknown`. A test
+names its verdict file by its index in `executables`, because two files
+can have the same name. Under `--lines` or `--diff`, the verdict counts,
+the three measures and `mutants` hold only the mutants on the lines. But
+`executables` still lists every verdict file, and `refused` still counts
+every refused file. Under a gate, the outcome line goes to standard
+error, and the exit code is that of the gates. A later version can add
+keys. A change to the meaning of a key increments `version`.
 [`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each key:
 
 ```
