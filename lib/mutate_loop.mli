@@ -374,16 +374,16 @@ val execute_and_report :
 val settings : Run.config -> string
 (** [settings config] is the lowercase hexadecimal MD5 of one injective spelling
     of the settings of [config] that change what a test does in a job: the
-    windtrap version ({!Cli.release}, or [dev]), [seed], [prop_count], [replay],
-    the choices of [case_file], [mutate_workers], [timeout], [default_timeout]
-    and [mutate_memory]. Each value has a tag and a length, so no two
-    configurations that differ in one of them share a spelling. *)
+    windtrap version ({!Cli.version}), [seed], [prop_count], [replay], the
+    choices of [case_file], [mutate_workers], [timeout], [default_timeout] and
+    [mutate_memory]. Each value has a tag and a length, so no two configurations
+    that differ in one of them share a spelling. *)
 
-val test_digest : Loc.t option -> string option
-(** [test_digest loc] is the lowercase hexadecimal MD5 of the source file of the
-    location [loc] of a test. It reads the file under {!Os.project_root} first
-    ({!Os.reconstruct}) and then as given, and it reads only a regular file.
-    [None] gives [None], and so does a file that it cannot read. *)
+val test_digest : string -> string option
+(** [test_digest file] is the lowercase hexadecimal MD5 of the source file
+    [file] of a test, as its location names it. It reads the file under
+    {!Os.project_root} first ({!Os.reconstruct}) and then as given, and it reads
+    only a regular file. A file that it cannot read gives [None]. *)
 
 (** {1:effects Effects}
 

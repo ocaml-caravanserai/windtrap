@@ -10,6 +10,8 @@ let release =
   let watermark = "%%VERSION%%" in
   if String.starts_with ~prefix:"%" watermark then None else Some watermark
 
+let version = Option.value release ~default:"dev"
+
 (* Parsed flags *)
 
 (* Each flag sets the configuration's field directly, over the defaults, and

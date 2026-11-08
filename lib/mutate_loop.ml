@@ -167,7 +167,7 @@ let settings (config : Run.config) =
     | Some value ->
         Printf.bprintf b "%s %d %s\n" tag (String.length value) value
   in
-  field "version" (Some (Option.value Cli.release ~default:"dev"));
+  field "version" (Some Cli.version);
   field "seed" (Some (Seed.to_string config.seed));
   field "prop_count" (Option.map string_of_int config.prop_count);
   field "replay" config.replay;
@@ -191,19 +191,22 @@ let regular path =
   | _ -> false
   | exception Unix.Unix_error _ -> false
 
-(* As [read_source], under the project root first. *)
-let test_digest = function
-  | None -> None
-  | Some { Loc.file; _ } ->
-      let under_root =
-        match Os.project_root () with
-        | root -> Result.to_option (Os.reconstruct ~root file)
-        | exception Sys_error _ -> None
-      in
-      List.find_map
-        (fun path ->
-          if regular path then Windtrap_runtime.Instr.file_digest path else None)
-        (Option.to_list under_root @ [ file ])
+(* Recorded paths are relative to the project root. Under [dune runtest] the
+   working directory is inside [_build], where they do not open. Thus the
+   path under the project root comes first, and then the path as given. *)
+let candidates file =
+  let under_root =
+    match Os.project_root () with
+    | root -> Result.to_option (Os.reconstruct ~root file)
+    | exception Sys_error _ -> None
+  in
+  Option.to_list under_root @ [ file ]
+
+let test_digest file =
+  List.find_map
+    (fun path ->
+      if regular path then Windtrap_runtime.Instr.file_digest path else None)
+    (candidates file)
 
 (* The entry of each test whose file has a digest: the file, and the limit
    and the retries that the test declares. Each file is read once. *)
@@ -213,7 +216,7 @@ let test_digests tests =
     match Hashtbl.find_opt files loc.file with
     | Some digest -> digest
     | None ->
-        let digest = test_digest (Some loc) in
+        let digest = test_digest loc.file in
         Hashtbl.add files loc.file digest;
         digest
   in
@@ -451,13 +454,6 @@ let check_failure test (ran : Supervisor.ran) =
       | Pass | Fail _ | Skip _ -> None)
     ran.results
 
-(* [paths] up to and with [test]. *)
-let rec through test = function
-  | [] -> []
-  | path :: paths ->
-      if List.equal String.equal path test then [ path ]
-      else path :: through test paths
-
 (* The failure of a job that did not evaluate the armed site. *)
 let uncaused (ran : Supervisor.ran) =
   match List.find_opt kills ran.results with
@@ -481,8 +477,6 @@ let verdict ~deadline paths (ran : Supervisor.ran) =
           | None -> Verdicts.Not_evaluated
           | Some _ -> Verdicts.survived paths))
 
-(* Recorded paths are relative to the project root; under [dune runtest] the
-   working directory is inside [_build], where they do not open. *)
 let read_source =
   let cache = Hashtbl.create 16 in
   let read path =
@@ -493,16 +487,7 @@ let read_source =
     match Hashtbl.find_opt cache file with
     | Some source -> source
     | None ->
-        let under_root =
-          match Os.project_root () with
-          | root -> Result.to_option (Os.reconstruct ~root file)
-          | exception Sys_error _ -> None
-        in
-        let source =
-          match Option.bind under_root read with
-          | None -> read file
-          | found -> found
-        in
+        let source = List.find_map read (candidates file) in
         Hashtbl.add cache file source;
         source
 
@@ -530,16 +515,10 @@ type found = {
 }
 
 (* A survivor's block is committed when its last run is given, so a loop
-   that dies has printed what it found. [record], when given, is the record
-   of a reused verdict. *)
-let found_verdict renderer (config : Run.config) ~effort ?prefix ?record
-    ~locations ~failed ~runs ~early found (index, mutant) verdict =
-  let record =
-    match record with
-    | Some record -> record
-    | None -> Verdicts.record_of_mutant ~effort ?prefix mutant verdict
-  in
-  (match verdict with
+   that dies has printed what it found. *)
+let found_verdict renderer (config : Run.config) ~locations ~failed ~runs ~early
+    found (index, mutant) (record : Verdicts.record) =
+  (match record.verdict with
   | Verdicts.Survived { first; others } ->
       let witness path : Report_sections.witness =
         let test = Test_tree.path_to_string path in
@@ -777,25 +756,26 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
   (* A kill that names a test keeps the tests of its job up to it. *)
   let commit ~failed ~run i verdict =
     judged.(i) <- true;
+    let mutant = fst mutants.(i) in
     let prefix =
       match verdict with
-      | Verdicts.Killed { by = [ test ] } -> Some (through test (paths i))
+      | Verdicts.Killed { by = [ test ] } ->
+          Some (Verdicts.through test (paths i))
       | _ -> None
     in
-    found_verdict renderer config
-      ~effort:{ effort with Verdicts.pass = run }
-      ?prefix ~locations ~failed ~runs:run
+    found_verdict renderer config ~locations ~failed ~runs:run
       ~early:(List.rev early.(i))
-      found
-      (i, fst mutants.(i))
-      verdict
+      found (i, mutant)
+      (Verdicts.record_of_mutant
+         ~effort:{ effort with Verdicts.pass = run }
+         ?prefix mutant verdict)
   in
   (* The checks by their paths, and the mutants that wait for one. *)
   let checks = Hashtbl.create 16 in
   let checking = Array.make total false in
   let await_check ~run i test =
     checking.(i) <- true;
-    let paths = through test (paths i) in
+    let paths = Verdicts.through test (paths i) in
     match Hashtbl.find_opt checks paths with
     | Some check -> check.waiting <- (i, run) :: check.waiting
     | None -> Hashtbl.add checks paths { paths; test; waiting = [ (i, run) ] }
@@ -951,9 +931,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
           (* A reused verdict counts only once the probe agrees. Its index
              orders nothing, because only a kill or a survivor is reused. *)
           List.iter
-            (fun ((mutant : Mutate.mutant), (record : Verdicts.record)) ->
-              found_verdict renderer config ~effort ~record ~locations
-                ~failed:None ~runs:1 ~early:[] found (-1, mutant) record.verdict)
+            (fun ((mutant : Mutate.mutant), record) ->
+              found_verdict renderer config ~locations ~failed:None ~runs:1
+                ~early:[] found (-1, mutant) record)
             reused;
           if total > 0 then next := Some 0;
           testing 0
@@ -1035,6 +1015,8 @@ let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside found
 
 (* Killed elsewhere *)
 
+let plural n = if n = 1 then "" else "s"
+
 (* The executable of the verdict file that killed each mutant of [reached],
    and the executable of each file that the loop used. A kill counts for the
    mutant of this executable only when the two compiled the same source and
@@ -1112,7 +1094,6 @@ let killed_elsewhere ~suite reached =
 (* The line names the executable of each file that the loop used, so that a
    reader can find the run that gave a skip. *)
 let elsewhere_line ~used skipped =
-  let plural n = if n = 1 then "" else "s" in
   let n = List.length skipped in
   let files =
     match List.sort_uniq String.compare used with
@@ -1150,7 +1131,7 @@ let reused_line found =
     List.length
       (List.filter (fun (r : Verdicts.record) -> r.reused) found.records)
   in
-  strf "reused: %d verdict%s from the last run" n (if n = 1 then "" else "s")
+  strf "reused: %d verdict%s from the last run" n (plural n)
 
 let loop renderer ~scope ~suite (config : Run.config) tests =
   let population = population ~scope in
@@ -1248,17 +1229,12 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                 match if config.incremental then last_run ~suite else None with
                 | None -> ([], to_test)
                 | Some last ->
-                    let recorded = Verdicts.recorded_digest last in
-                    let digests = Hashtbl.create 64 in
-                    List.iter
-                      (fun (test, digest) ->
-                        Hashtbl.replace digests test digest)
-                      test_digests;
+                    let recorded = Verdicts.lookup last.test_digests
+                    and digest = Verdicts.lookup test_digests in
                     List.partition_map
                       (fun (((m : Mutate.mutant), site) as mutant) ->
                         match
-                          Verdicts.reuse ~last ~recorded
-                            ~digest:(Hashtbl.find_opt digests) ~effort
+                          Verdicts.reuse ~last ~recorded ~digest ~effort
                             ~reaching:(List.rev site.tests) m
                         with
                         | Some r -> Either.Left (m, r)

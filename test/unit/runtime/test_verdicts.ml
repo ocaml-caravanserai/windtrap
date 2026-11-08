@@ -160,6 +160,10 @@ let small_verdict =
 let small_digest =
   Gen.option (Gen.of_list [ String.make 32 'a'; String.make 32 'b' ])
 
+let hex_digest =
+  Gen.string_of ~size:(Gen.constant 32)
+    (Gen.of_list (List.of_seq (String.to_seq "0123456789abcdef")))
+
 let any_previous =
   Gen.option (Gen.of_list [ `Killed; `Survived; `Not_evaluated ])
 
@@ -224,11 +228,7 @@ let any_record =
         Gen.map Verdicts.survived (Gen.list ~size:(Gen.int_range 1 3) path);
       ]
   in
-  let digest =
-    Gen.option
-      (Gen.string_of ~size:(Gen.constant 32)
-         (Gen.of_list (List.of_seq (String.to_seq "0123456789abcdef"))))
-  in
+  let digest = Gen.option hex_digest in
   (* Only a kill that names a test has a prefix, and only such a kill or a
      survivor has the mark, as load demands. *)
   let reusable = function
@@ -275,9 +275,7 @@ let any_identity =
     (Gen.with_pp pp_identity
        (Gen.map
           (fun (exe, digest) -> { Verdicts.exe = "e" ^ exe; digest })
-          (Gen.pair Gen.string
-             (Gen.string_of ~size:(Gen.constant 32)
-                (Gen.of_list (List.of_seq (String.to_seq "0123456789abcdef")))))))
+          (Gen.pair Gen.string hex_digest)))
 
 (* Test digests with distinct tests, in any order. *)
 let any_test_digests =
@@ -288,10 +286,7 @@ let any_test_digests =
         entries
       |> List.rev)
     (Gen.list ~size:(Gen.int_range 0 3)
-       (Gen.pair
-          (Gen.list ~size:(Gen.int_range 0 2) Gen.string)
-          (Gen.string_of ~size:(Gen.constant 32)
-             (Gen.of_list (List.of_seq (String.to_seq "0123456789abcdef"))))))
+       (Gen.pair (Gen.list ~size:(Gen.int_range 0 2) Gen.string) hex_digest))
 
 let any_file =
   Gen.quad any_identity (Gen.option Gen.string)
@@ -426,9 +421,7 @@ let record_of_mutant () =
   let effort = { Verdicts.retries = 2; pass = 3; settings = zeros } in
   equal string
     {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b" of aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: killed (retries 2, pass 3, settings "00000000000000000000000000000000")|}
-    (record_row
-       (Verdicts.record_of_mutant ~effort ~prefix:[ [ "t" ] ] m
-          (Verdicts.killed [])));
+    (record_row (Verdicts.record_of_mutant ~effort m (Verdicts.killed [])));
   equal string {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b": killed|}
     (record_row
        (Verdicts.record_of_mutant ~effort:base_effort
@@ -443,12 +436,27 @@ let record_of_mutant () =
           ~prefix:[ [ "s" ]; [ "t" ] ]
           { m with source_digest = None }
           (Verdicts.killed [ [ "t" ] ])));
-  equal string
-    {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b": survived by ["t"]|}
-    (record_row
-       (Verdicts.record_of_mutant ~effort:base_effort ~prefix:[ [ "t" ] ]
+  (* Only a kill that names a test keeps its prefix in a collection. *)
+  List.iter
+    (fun (verdict, row) ->
+      let r =
+        Verdicts.record_of_mutant ~effort:base_effort ~prefix:[ [ "t" ] ]
           { m with source_digest = None }
-          (Verdicts.survived [ [ "t" ] ])))
+          verdict
+      in
+      equal string
+        (strf
+           {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b": %s prefix %s|}
+           row
+           (Verdicts.prefix_digest [ [ "t" ] ]))
+        (record_row r);
+      equal (list string)
+        [ {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b": |} ^ row ]
+        (rows (collection [ r ])))
+    [
+      (Verdicts.killed [], "killed");
+      (Verdicts.survived [ [ "t" ] ], {|survived by ["t"]|});
+    ]
 
 let prefix_digests () =
   let digests =
@@ -966,14 +974,12 @@ let reuse_cases =
     case "a kill whose later test in the job has another digest"
       ~digest:(now ~changes:[ (t2, other_digest) ])
       (last [ k ]) [ t1; t2 ] (Some k);
-    case "a kill by two tests, up to the later one"
+    case "a kill by two tests"
       (last [ kill ~prefix:[ t1; t2; t3 ] [ t3; t1 ] ])
-      [ t1; t2; t3 ]
-      (Some (kill ~prefix:[ t1; t2; t3 ] [ t1; t3 ]));
-    case "a kill by two tests, with a change between them"
-      ~digest:(now ~changes:[ (t2, other_digest) ])
-      (last [ kill ~prefix:[ t1; t2; t3 ] [ t1; t3 ] ])
       [ t1; t2; t3 ] None;
+    case "a kill whose earlier test in the job does not reach now"
+      (last [ kill ~prefix:[ t1; t2 ] [ t2 ] ])
+      [ t2; t3 ] None;
     case "a kill judged 0, asked 1" ~asked:(effort 1) (last [ k ]) [ t1 ] None;
     case "a kill judged 2, asked 1" ~asked:(effort 1)
       (last [ kill ~effort:(effort 2) ~prefix:[ t1 ] [ t1 ] ])
@@ -1068,7 +1074,7 @@ let reused (_, (file, digest, asked, reaching, m, expected)) =
        expected)
     (Option.map record_row
        (Verdicts.reuse ~last:file
-          ~recorded:(Verdicts.recorded_digest file)
+          ~recorded:(Verdicts.lookup file.test_digests)
           ~digest ~effort:asked ~reaching m))
 
 let reuse =
@@ -1079,13 +1085,22 @@ let reuse =
         covers_cases covers;
       cases "reuse gives the last verdict only when its evidence did not change"
         ~id:fst reuse_cases reused;
-      test "recorded_digest finds each test of the file" (fun () ->
-          let f = last [] in
-          let recorded = Verdicts.recorded_digest f in
+      test "lookup finds each test of the list" (fun () ->
+          let recorded = Verdicts.lookup digests in
           equal
             (list (option string))
             (List.map (fun t -> Some (digest_of t)) [ t1; t2; t3 ] @ [ None ])
             (List.map recorded [ t1; t2; t3; [ "g" ] ]));
+      test "through ends at the first test, or keeps each path" (fun () ->
+          equal
+            (list (list (list string)))
+            [ [ t1 ]; [ t1; t2 ]; [ t1; t2; t3 ]; [] ]
+            [
+              Verdicts.through t1 [ t1; t2; t1 ];
+              Verdicts.through t2 [ t1; t2; t3 ];
+              Verdicts.through [ "g" ] [ t1; t2; t3 ];
+              Verdicts.through t1 [];
+            ]);
     ]
 
 (* Verdict files *)
@@ -1318,11 +1333,17 @@ let record_prefix = "windtrap-mutants-v15\ntested\n0\n1\n8 lib/a.ml "
 (* The fields after the previous outcome of a valid record. *)
 let tail = " 0 1 " ^ zeros ^ " none fresh"
 
+(* A file of one record with [verdict], no previous outcome, a valid effort,
+   [prefix] and [mark]. *)
+let with_tail ?(prefix = "none") ?(mark = "fresh") verdict =
+  strf "%s1 2 1 5 3 add 1 b 1 a 0  %s none 0 1 %s %s %s\n" record_prefix verdict
+    zeros prefix mark
+
 (* A file of one valid record, up to its effort. *)
 let effort_prefix =
   record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 1 1 1 t none "
 
-(* A file of one test digest line [entry], and no record. *)
+(* A file with the test count and digest lines [lines], and no record. *)
 let with_digests lines = "windtrap-mutants-v15\ntested\n" ^ lines ^ "0\n"
 
 let corrupt_files =
@@ -1478,28 +1499,16 @@ let corrupt_files =
     ("no prefix", effort_prefix ^ "0 1 " ^ zeros ^ "\n");
     ("a short prefix", effort_prefix ^ "0 1 " ^ zeros ^ " abc fresh\n");
     ( "a prefix on a kill that names no test",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 none 0 1 " ^ zeros
-      ^ " " ^ digest ^ " fresh\n" );
-    ( "a prefix on a survivor",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  survived 1 1 1 t none 0 1 "
-      ^ zeros ^ " " ^ digest ^ " fresh\n" );
+      with_tail ~prefix:digest "killed 0" );
+    ("a prefix on a survivor", with_tail ~prefix:digest "survived 1 1 1 t");
     ("no mark", effort_prefix ^ "0 1 " ^ zeros ^ " none\n");
     ("an unknown mark", effort_prefix ^ "0 1 " ^ zeros ^ " none maybe\n");
-    ( "a reused kill that names no test",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 none 0 1 " ^ zeros
-      ^ " none reused\n" );
-    ( "a reused unknown verdict",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown other 1 x none 0 1 "
-      ^ zeros ^ " none reused\n" );
-    ( "a reused skip",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed_elsewhere 1 x none 0 1 "
-      ^ zeros ^ " none reused\n" );
-    ( "a reused unreached mutant",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unreached none 0 1 " ^ zeros
-      ^ " none reused\n" );
+    ("a reused kill that names no test", with_tail ~mark:"reused" "killed 0");
+    ("a reused unknown verdict", with_tail ~mark:"reused" "unknown other 1 x");
+    ("a reused skip", with_tail ~mark:"reused" "killed_elsewhere 1 x");
+    ("a reused unreached mutant", with_tail ~mark:"reused" "unreached");
     ( "a reused mutant that was not evaluated",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  not_evaluated none 0 1 " ^ zeros
-      ^ " none reused\n" );
+      with_tail ~mark:"reused" "not_evaluated" );
   ]
 
 let corrupt (_, text) =

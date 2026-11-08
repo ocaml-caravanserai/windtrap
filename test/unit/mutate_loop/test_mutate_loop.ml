@@ -3194,10 +3194,13 @@ let rewrite ?(path = verdicts_path ()) ?digest ?suite ?refused ?(tests = Fun.id)
     (List.fold_left Verdicts.add Verdicts.empty
        (List.map change (Verdicts.records f.verdicts)))
 
+(* [f r] for the record [r] of line [line], and [r] for the others. *)
+let on_line line f (r : Verdicts.record) = if r.id.line <> line then r else f r
+
 (* The record of line [line] with [verdict], and [previous] when given. *)
-let at_line ?previous line verdict (r : Verdicts.record) =
-  if r.id.line <> line then r
-  else { r with verdict; previous = Option.value previous ~default:r.previous }
+let at_line ?previous line verdict =
+  on_line line (fun r ->
+      { r with verdict; previous = Option.value previous ~default:r.previous })
 
 let survived_by test = Verdicts.survived [ [ "calc"; test ] ]
 
@@ -4898,6 +4901,12 @@ let first_run ?(args = []) () =
 
 let second_run ?(args = []) () = rerun (mutate :: incremental :: args)
 
+(* A second run after a whole run and a [rewrite] of its file. *)
+let after_rewrite ?args ?tests change =
+  ignore (first_run ());
+  rewrite ?tests change;
+  second_run ?args ()
+
 (* A run whose verdicts and outcome are those of [green], with [n] reused. *)
 let as_green n (r : ran) =
   whole r;
@@ -4911,21 +4920,19 @@ let negatives = [ "calc"; "sub of two negatives" ]
 let nonzero = [ "widen"; "widen is nonzero" ]
 let not_99 = [ "widen"; "widen is not 99" ]
 
-let kill_at line ~by ~through (r : Verdicts.record) =
-  if r.id.line <> line then r
-  else
-    {
-      r with
-      verdict = Verdicts.killed [ by ];
-      prefix = Some (Verdicts.prefix_digest through);
-    }
+let kill_at line ~by ~through =
+  on_line line (fun r ->
+      {
+        r with
+        verdict = Verdicts.killed [ by ];
+        prefix = Some (Verdicts.prefix_digest through);
+      })
 
 let digest_of test digest tests =
   List.map (fun (t, d) -> if t = test then (t, digest) else (t, d)) tests
 
-let effort_at line ~retries ~pass (r : Verdicts.record) =
-  if r.id.line <> line then r
-  else { r with effort = { r.effort with retries; pass } }
+let effort_at line ~retries ~pass =
+  on_line line (fun r -> { r with effort = { r.effort with retries; pass } })
 
 let second_reuses () =
   let r1 = first_run () in
@@ -4956,9 +4963,10 @@ let second_reuses () =
     (index_of ~sub:(strf "%s  a + b \u{2192} a - b  (reused)" (site 18)) r2.out)
 
 let planted_survivor () =
-  ignore (first_run ());
-  rewrite (at_line 15 (Verdicts.survived [ positives; to_zero; negatives ]));
-  let r = second_run () in
+  let r =
+    after_rewrite
+      (at_line 15 (Verdicts.survived [ positives; to_zero; negatives ]))
+  in
   equal
     (option (list string))
     (Some
@@ -4968,16 +4976,12 @@ let planted_survivor () =
     (rows r);
   equal (option (list string)) both_reused (marks r);
   equal (list string) [ site 15; site 18 ] (survivors r.out);
-  ignore (first_run ());
-  rewrite (at_line 15 (survived_by "sub to zero"));
-  let r = second_run () in
+  let r = after_rewrite (at_line 15 (survived_by "sub to zero")) in
   as_green 1 r;
   equal (option (list string)) (marked "fresh" "reused") (marks r)
 
 let planted_kill () =
-  ignore (first_run ());
-  rewrite (kill_at 18 ~by:nonzero ~through:[ nonzero ]);
-  let r = second_run () in
+  let r = after_rewrite (kill_at 18 ~by:nonzero ~through:[ nonzero ]) in
   equal
     (option (list string))
     (Some
@@ -4990,23 +4994,17 @@ let planted_kill () =
     (rows r);
   equal (option (list string)) both_reused (marks r);
   equal (list string) [] (survivors r.out);
-  ignore (first_run ());
-  rewrite (at_line 18 (Verdicts.killed []));
-  let r = second_run () in
+  let r = after_rewrite (at_line 18 (Verdicts.killed [])) in
   as_green 1 r;
   equal (option (list string)) (marked "reused" "fresh") (marks r);
-  ignore (first_run ());
-  rewrite (kill_at 18 ~by:to_zero ~through:[ to_zero ]);
-  let r = second_run () in
+  let r = after_rewrite (kill_at 18 ~by:to_zero ~through:[ to_zero ]) in
   as_green 1 r;
   equal (option (list string)) (marked "reused" "fresh") (marks r)
 
 (* The kill of line 15 names its first test, [positives]. *)
 let changed_tests () =
   let run ?(change = Fun.id) tests =
-    ignore (first_run ());
-    rewrite ~tests change;
-    let r = second_run () in
+    let r = after_rewrite ~tests change in
     whole r;
     marks r
   in
@@ -5058,11 +5056,7 @@ let other_mutant_records =
     ("another end", fun r -> { r with end_col = r.end_col + 1 });
   ]
 
-let other_mutant_record (_, change) =
-  ignore (first_run ());
-  rewrite change;
-  as_green 0 (second_run ());
-  ()
+let other_mutant_record (_, change) = as_green 0 (after_rewrite change)
 
 let not_reusable =
   [
@@ -5072,17 +5066,14 @@ let not_reusable =
   ]
 
 let not_reused (_, verdict) =
-  ignore (first_run ());
-  rewrite (at_line 15 verdict);
-  let r = second_run () in
+  let r = after_rewrite (at_line 15 verdict) in
   as_green 1 r;
   equal (option (list string)) (marked "fresh" "reused") (marks r)
 
 let other_settings () =
-  ignore (first_run ());
-  rewrite (fun r ->
-      { r with effort = { r.effort with settings = String.make 32 '0' } });
-  as_green 0 (second_run ());
+  as_green 0
+    (after_rewrite (fun r ->
+         { r with effort = { r.effort with settings = String.make 32 '0' } }));
   ignore (first_run ());
   as_green 0 (second_run ~args:[ "--seed"; "s1:0000000000000007" ] ())
 
@@ -5096,31 +5087,29 @@ let retries () =
     (option (list string))
     (efforts_of ~rest:"retries 1 pass 1" "retries 1 pass 1" "retries 1 pass 2")
     (efforts r);
-  ignore (first_run ());
-  rewrite (effort_at 18 ~retries:2 ~pass:3);
-  let r = second_run ~args:[ retry_once ] () in
+  let r =
+    after_rewrite ~args:[ retry_once ] (effort_at 18 ~retries:2 ~pass:3)
+  in
   as_green 1 r;
   equal (option (list string)) (marked "fresh" "reused") (marks r);
   equal
     (option (list string))
     (efforts_of ~rest:"retries 1 pass 1" "retries 1 pass 1" "retries 2 pass 3")
     (efforts r);
-  ignore (first_run ());
-  rewrite (effort_at 15 ~retries:1 ~pass:1);
-  let r = second_run ~args:[ "--mutate-retry=2" ] () in
+  let r =
+    after_rewrite ~args:[ "--mutate-retry=2" ] (effort_at 15 ~retries:1 ~pass:1)
+  in
   as_green 1 r;
   equal (option (list string)) (marked "reused" "fresh") (marks r)
 
 (* A kill of a retry needs a run with as many retries. *)
 let kill_of_a_retry () =
-  ignore (first_run ());
-  rewrite (effort_at 15 ~retries:1 ~pass:2);
-  let r = second_run () in
+  let r = after_rewrite (effort_at 15 ~retries:1 ~pass:2) in
   as_green 1 r;
   equal (option (list string)) (marked "fresh" "reused") (marks r);
-  ignore (first_run ());
-  rewrite (effort_at 15 ~retries:1 ~pass:2);
-  let r = second_run ~args:[ retry_once ] () in
+  let r =
+    after_rewrite ~args:[ retry_once ] (effort_at 15 ~retries:1 ~pass:2)
+  in
   as_green 1 r;
   equal (option (list string)) (marked "reused" "fresh") (marks r)
 
@@ -5378,20 +5367,18 @@ let settings_input (_, change) =
   is_true (Loop.settings c <> Loop.settings (change c))
 
 let file_digest path = Digest.to_hex (Digest.file path)
-let at file = Some { Windtrap.Private.Loc.file; line = 1; column = 0 }
 
 let test_digests () =
   let dir = temp_dir () in
   let file = Filename.concat dir "t.ml" in
   write file "let x = 1\n";
-  equal (option string) None (Loop.test_digest None);
-  equal (option string) (Some (file_digest file)) (Loop.test_digest (at file));
+  equal (option string) (Some (file_digest file)) (Loop.test_digest file);
   equal (option string) None
-    (Loop.test_digest (at (Filename.concat dir "missing.ml")));
-  equal (option string) None (Loop.test_digest (at dir));
+    (Loop.test_digest (Filename.concat dir "missing.ml"));
+  equal (option string) None (Loop.test_digest dir);
   let fifo = Filename.concat dir "fifo.ml" in
   Unix.mkfifo fifo 0o600;
-  equal (option string) None (Loop.test_digest (at fifo))
+  equal (option string) None (Loop.test_digest fifo)
 
 let relative_test_digest () =
   let root = temp_dir () in
@@ -5399,9 +5386,7 @@ let relative_test_digest () =
   let file = Filename.concat root "test/t.ml" in
   write file "let y = 2\n";
   setenv "WINDTRAP_PROJECT_ROOT" (Some root);
-  equal (option string)
-    (Some (file_digest file))
-    (Loop.test_digest (at "test/t.ml"))
+  equal (option string) (Some (file_digest file)) (Loop.test_digest "test/t.ml")
 
 let evidence =
   group "Evidence"
@@ -5413,8 +5398,8 @@ let evidence =
       cases "settings changes with each of its inputs" ~id:fst changed_settings
         settings_input;
       test
-        "test_digest is the MD5 of a regular file, and None for no location, a \
-         missing file, a directory or a FIFO"
+        "test_digest is the MD5 of a regular file, and None for a missing \
+         file, a directory or a FIFO"
         test_digests;
       test "test_digest reads a relative path under the project root"
         relative_test_digest;

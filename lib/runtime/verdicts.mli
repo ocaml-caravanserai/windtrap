@@ -137,6 +137,10 @@ val prefix_digest : reaching_test list -> string
     spelling of [paths], in order: the tests of a job up to and with its killing
     test. *)
 
+val through : reaching_test -> reaching_test list -> reaching_test list
+(** [through test paths] is [paths] up to and with the first [test], or [paths]
+    when [test] is not in it. *)
+
 type record = {
   id : Mutate.id;  (** The identifier of the mutant. *)
   end_line : int;  (** The [end_line] of its site ({!Mutate.type-site}). *)
@@ -157,12 +161,12 @@ type record = {
           the effort of the run that tested the mutant. *)
   prefix : string option;
       (** For a {!Killed} that names a test, the {!prefix_digest} of the tests
-          of its job up to and with the killing test, when it is known. It is
-          [None] for every other verdict. *)
+          of its job up to and with the killing test, when it is known. {!add}
+          drops it for every other verdict. *)
   reused : bool;
       (** [true] when a run took [verdict] from the verdict file of the last run
-          ({!reuse}) and did not test the mutant. Only a {!Killed} that names a
-          test and a {!Survived} can be reused. *)
+          ({!reuse}) and did not test the mutant. {!reuse} gives only a
+          {!Killed} that names one test and a {!Survived}. *)
 }
 (** The type for the record of one mutant. A record is self-describing: it
     carries the two renderings and the extent that a report draws the mutant
@@ -177,8 +181,9 @@ val record_of_mutant :
   record
 (** [record_of_mutant ~effort ?prefix m v] is the record of [m] with the verdict
     [v], the effort [effort], no previous outcome and no mark. Its prefix is the
-    {!prefix_digest} of [prefix] when [v] is a {!Killed} that names a test, and
-    [None] if not. [m.dismissed] is dropped. *)
+    {!prefix_digest} of [prefix], or [None] without [prefix]. {!add} drops the
+    prefix of a verdict that is not a {!Killed} that names a test. [m.dismissed]
+    is dropped. *)
 
 val changed : record -> (outcome * outcome) option
 (** [changed r] is [Some (was, is)] when [r.previous] is [Some was],
@@ -298,9 +303,10 @@ type file = {
 }
 (** The type for what a verdict file holds. *)
 
-val recorded_digest : file -> reaching_test -> string option
-(** [recorded_digest f] is the lookup of [f.test_digests]. It indexes the list
-    when it is applied to [f], so apply it once for each file. *)
+val lookup : (reaching_test * string) list -> reaching_test -> string option
+(** [lookup digests] is the lookup of the test digests [digests], a list as
+    [file.test_digests]. It indexes the list when it is applied to [digests], so
+    apply it once for each list. *)
 
 val reuse :
   last:file ->
@@ -313,7 +319,7 @@ val reuse :
 (** [reuse ~last ~recorded ~digest ~effort ~reaching m] is the record of [m]
     with the verdict of the last run, when the evidence of that verdict did not
     change. [last] is the verdict file of the last run, [recorded] is
-    [recorded_digest last], [digest t] is the digest of the test [t] in this
+    [lookup last.test_digests], [digest t] is the digest of the test [t] in this
     run, [effort] is the effort of this run and [reaching] is the reaching tests
     of [m] in this run, in the order of its job. The result is [Some r] when all
     of these hold, and [None] if not:
@@ -321,13 +327,13 @@ val reuse :
     + [last.verdicts] holds a record [p] of [m.id], [m.source_digest] is not
       [None] and is [p.source_digest], and [p] has the end and the renderings of
       [m].
-    + [p.verdict] is a {!Killed} that names tests, each of them is in
-      [reaching], the {!prefix_digest} of the shortest prefix of [reaching] that
-      holds them is [p.prefix], and {!effort_covers} [`Killed] holds for
-      [~judged:p.effort ~asked:effort]. The compared tests are this prefix. Or
-      [p.verdict] is a {!Survived} whose reaching tests are those of [reaching],
-      as sets, and {!effort_covers} [`Survived] holds. The compared tests are
-      [reaching].
+    + [p.verdict] is a {!Killed} that names one test [t], [t] is in [reaching],
+      the {!prefix_digest} of [through t reaching] is [p.prefix], and
+      {!effort_covers} [`Killed] holds for [~judged:p.effort ~asked:effort]. The
+      compared tests are [through t reaching]. A kill that names several tests
+      is not reused. Or [p.verdict] is a {!Survived} whose reaching tests are
+      those of [reaching], as sets, and {!effort_covers} [`Survived] holds. The
+      compared tests are [reaching].
     + For each compared test [t], [recorded t] is [Some d] and [digest t] is
       [Some d].
 

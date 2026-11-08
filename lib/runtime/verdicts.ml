@@ -144,8 +144,7 @@ let record_of_mutant ~effort ?prefix (m : Mutate.mutant) verdict =
     verdict;
     previous = None;
     effort;
-    prefix =
-      (if names_a_test verdict then Option.map prefix_digest prefix else None);
+    prefix = Option.map prefix_digest prefix;
     reused = false;
   }
 
@@ -182,19 +181,17 @@ let combine a b =
     | None, p | p, None -> p
     | Some x, Some y -> Some (if outcome_rank x >= outcome_rank y then x else y)
   in
-  (* The effort, the prefix and the mark come from the records of the higher
-     rank: the smallest effort and prefix, and the mark only when each of
-     them has it. *)
-  let top =
+  (* The effort, the prefix and the mark come from the record of the higher
+     rank. Of two records of one rank, the smaller effort and prefix, and the
+     mark only when the two have it. *)
+  let effort, prefix, reused =
     match Int.compare (rank a.verdict) (rank b.verdict) with
-    | 0 -> [ a; b ]
-    | c when c > 0 -> [ a ]
-    | _ -> [ b ]
-  in
-  let effort, prefix =
-    List.fold_left min
-      ((List.hd top).effort, (List.hd top).prefix)
-      (List.map (fun r -> (r.effort, r.prefix)) top)
+    | 0 ->
+        let effort, prefix = min (a.effort, a.prefix) (b.effort, b.prefix) in
+        (effort, prefix, a.reused && b.reused)
+    | c ->
+        let r = if c > 0 then a else b in
+        (r.effort, r.prefix, r.reused)
   in
   {
     kept with
@@ -202,10 +199,9 @@ let combine a b =
     previous;
     effort;
     prefix;
-    reused = List.for_all (fun r -> r.reused) top;
+    reused;
   }
 
-(* A record whose verdict changed keeps no prefix of an earlier kill. *)
 let add t r =
   let r =
     match r.verdict with
@@ -215,6 +211,7 @@ let add t r =
       ->
         r
   in
+  (* Only a kill that names a test has a prefix. *)
   let r = if names_a_test r.verdict then r else { r with prefix = None } in
   Id_map.update r.id
     (function None -> Some r | Some prior -> Some (combine prior r))
@@ -300,22 +297,18 @@ module Test_map = Map.Make (struct
   let compare = compare_test
 end)
 
-let recorded_digest f =
-  let digests =
+let lookup digests =
+  let map =
     List.fold_left
       (fun map (test, digest) -> Test_map.add test digest map)
-      Test_map.empty f.test_digests
+      Test_map.empty digests
   in
-  fun test -> Test_map.find_opt test digests
+  fun test -> Test_map.find_opt test map
 
-(* The shortest prefix of [paths] that holds each test of [by]. *)
-let rec holding by acc = function
-  | _ when by = [] -> Some (List.rev acc)
-  | [] -> None
+let rec through test = function
+  | [] -> []
   | path :: paths ->
-      holding
-        (List.filter (fun test -> not (equal_test test path)) by)
-        (path :: acc) paths
+      if equal_test path test then [ path ] else path :: through test paths
 
 let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
   let unchanged test =
@@ -332,11 +325,11 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
   in
   let compared (p : record) =
     match p.verdict with
-    | Killed { by = _ :: _ as by }
-      when effort_covers `Killed ~judged:p.effort ~asked:effort -> (
-        match holding by [] reaching with
-        | Some prefix when p.prefix = Some (prefix_digest prefix) -> Some prefix
-        | Some _ | None -> None)
+    | Killed { by = [ test ] }
+      when List.exists (equal_test test) reaching
+           && effort_covers `Killed ~judged:p.effort ~asked:effort ->
+        let prefix = through test reaching in
+        if p.prefix = Some (prefix_digest prefix) then Some prefix else None
     | Survived { first; others }
       when effort_covers `Survived ~judged:p.effort ~asked:effort
            && List.equal equal_test (first :: others)
@@ -385,9 +378,9 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
    [<pass>] are numbers, [<pass>] from 1 to [<retries>] + 1. [<digest>] and
    [<settings>] are 32 lowercase hexadecimal digits, and so is [<prefix>],
    or [none]. Only a kill that names a test has a prefix. [<mark>] is
-   [fresh], or [reused] on a survivor or on a kill that names a test.
-   [load] reads this grammar and nothing else, and refuses a rewrite outside [Mutate.rewrites],
-   which no report could render. *)
+   [fresh], or [reused] on a survivor or on a kill that names a test. [load]
+   reads this grammar and nothing else, and refuses a rewrite outside
+   [Mutate.rewrites], which no report could render. *)
 let load path =
   let read_test c =
     List.init (Instr.read_count c "test path length") (fun _ ->

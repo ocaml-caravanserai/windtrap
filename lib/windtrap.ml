@@ -149,10 +149,6 @@ let chdir = Run.chdir
 
 (* Running *)
 
-(* A tree with no release reports "dev". *)
-let release = Cli.release
-let version = Option.value release ~default:"dev"
-
 (* Under dune, where [dune runtest] and [dune exec] both set [INSIDE_DUNE],
    the command is a [dune exec] of this executable. An executable with
    mutants was built with the mutation backend, and a [dune exec] without
@@ -279,7 +275,7 @@ let run_parent ~argv suite tests =
       Printf.printf "%s%!" (Cli.help ~prog);
       0
   | Ok { Cli.version = true; _ } ->
-      Printf.printf "windtrap %s\n%!" version;
+      Printf.printf "windtrap %s\n%!" Cli.version;
       0
   | Ok parsed -> (
       match Cli.settings parsed with
@@ -302,7 +298,7 @@ let run ?(argv = Sys.argv) suite tests =
 (* Private *)
 
 module Private = struct
-  let version = release
+  let version = Cli.release
 
   module Baseline = Baseline
   module Capture = Capture
