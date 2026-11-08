@@ -167,6 +167,11 @@ type config = {
       (** [--mutate-retry]: under {!Loop}, the job of a mutant that survived
           runs again, each time in a fresh worker, up to this many more times.
           [0] runs each job once. *)
+  mutate_memory : int;
+      (** [--mutate-memory]: under {!Loop}, the limit of the resident memory of
+          each worker of a mutant, in MB, from 1 to 1048576. On Linux, the loop
+          kills a worker above the limit ({!Supervisor.fresh}). Default [1024].
+      *)
   github : bool;
       (** Whether the report is written for GitHub Actions, with its group and
           its annotations (see {!Report}). *)

@@ -520,7 +520,10 @@ let memory_of_status text =
   | Some resident_kb, Some peak_kb -> Some { resident_kb; peak_kb }
   | _ -> None
 
-let memory () =
-  match In_channel.with_open_bin "/proc/self/status" In_channel.input_all with
+let memory_at path =
+  match In_channel.with_open_bin path In_channel.input_all with
   | text -> memory_of_status text
   | exception Sys_error _ -> None
+
+let memory () = memory_at "/proc/self/status"
+let memory_of_pid pid = memory_at (Printf.sprintf "/proc/%d/status" pid)

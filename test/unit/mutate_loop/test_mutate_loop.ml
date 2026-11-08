@@ -1195,6 +1195,84 @@ let deadline_kill () =
        ])
     (rows b.run)
 
+let need_proc () =
+  if not (Sys.file_exists "/proc/self/status") then
+    skip ~reason:"the limit reads /proc/<pid>/status" ()
+
+let hog_run args =
+  need_proc ();
+  remove (verdicts_path ());
+  finish_within ~what:"the hog's run"
+    (start ~env:[ suite "hog" ] (mutate :: args))
+
+(* Under the default limit, the 96 MB of the armed run stay, and only the
+   deadline ends it. *)
+let memory_default () =
+  let r = hog_run [] in
+  equal string "exited 0" r.status;
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 unknown: its run passed its deadline of <time>";
+         "subject.ml:18 unreached";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r)
+
+(* Each worker takes more than 1 MB, so the unarmed worker of the probe
+   passes the limit too. *)
+let memory_probe () =
+  need_proc ();
+  let r =
+    finish_within ~what:"the lasting run"
+      (start ~env:[ suite "lasting" ] [ mutate; "--mutate-memory=1" ])
+  in
+  equal string "exited 1" r.status;
+  contains
+    ~sub:
+      "the determinism probe's worker passed the memory limit of 1 MB, which \
+       the dry run does not have. Raise the limit with --mutate-memory or \
+       WINDTRAP_MUTATE_MEMORY"
+    r.err
+
+let memory_limit () =
+  let r = hog_run [ "--mutate-memory=64" ] in
+  equal string "exited 0" r.status;
+  equal text "" r.err;
+  equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+    (outcome r.out);
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 unknown: its run passed its memory limit of 64 MB";
+         "subject.ml:18 unreached";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r)
+
+let memory_reports () =
+  need_proc ();
+  remove (verdicts_path ());
+  let r =
+    finish_within ~what:"the streaming run"
+      (start ~env:[ suite "streaming" ] [ mutate; "--mutate-memory=64" ])
+  in
+  equal string "exited 0" r.status;
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 unknown: its run passed its memory limit of 64 MB";
+         "subject.ml:18 unreached";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r)
+
 (* The sleep runs armed and unarmed alike, so the dry run prices it into
    the deadline; the verdict, not a stopwatch, says whether the clock
    ended the child. *)
@@ -1260,6 +1338,14 @@ let limits =
       test "a mutant that never terminates is killed by its hit budget" runaway;
       test "a mutant whose run hangs is unknown at its job's deadline"
         deadline_kill;
+      test "a mutant whose worker passes its memory limit is unknown"
+        memory_limit;
+      test "under the default memory limit, the deadline ends a run of 96 MB"
+        memory_default;
+      test "a probe whose worker passes the memory limit refuses the run"
+        memory_probe;
+      test "a worker that reports at each turn passes its memory limit"
+        memory_reports;
       test "a child's deadline is at least one second" (fun () ->
           let b = Lazy.force blocked in
           equal string "exited 0" b.run.status;

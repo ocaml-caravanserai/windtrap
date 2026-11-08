@@ -1168,7 +1168,7 @@ type job = {
   alone : bool;
 }
 
-type ended = Ran | Lost of string | Expired
+type ended = Ran | Lost of string | Expired | Outgrown of int
 
 type ran = {
   results : Run.result list;
@@ -1197,6 +1197,7 @@ type state = {
   mutable witnessed : bool;
   mutable restarted : Os.counter option; (* a new start, until it serves *)
   mutable left_out : float; (* the seconds left out for the new starts *)
+  mutable memory_read : Os.counter; (* the last read of its memory *)
 }
 
 let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
@@ -1259,6 +1260,7 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
           witnessed = true;
           restarted = None;
           left_out = 0.;
+          memory_read = Os.counter ();
         }
       in
       incr next;
@@ -1331,10 +1333,29 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
     | Unwitnessed -> st.witnessed <- false
     | Report (Event _ | Judge _) | Counts _ | Pool _ -> ()
   in
-  let expired st =
+  let cut st ended =
     kill st.w;
     ignore (reap st.w);
-    settle st Expired
+    settle st ended
+  in
+  (* The memory of a worker is read at most once each [memory_step]
+     seconds, and the read waits while the worker has a report to read. A
+     worker that finishes its job is not stopped: its deadline bounds it. *)
+  let memory_step = 0.25 in
+  let limit_kb = config.mutate_memory * 1024 in
+  let over_limit st =
+    st.memory_read <- Os.counter ();
+    match Os.memory_of_pid st.w.pid with
+    | Some m -> m.resident_kb > limit_kb
+    | None -> false
+  in
+  let outgrown st =
+    Os.count_s st.memory_read >= memory_step
+    && (not (st.finishing && st.pending = []))
+    && (match Unix.select [ st.w.reports ] [] [] 0. with
+      | [], _, _ -> true
+      | _ :: _, _, _ | (exception Unix.Unix_error _) -> false)
+    && over_limit st
   in
   let rec deliver () =
     if !delivered < n then
@@ -1374,7 +1395,7 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
               (* A new start is checked once a step until it serves. *)
               if Option.is_some st.restarted then acc
               else Float.min acc (Float.max 0. (remaining st)))
-            1. running'
+            memory_step running'
         in
         let ready =
           match
@@ -1386,12 +1407,18 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
         List.iter
           (fun st ->
             if Option.is_none !signal then
-              if remaining st <= 0. then expired st
-              else if List.mem st.w.reports ready then handle st
-              else if ready = [] then
-                match reap ~flags:[ Unix.WNOHANG ] st.w with
-                | Some _ -> dead st
-                | None -> ())
+              if remaining st <= 0. then cut st Expired
+              else begin
+                let reported = List.mem st.w.reports ready in
+                if reported then handle st;
+                (* A worker that reports at each turn gets its read too. *)
+                if List.memq st !running && outgrown st then
+                  cut st (Outgrown config.mutate_memory)
+                else if ready = [] then
+                  match reap ~flags:[ Unix.WNOHANG ] st.w with
+                  | Some _ -> dead st
+                  | None -> ()
+              end)
           running';
         loop ()
   in

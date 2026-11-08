@@ -192,6 +192,42 @@ let hang () =
   let never_written, _held_open = Unix.pipe () in
   ignore (Unix.read never_written (Bytes.create 1) 0 1)
 
+(* Touches 96 MB when [sub]'s answer changes, then waits as [hang] does,
+   so only the memory limit or the deadline ends the run. *)
+let hog =
+  [
+    test "fills memory when sub changes" (fun () ->
+        if Subject.sub 10 4 <> 6 then begin
+          let chunks =
+            List.init 12 (fun _ -> Bytes.make (8 * 1024 * 1024) 'x')
+          in
+          ignore (Sys.opaque_identity chunks);
+          hang ()
+        end;
+        is_true (Subject.sub 10 4 < 100));
+  ]
+
+(* The test lives for more than two memory reads of the parent, armed or
+   not, so the read of the probe's worker comes before its end. *)
+let lasting =
+  [
+    test "sleeps past two memory reads" (fun () ->
+        Unix.sleepf 0.6;
+        is_true (Subject.sub 10 4 < 100));
+  ]
+
+(* Under the mutant, each test keeps 8 MB, and the worker reports more
+   often than the parent reads its memory. *)
+let kept = ref []
+
+let streaming =
+  List.init 40 (fun i ->
+      test (Printf.sprintf "keeps memory %d" i) (fun () ->
+          if Subject.sub 10 4 <> 6 then
+            kept := Bytes.make (8 * 1024 * 1024) 'x' :: !kept;
+          Unix.sleepf 0.05;
+          is_true (Subject.sub 10 4 < 100)))
+
 let block =
   [
     test "watches sub without pinning it" (fun () ->
@@ -813,6 +849,9 @@ let () =
         (Windtrap_runtime.Mutate.catalogue ())
   | "weak" -> exit @@ run "calc" [ group "widen" weak ]
   | "block" -> exit @@ run "calc" [ group "block" block ]
+  | "hog" -> exit @@ run "calc" [ group "hog" hog ]
+  | "lasting" -> exit @@ run "calc" [ group "lasting" lasting ]
+  | "streaming" -> exit @@ run "calc" [ group "streaming" streaming ]
   | "held" -> exit @@ run "calc" [ group "held" held ]
   | "interrupted" -> exit @@ run "calc" [ group "held" interrupted ]
   | "pinned" ->

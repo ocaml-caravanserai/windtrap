@@ -108,8 +108,9 @@ type error =
   | Requires_any of string * string list
       (** The command line gave the flag, which acts only with one of the
           others, and no layer gave any of them:
-          [("--mutate-workers", ["--mutate"; "--arm"])] or
-          [("--mutate-retry", ["--mutate"])]. *)
+          [("--mutate-workers", ["--mutate"; "--arm"])],
+          [("--mutate-retry", ["--mutate"])] or
+          [("--mutate-memory", ["--mutate"])]. *)
 
 val error_message : error -> string
 (** [error_message error] is one sentence on [error] for a user, which names the
@@ -172,6 +173,10 @@ val settings : parsed -> (Run.config, error) result
       [--mutate], and [0] otherwise. [--mutate-retry] from the command line
       without [--mutate] is [Error (Requires_any _)]. From its mirror alone it
       is ignored.
+    - [mutate_memory] is the layers' [--mutate-memory] when a layer gives
+      [--mutate], and the default otherwise. [--mutate-memory] from the command
+      line without [--mutate] is [Error (Requires_any _)]. From its mirror alone
+      it is ignored.
     - A relative path of [--junit], [--json] or [-o] is made absolute, against
       the working directory when the command line gives it and against
       {!Os.project_root} when its mirror does. It is kept as given when that

@@ -92,7 +92,8 @@ val execute_and_report :
     before it has another cause, and the job does not stop there. It is
     {!Windtrap_runtime.Verdicts.Unknown} when its job ended before its tests
     did: its worker was killed by a signal or exited, code under test calling
-    [exit] included, or it passed its deadline. Otherwise it is
+    [exit] included, or it passed its deadline or its memory limit
+    ([config.mutate_memory]). Otherwise it is
     {!Windtrap_runtime.Verdicts.Not_evaluated} when its job did not evaluate the
     armed site, as when the dry run reached the site in a test only because of
     what an earlier test had done, and survived when it did. The report lists a
@@ -174,12 +175,12 @@ val execute_and_report :
     no mutant and kills none. The dry run and the probe run it, no mutant's job
     runs it, and no survivor names it.
 
-    {b Limits.} Nothing bounds a whole run. A job that passes its deadline has
-    its process group killed, and the loop goes on. The deadline is the time
-    that the dry run took, read on the monotonic clock ({!Os.val-counter}), plus
-    a share for the tests of the job. The share is ten times
-    ([deadline_multiplier]) what the dry run measured for those tests, and at
-    least one second. The probe's tests are every executed test. A worker
+    {b Limits.} Nothing bounds a whole run. A job that passes its deadline or
+    its memory limit has its process group killed, and the loop goes on. The
+    deadline is the time that the dry run took, read on the monotonic clock
+    ({!Os.val-counter}), plus a share for the tests of the job. The share is ten
+    times ([deadline_multiplier]) what the dry run measured for those tests, and
+    at least one second. The probe's tests are every executed test. A worker
     retires after a test that spawned a domain, and a new worker runs the rest
     of the job. Its start, up to the end of its module initialization, does not
     count toward the deadline.
@@ -248,7 +249,8 @@ val execute_and_report :
       site of a file of the catalogue that they name. The loop then says so on
       standard error and is [Ok] of its dry run, with no verdict file.
     - The probe disagrees with the dry run, and the sentence names the tests
-      that failed in it, or its worker ended early or passed its deadline. *)
+      that failed in it, or its worker ended early or passed its deadline or its
+      memory limit. *)
 
 (** {1:armed The armed run}
 

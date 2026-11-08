@@ -53,6 +53,7 @@ type config = {
   mutation : mutation;
   mutate_workers : bool;
   mutate_retry : int;
+  mutate_memory : int;
   github : bool;
   invocation : invocation;
   broadcast : broadcast;
@@ -88,6 +89,7 @@ let default_config () =
     mutation = No_mutation;
     mutate_workers = false;
     mutate_retry = 0;
+    mutate_memory = 1024;
     github = false;
     invocation = `Mirrors;
     broadcast = not_broadcast;

@@ -374,3 +374,8 @@ val memory : unit -> memory option
 (** [memory ()] is {!memory_of_status} of [/proc/self/status], or [None] when
     the file cannot be read, for example on a system without [/proc]. It does
     not raise and does not print. *)
+
+val memory_of_pid : int -> memory option
+(** [memory_of_pid pid] is {!memory_of_status} of [/proc/<pid>/status], or
+    [None] when the file cannot be read, for example on a system without [/proc]
+    or when the process ended. It does not raise and does not print. *)
