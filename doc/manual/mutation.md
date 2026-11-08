@@ -973,6 +973,50 @@ $ dune exec windtrap -- mutants --json --lines=calc.ml:10
   "unstable": [ ] }
 ```
 
+## Exporting SARIF
+
+`--sarif` prints the merge as one SARIF 2.1.0 document on standard
+output, in place of the report. GitHub code scanning and the SARIF
+viewer of VS Code read this format:
+
+```
+$ dune exec windtrap -- mutants --sarif > mutants.sarif
+```
+
+Each mutant gives one result or none:
+
+- A survivor gives a warning. Its message gives the original and the
+  mutated expression, and the number of tests that ran the line.
+- An unknown mutant gives a note with the reason of the report. When
+  `--crash-kills` counts the mutant as killed, it gives no result.
+- A mutant that was not evaluated gives a note.
+- A killed mutant, a never reached mutant and a mutant evaluated
+  outside tests give no result. The mutants of a suite that was not
+  mutation-tested give no result.
+
+Each result has a rule, which is the rewrite of the mutant, and the
+location of the mutated expression. A column counts Unicode code
+points. When the command cannot read the source of the file, the
+location gives only the lines. The options act as they do for `--json`.
+`--lines` and `--diff` keep the mutants on their lines. Under a gate,
+the outcome line goes to standard error, and the exit code is that of
+the gates.
+
+This GitHub Actions job uploads the document to code scanning:
+
+```yaml
+- run: dune exec windtrap -- mutants --sarif > mutants.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: mutants.sarif
+```
+
+The command exits 1 when a mutant survives. Thus give the first step
+`continue-on-error: true`, or give a gate that the project meets. The
+upload job must have the `security-events: write` permission. On a
+private repository, the upload probably also needs GitHub Code
+Security. We did not do a test of this.
+
 ## Killing a survivor
 
 A survivor names a behaviour no test checks. To kill the three survivors
@@ -1196,6 +1240,10 @@ OPTIONS:
 
   --json
       Machine-readable report on standard output.
+
+  --sarif
+      SARIF 2.1.0 document of the survivors, the unknown and the not
+      evaluated mutants on standard output, for code scanning.
 
   --lines=FILE:A-B,...
       Report only the mutants on these lines of these files.

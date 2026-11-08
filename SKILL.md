@@ -462,7 +462,8 @@ reached mutants. `--min-total PCT` gates on the total, the percentage
 of killed mutants among all mutants that count. `--max-survivors N`
 gates on the number of survivors. `--crash-kills` counts a mutant whose
 run passed its deadline, crashed or passed its memory limit as killed,
-as PIT does. `--json` gives each verdict to other tools.
+as PIT does. `--json` gives each verdict to other tools. `--sarif`
+gives the survivors to GitHub code scanning.
 
 `--skip-killed` (`WINDTRAP_SKIP_KILLED=1`) skips a mutant that another
 suite already killed. It reads only the verdict files on disk, so run
