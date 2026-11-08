@@ -55,11 +55,12 @@ what is non-obvious.
   build paths, the atomic write); and `test_verdicts`, the verdict
   lattice and the verdict file. `mutate_loop/` drives the mutant loop
   through a real spawned process (a loop that starts a worker per mutant
-  cannot be observed from inside its own image), with `plain_main.exe` as the zero-mutant
-  control that must be declined by name, `runaway/` for the hit-count
-  budget and `inline/` for an armed inline partition. Its scenarios
-  share the verdict file of `suite_main.exe`, so the stanza runs `-j 1`,
-  whatever `WINDTRAP_JOBS` the environment holds.
+  cannot be observed from inside its own image), with `plain_main.exe`
+  as the zero-mutant control that must be declined by name, `runaway/`
+  for the hit-count budget of a recursion and of a loop body, and
+  `inline/` for an armed inline partition. Its scenarios share the
+  verdict file of `suite_main.exe`, so the stanza runs `-j 1`, whatever
+  `WINDTRAP_JOBS` the environment holds.
   The scenarios of `--skip-killed` copy `suite_main.exe` into a scratch
   build directory, and put the verdict files of other suites beside its
   file there. The scenarios of unstable verdicts run the loop two times

@@ -1,5 +1,6 @@
 (* [del]: the statement [e1] of [e1; e2] does not run. [()], an [assert]
-   and the value of a sequence are no statement it drops. *)
+   and the value of a sequence outside a unit position are no statement
+   that it drops. fixture_del_units.ml has the unit positions. *)
 
 let log = ref []
 

@@ -858,46 +858,66 @@ dune builds for a stanza naming both backends:
 
   $ ../pp.exe -apply windtrap_mutate,windtrap_coverage --impl ./fixture_guards.ml | ../elide.exe
   coverage points of "./fixture_guards.ml" in Windtrap_cov_________fixture_guards___ml, with ___windtrap_post_visit___:
-    0: 456-461
-    1: 467-468
-    2: 474-475
-    3: 453-475
-    4: 490-495
-    5: 746-747
-    6: 679-698
-    7: 703-729
-    8: 734-756
-    9: 761-773
-    10: 662-773
-    11: 807-808
-    12: 814-819
-    13: 792-819
-    14: 959-967
-    15: 959-967
-    16: 942-974
-    17: 1008-1011
-    18: 993-1012
-    19: 1143-1144
-    20: 1391-1396
-    21: 1386-1396
-    22: 1417-1420
-    23: 1424-1428
+    0: 852-857
+    1: 863-864
+    2: 870-871
+    3: 849-871
+    4: 886-891
+    5: 1142-1143
+    6: 1075-1094
+    7: 1099-1125
+    8: 1130-1152
+    9: 1157-1169
+    10: 1058-1169
+    11: 1203-1204
+    12: 1210-1215
+    13: 1188-1215
+    14: 1355-1363
+    15: 1355-1363
+    16: 1338-1370
+    17: 1404-1407
+    18: 1389-1408
+    19: 1539-1540
+    20: 1787-1792
+    21: 1782-1792
+    22: 1813-1816
+    23: 1820-1824
+    24: 2116-2119
+    25: 2116-2126
+    26: 2167-2174
+    27: 2167-2174
+    28: 2150-2179
+    29: 2220-2223
+    30: 2220-2223
+    31: 2200-2228
+    32: 2436-2442
+    33: 2424-2430
+    34: 2418-2443
+    35: 2408-2443
   mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands:
-    0: 9:34-9:35 "int" "0" -> "1"
-    1: 9:27-9:28 "int" "1" -> "0"
-    2: 9:16-9:21 "le" "a < b" -> "a <= b"
-    3: 10:14-10:19 "sub" "a + b" -> "a - b"
-    4: 16:11-16:14 "not" "p x" -> "not (p x)"
-    5: 17:11-17:16 "neq" "a = b" -> "a <> b"
-    6: 18:11-18:17 "or" "a && b" -> "a || b"
-    7: 21:39-21:44 "bool" "false" -> "true"
-    8: 21:27-21:33 "or" "a && b" -> "a || b"
-    9: 21:20-21:21 "not" "c" -> "not c"
-    10: 26:8-26:11 "not" "f x" -> "not (f x)"
-    11: 30:24-30:36 "or" "(f x) && (g x)" -> "(f x) || (g x)"
-    12: 34:17-34:23 "and" "a || b" -> "a && b"
-    13: 39:15-39:25 "none" "Some (f x)" -> "None"
-    14: 40:20-40:31 "tail" "(f x) :: (g xs)" -> "g xs"
+    0: 14:34-14:35 "int" "0" -> "1"
+    1: 14:27-14:28 "int" "1" -> "0"
+    2: 14:16-14:21 "le" "a < b" -> "a <= b"
+    3: 15:14-15:19 "sub" "a + b" -> "a - b"
+    4: 21:11-21:14 "not" "p x" -> "not (p x)"
+    5: 22:11-22:16 "neq" "a = b" -> "a <> b"
+    6: 23:11-23:17 "or" "a && b" -> "a || b"
+    7: 26:39-26:44 "bool" "false" -> "true"
+    8: 26:27-26:33 "or" "a && b" -> "a || b"
+    9: 26:20-26:21 "not" "c" -> "not c"
+    10: 32:4-32:12 "del" "loop f x" -> "()"
+    11: 31:8-31:11 "not" "f x" -> "not (f x)"
+    12: 35:24-35:36 "or" "(f x) && (g x)" -> "(f x) || (g x)"
+    13: 39:17-39:23 "and" "a || b" -> "a && b"
+    14: 44:15-44:25 "none" "Some (f x)" -> "None"
+    15: 45:20-45:31 "tail" "(f x) :: (g xs)" -> "g xs"
+    16: 52:2-52:5 "del" "f x" -> "()"
+    17: 55:39-55:46 "del" "step ()" -> "()"
+    18: 55:28-55:35 "not" "more ()" -> "not (more ())"
+    19: 56:40-56:43 "del" "f i" -> "()"
+    20: 62:4-62:10 "del" "step a" -> "()"
+    21: 63:4-63:10 "del" "step b" -> "()"
+    22: 61:5-61:6 "not" "c" -> "not c"
   let lt a b =
     ___windtrap_visit___ 3;
     if
@@ -961,44 +981,103 @@ dune builds for a stanza naming both backends:
   let rec loop f x =
     ___windtrap_visit___ 16;
     while
-      (let __windtrap_mut_10_p = f x in
-       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 10
-       then Stdlib.not __windtrap_mut_10_p
-       else __windtrap_mut_10_p)
-      do (___windtrap_visit___ 15; ___windtrap_post_visit___ 14 (loop f x))
+      (let __windtrap_mut_11_p = f x in
+       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 11
+       then Stdlib.not __windtrap_mut_11_p
+       else __windtrap_mut_11_p)
+      do
+      (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 10
+       then ((())[@ocaml.warning "-41-42"])
+       else
+         (___windtrap_visit___ 15;
+          ___windtrap_post_visit___ 14 (loop f x);
+          ((())
+          [@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
       done
   let left f g x =
     ___windtrap_visit___ 18;
     ignore
-      (let __windtrap_mut_11_p = f x in
+      (let __windtrap_mut_12_p = f x in
        if
-         Stdlib.(<>) (__windtrap_mut_11_p : Stdlib.Bool.t)
-           (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 11)
+         Stdlib.(<>) (__windtrap_mut_12_p : Stdlib.Bool.t)
+           (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 12)
        then (___windtrap_visit___ 17; ___windtrap_post_visit___ 17 (g x))
-       else __windtrap_mut_11_p)
+       else __windtrap_mut_12_p)
   let either a b =
-    let __windtrap_mut_12_p = a in
+    let __windtrap_mut_13_p = a in
     if
-      Stdlib.(=) (__windtrap_mut_12_p : Stdlib.Bool.t)
-        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 12)
+      Stdlib.(=) (__windtrap_mut_13_p : Stdlib.Bool.t)
+        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 13)
     then (___windtrap_visit___ 19; b)
-    else __windtrap_mut_12_p
+    else __windtrap_mut_13_p
   let wrap f x =
     if
       Stdlib.not
-        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 13)
+        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 14)
     then (___windtrap_visit___ 21; Some (___windtrap_post_visit___ 20 (f x)))
     else ((None)[@ocaml.warning "-18-41-42"])
   let push f g x xs =
     if
       Stdlib.not
-        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 14)
+        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 15)
     then
       (___windtrap_visit___ 22;
        (___windtrap_post_visit___ 22 (f x))
        ::
        (___windtrap_post_visit___ 23 (g xs)))
     else g xs
+  let twice f x =
+    ___windtrap_visit___ 25;
+    (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 16
+     then ((())[@ocaml.warning "-41-42"])
+     else (___windtrap_post_visit___ 24 (f x); ((())[@ocaml.warning "-41-42"])) : 
+    Stdlib.Unit.t);
+    f x
+  let drain more step =
+    ___windtrap_visit___ 28;
+    while
+      (let __windtrap_mut_18_p = more () in
+       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 18
+       then Stdlib.not __windtrap_mut_18_p
+       else __windtrap_mut_18_p)
+      do
+      (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 17
+       then ((())[@ocaml.warning "-41-42"])
+       else
+         (___windtrap_visit___ 27;
+          ___windtrap_post_visit___ 26 (step ());
+          ((())
+          [@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
+      done
+  let count f lo hi =
+    ___windtrap_visit___ 31;
+    for i = lo to hi do
+      (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 19
+       then ((())[@ocaml.warning "-41-42"])
+       else
+         (___windtrap_visit___ 30;
+          ___windtrap_post_visit___ 29 (f i);
+          ((())
+          [@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
+    done
+  let both_steps step a b c =
+    ___windtrap_visit___ 35;
+    if
+      (let __windtrap_mut_22_p = c in
+       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 22
+       then Stdlib.not __windtrap_mut_22_p
+       else __windtrap_mut_22_p)
+    then
+      (___windtrap_visit___ 34;
+       (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 20
+        then ((())[@ocaml.warning "-41-42"])
+        else
+          (___windtrap_post_visit___ 33 (step a);
+           ((())
+           [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
+       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 21
+       then ((())[@ocaml.warning "-41-42"])
+       else (___windtrap_visit___ 32; step b))
 
 A file is instrumented under its own name, and returned as parsed under
 an input name that is not a source file's:

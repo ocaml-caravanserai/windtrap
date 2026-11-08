@@ -1215,8 +1215,15 @@ identifier names the rewrite:
 - `&&` becomes `||` (`or`), and `||` becomes `&&` (`and`).
 - `+` becomes `-` (`sub`) and `-` becomes `+` (`add`); `+.` and `-.`
   swap likewise (`fsub`, `fadd`).
-- `del` drops a statement: `e1` in `e1; e2` does not run. It asks
-  whether a test observes what the statement does.
+- `del` drops a statement, and the statement does not run. A statement
+  is `e1` in `e1; e2`, the branch `e` of `if c then e` with no `else`,
+  or the body of a `while` or a `for` loop. In such a branch or body,
+  the last statement of a sequence is a statement too. `del` asks if a
+  test observes what the statement does. A `while` loop can loop
+  forever when a statement of its body does not run. Then the run
+  evaluates the site more than `hits * 8 + 1000` times, the test fails,
+  and the mutant is killed
+  (see [What a mutation run runs](#what-a-mutation-run-runs)).
 - `int` nudges an integer literal by one: `1` becomes `0`, and any other
   `n` becomes `n + 1`, in the type of its suffix.
 - `bool` flips `true` or `false`, outside a condition and the operands
@@ -1275,10 +1282,14 @@ These two rules read `f x`, `f @@ x`, `x |> f`, `Printf.ksprintf f` and
 when `f` is a name. Thus the message of `Logs.err ~src @@ fun m -> ...`
 keeps its mutants, and that of `Logs.err ~src (fun m -> ...)` does not.
 
-A statement in these arguments keeps its mutants, because it acts on the
-state of the program. In `a + b + 0` the outermost `+` has no mutant, so
-`a + b` carries the mutant of the chain. A `[@mutate off]` on such a
-site records it as dismissed, as on any other site.
+In these arguments, a statement is `e1` in `e1; e2` or the `e` of
+`let () = e in`. It keeps its mutants and the sites in it, because it
+acts on the state of the program. Outside such a statement, a
+then-branch with no `else` and a loop body give no `del` site. The rule
+of the message applies to their sites. In `a + b + 0` the outermost `+`
+has no mutant, so `a + b` carries the mutant of the chain. A
+`[@mutate off]` on such a site records it as dismissed, as on any other
+site.
 
 A comparison outside a condition, as in `let ok = a < b`, carries no
 mutant, and neither does an `assert`. In a chain of one operator, as

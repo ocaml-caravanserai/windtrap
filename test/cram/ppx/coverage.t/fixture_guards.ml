@@ -1,7 +1,12 @@
 (* The coverage rewriter over a file that holds the mutation rewriter's guards.
    A guard is generated code and takes no mark: every node of a guard is
    ghost but its disarmed arm, which keeps its site's location, so that arm
-   alone is marked. *)
+   alone is marked. The disarmed arm of the [del] guard of a statement or
+   a loop body is [e; ()]: [e] keeps its location, and [()] has a location
+   at the end of [e], where the coverage rewriter keys the out-edge of [e].
+   The arm [e; ()] is ghost on a statement and has the location of [e] on
+   a loop body. ppx/mutate/instrument.mli lists the points that differ
+   from those of the coverage rewriter alone. *)
 
 (* The disarmed arm of an ordering or [ari] guard is marked as the branch of
    an [if], whether or not the site is a block: [a < b] is a condition, and
@@ -38,3 +43,21 @@ let either a b = a || b
    guard is a copy of the tail with ghost locations, which has no point. *)
 let wrap f x = Some (f x)
 let push f g x xs = f x :: g xs
+
+(* A statement keeps its out-edge, and a loop body keeps its entry point and
+   its out-edge. In [count], the callee [f] has one byte. The coverage
+   rewriter alone gives one point to the entry point and the out-edge of the
+   loop body, but here they are two points. *)
+let twice f x =
+  f x;
+  f x
+
+let drain more step = while more () do step () done
+let count f lo hi = for i = lo to hi do f i done
+
+(* The guard of [step b] is an [if] with an [else], and its disarmed arm
+   [step b] has a point that the coverage rewriter alone does not give. *)
+let both_steps step a b c =
+  if c then (
+    step a;
+    step b)

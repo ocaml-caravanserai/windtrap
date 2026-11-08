@@ -3,7 +3,9 @@
    writes what an expect test reads, so its arguments keep their mutants.
    So does a function of another module, as [Log.debug], and the logging
    call itself as a statement. A statement in the arguments acts on the
-   state of the program, so it keeps its mutants. *)
+   state of the program, so it keeps its mutants. A then-branch with no
+   [else] and a loop body in the arguments are no statement, so they carry
+   no [del], and their sites are arid. *)
 
 let debug x = Logs.debug (fun m -> m "%d %a" (x + 1) Fmt.(option int) (Some x))
 let info x = Logs.info @@ fun m -> m "%d" (x - 1)
@@ -25,3 +27,11 @@ let counted y x =
       let () = incr y in
       m "%d" !y);
   !y + x
+
+let guarded c n = Logs.debug (fun m -> if c then m "%d" (n + 1))
+
+let looped n =
+  Logs.debug (fun m ->
+      for i = 1 to n do
+        m "%d" (i + 1)
+      done)

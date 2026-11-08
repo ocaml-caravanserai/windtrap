@@ -1,6 +1,6 @@
 (library
  (name mutate_loop_spinner)
- (modules spinner)
+ (modules spinner looper)
  (preprocess
   (pps ppx_windtrap.mutate)))
 
