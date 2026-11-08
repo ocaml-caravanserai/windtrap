@@ -992,18 +992,19 @@ Each mutant gives one result or none:
   result.
 - A mutant that was not evaluated gives a note.
 - A killed mutant, a mutant killed elsewhere, a never reached mutant and
-  a mutant evaluated outside tests give no result. A mutant gives no
-  result when only suites that were not mutation-tested hold it.
+  a mutant evaluated outside tests give no result. An unknown mutant
+  gives no result when only suites that were not mutation-tested hold it
+  as unknown.
 
 Each result has a rule, which is the rewrite of the mutant, and the
 location of the mutated expression. A column counts Unicode code points.
-When the command cannot read the source of the file, the location gives
-only the lines. A file path is relative to the root of the dune
-workspace. GitHub reads it relative to the root of the repository, so
-the two roots must be the same. The options act as they do for `--json`.
-`--lines` and `--diff` keep the mutants on their lines. Under a gate,
-the outcome line goes to standard error, and the exit code is that of
-the gates.
+When the command cannot read the source of the file, or the source has
+no such column, the location gives only the lines. A file path is
+relative to the root of the dune workspace. GitHub reads it relative to
+the root of the repository, so the two roots must be the same. The
+options act as they do for `--json`. `--lines` and `--diff` keep the
+mutants on their lines. Under a gate, the outcome line goes to standard
+error, and the exit code is that of the gates.
 
 This GitHub Actions job uploads the document to code scanning. The
 steps that build the project and run the mutation tests come before
@@ -1027,14 +1028,14 @@ mutants:
 ```
 
 Without a gate, the command exits 1 when a mutant survives or when a
-suite was not mutation-tested. Thus the first step has
-`continue-on-error: true`, so that the upload runs. Another way is to
-remove `continue-on-error` and to give the upload step
-`if: ${{ !cancelled() }}`. Then the job fails, but the upload occurs.
-The upload uses the `security-events: write` permission. On a
-private repository, it uses `actions: read` too. GitHub Code Security
-is probably also necessary on a private repository. We did not do a
-test of this.
+suite was not mutation-tested. With a gate, it exits 1 when a gate
+fails. Thus the `windtrap` step has `continue-on-error: true`, so that
+the upload runs. Another way is to remove `continue-on-error` and to
+give the upload step `if: ${{ !cancelled() }}`. Then the job fails, but
+the upload occurs. The upload uses the `security-events: write`
+permission. On a private repository, it uses `actions: read` too. GitHub
+Code Security is probably also necessary on a private repository. We did
+not do a test of this.
 
 ## Killing a survivor
 
@@ -1261,8 +1262,8 @@ OPTIONS:
       Machine-readable report on standard output.
 
   --sarif
-      SARIF 2.1.0 document of the survivors, the unknown and the not
-      evaluated mutants on standard output, for code scanning.
+      SARIF 2.1.0 document of the survivors, the unknown and the
+      not-evaluated mutants on standard output, for code scanning.
 
   --lines=FILE:A-B,...
       Report only the mutants on these lines of these files.

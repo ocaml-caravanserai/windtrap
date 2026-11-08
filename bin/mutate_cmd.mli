@@ -304,8 +304,8 @@
     - A mutant that was not evaluated, at the level [note].
 
     A killed mutant, a mutant killed elsewhere, a mutant that no test reached
-    and a mutant evaluated outside tests give no result. The mutants that only
-    refused files hold give no result either. The driver gives
+    and a mutant evaluated outside tests give no result. An unknown mutant that
+    only refused files hold as unknown gives no result either. The driver gives
     {!Windtrap.Private.version} when it is known.
     {!Windtrap.Private.Report_sarif} gives the fields of the document. *)
 

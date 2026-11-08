@@ -1289,13 +1289,13 @@ The SARIF document
 --sarif writes the merge as one SARIF 2.1.0 document on standard output.
 A survivor is a warning, and an unknown mutant and a mutant that was not
 evaluated are notes. A killed mutant, a mutant that no test reached and
-a mutant that only a refused suite holds give no result. The results
-keep the order of identifiers. A tree that dune subst did not substitute
-knows no version, but a release gives one in the driver, so the sarif
-function drops that line. A column counts code points, so the two
-characters before the mutant of text.ml count one each. The column of
-the mutant of the rewrite and is after the end of its line, so its region
-gives only the lines:
+a mutant that only a refused suite holds as unknown give no result. The
+results keep the order of identifiers. A tree that dune subst did not
+substitute knows no version. A release gives one in the driver, so the
+sarif function drops that line. A column counts code points, so the two
+multibyte characters before the mutant of text.ml count one each. The
+mutant of the rewrite "and" has a column after the end of its line, so
+its region gives only the lines:
 
   $ plant "$scratch/sarif" && cd "$scratch/sarif"
   $ printf 'let f x y = "\303\251\342\202\254" <> "" && x < y\n' > lib/text.ml
@@ -1964,8 +1964,8 @@ The command line
         Machine-readable report on standard output.
   
     --sarif
-        SARIF 2.1.0 document of the survivors, the unknown and the not
-        evaluated mutants on standard output, for code scanning.
+        SARIF 2.1.0 document of the survivors, the unknown and the
+        not-evaluated mutants on standard output, for code scanning.
   
     --lines=FILE:A-B,...
         Report only the mutants on these lines of these files.
