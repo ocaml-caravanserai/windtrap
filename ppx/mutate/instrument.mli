@@ -79,10 +79,18 @@
       short-circuit evaluation. The deprecated [&] and [or] are not sites.
     - [ari] swaps [+] and [-] under the names [sub] and [add], and [+.] and [-.]
       under [fsub] and [fadd].
-    - [del] drops a statement: [e1] in [e1; e2] does not run, under the name
-      [del]. The guard is [(if armed then () else (e1; ())); e2], which types
-      [e1] as the statement that it was. [()] and an [assert] are no statement
-      it drops, and neither is the value [e2] of a sequence.
+    - [del] drops a statement, under the name [del]: the statement does not run.
+      A statement is [e1] in [e1; e2], the branch [e] of [if c then e] with no
+      [else], the body of a [while] or a [for], and the last statement of a
+      sequence that is such a branch or body. In [e1; e2] the guard is
+      [(if armed then () else (e1; ())); e2], which types [e1] as the statement
+      that it was. A loop body takes the same form, because without
+      [-strict-sequence] its type can be other than [unit]. The guard of a
+      branch is [if c then (if armed then () else e)], which keeps [e] in tail
+      position. A branch or a loop body that is a sequence has no [del] of its
+      own, because the [del] of each of its statements covers it. [()] and an
+      [assert] are no statement that it drops, and neither is the value [e2] of
+      a sequence in another position.
     - [int] nudges an integer literal by one in the type that its suffix gives,
       under the name [int]: [1] becomes [0], and any other [n] becomes [n + 1].
       A literal whose nudge leaves its type, as [max_int], and a literal with a
@@ -180,7 +188,7 @@
     [Logs.err ~src (fun m -> ...)] does not. A statement in the arguments of a
     logging function, of [failwith] or of [invalid_arg] keeps its mutants, with
     the sites inside it. A statement acts on the state of the program. A
-    statement is the left operand of a sequence or the expression of
+    statement is a statement of [del], as [e1] in [e1; e2], or the expression of
     [let () = e in]. A logging call that is a statement keeps its own [del]
     mutant. These two rules do not see other effects, for example of a function
     that the message calls.
@@ -294,8 +302,8 @@
     are local to the file. That order is the traversal's and not the source's. A
     site comes before the sites inside its operands, and the operands of a
     mutated operator come left to right. The else branch of an [if] comes before
-    its then branch, and both before its condition, and the body of a [while]
-    comes before its condition.
+    its then branch, and both before its condition. The body of a [while] comes
+    before its condition, and the bounds of a [for] come before its body.
 
     The [before] and [after] texts of a site are printed from the parsetree and
     never cut out of the source. The attributes of the site are left out, and

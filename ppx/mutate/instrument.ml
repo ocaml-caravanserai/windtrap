@@ -238,7 +238,7 @@ type guard =
   | Literal of expression (* [int] and [bool], by this constant *)
   | Nothing (* [none] on [Some e] *)
   | Tail of expression (* [tail] on [h :: t], with [t] *)
-  | Delete (* [del], whose guard [descend] builds *)
+  | Delete (* [del], whose guard [dropped] builds *)
 
 and operator_guard =
   | Negate (* [cmp] on an equality *)
@@ -683,6 +683,13 @@ let is_opaque e =
   | Pexp_lazy body -> is_trivial_syntactic_value body
   | _ -> false
 
+(* How [del] drops a statement [e]. [In_tail] is [if armed then () else e],
+   which keeps [e] in the tail position of an [if] with no [else], so a tail
+   call in [e] stays a tail call. [As_statement] is
+   [if armed then () else (e; ())], where [e; ()] types [e] as the statement
+   that it was: a loop body can have a type other than [unit]. *)
+type drop = In_tail | As_statement
+
 type site = {
   line : int;
   col : int;
@@ -870,9 +877,10 @@ class instrumenter ~keeps ~module_name =
        operator: a chain of one operator carries one mutant, and reading it
        from the tree keeps a bracket from changing the count. A dismissal
        leaves [e] as written, and an arid site ends the chain. [branches] is
-       for the condition of an [if], as [arid] reads it. [parent] and
-       [at_load] hold for the children of [e] while they are rewritten. *)
-    method private mutate ?chained ?branches context e =
+       for the condition of an [if], as [arid] reads it, and [last] is
+       [descend]'s. [parent] and [at_load] hold for the children of [e] while
+       they are rewritten. *)
+    method private mutate ?chained ?branches ?last context e =
       let outer = (parent, at_load, recursive) in
       let mutant =
         match mutant ~keeps context e with
@@ -889,7 +897,7 @@ class instrumenter ~keeps ~module_name =
           recursive <- false
       | Pexp_poly _ | Pexp_object _ | Pexp_newtype _ -> at_load <- false
       | _ -> ());
-      let rewritten = self#rewrite ?chained ?branches context e mutant in
+      let rewritten = self#rewrite ?chained ?branches ?last context e mutant in
       let p, l, r = outer in
       parent <- p;
       at_load <- l;
@@ -905,8 +913,8 @@ class instrumenter ~keeps ~module_name =
         recursive <- outer;
         result
 
-    method private rewrite ?(chained = false) ?(branches = false) context e
-        mutant =
+    method private rewrite ?(chained = false) ?(branches = false) ?last context
+        e mutant =
       let off = off_reason e.pexp_attributes in
       if is_opaque e then e
       else
@@ -916,7 +924,7 @@ class instrumenter ~keeps ~module_name =
             if not chained then
               ignore (self#site e mutant ~dismissed:(Some reason));
             e
-        | None, None -> self#descend e
+        | None, None -> self#descend ?last e
         | None, Some mutant ->
             let arid = self#arid ~branches mutant in
             let index =
@@ -928,7 +936,7 @@ class instrumenter ~keeps ~module_name =
     method private guard ~chain e mutant index =
       let loc = { e.pexp_loc with loc_ghost = true } in
       match mutant.guard with
-      | Delete -> e (* [descend] guards a statement *)
+      | Delete -> e (* [dropped] guards a statement *)
       | Literal replacement -> (
           match index with
           | None -> e
@@ -1008,10 +1016,62 @@ class instrumenter ~keeps ~module_name =
           { e with pexp_desc = Pexp_construct (constructor, Some pair) }
       | _ -> self#descend e
 
-    (* [descend e] rewrites the children of [e], each in the context that [e]
-       gives it. A connective that carries no mutant still has boolean
-       operands. *)
-    method private descend e =
+    (* [dropped drop e] rewrites the statement [e] and guards it with [del]
+       in the form [drop]. [()], an opaque expression, a release and code
+       that runs when the module is initialized carry no [del]. *)
+    method private dropped drop e =
+      let deletable =
+        (not at_load)
+        && (not (is_opaque e))
+        && (not (is_release e))
+        &&
+        match e.pexp_desc with
+        | Pexp_construct ({ txt = Lident "()"; _ }, None) -> false
+        | _ -> true
+      in
+      let off = off_reason e.pexp_attributes in
+      let index, rewritten =
+        self#statement (fun () ->
+            let index =
+              if not deletable then None
+              else
+                let mutant =
+                  { guard = Delete; rewrite = "del"; after = "()" }
+                in
+                match self#site e mutant ~dismissed:off with
+                | Some _ when Option.is_some off -> None
+                | index -> index
+            in
+            (index, self#expression e))
+      in
+      match index with
+      | None -> rewritten
+      | Some index -> (
+          let loc = { e.pexp_loc with loc_ghost = true } in
+          let armed = armed ~loc ~module_name index in
+          match drop with
+          | In_tail -> [%expr if [%e armed] then () else [%e rewritten]]
+          | As_statement ->
+              [%expr
+                if [%e armed] then ()
+                else (
+                  [%e rewritten];
+                  ())])
+
+    (* [unit_position drop e] rewrites [e], a then-branch with no [else], a
+       loop body or the last statement of a sequence there, as a statement.
+       A sequence there carries no [del] of its own: each of its statements
+       carries one, and its last statement is in the position of [e]. *)
+    method private unit_position drop e =
+      match e.pexp_desc with
+      | Pexp_sequence _ -> self#mutate ~last:drop Ordinary e
+      | _ -> self#dropped drop e
+
+    (* [descend ?last e] rewrites the children of [e], each in the context
+       that [e] gives it. [last] is the form of [del] for the last statement
+       of a sequence [e] in a unit position. A connective that carries no
+       mutant still has boolean operands. *)
+    method private descend ?last e =
       match e.pexp_desc with
       | Pexp_ifthenelse (condition, then_, else_) ->
           let branches =
@@ -1022,55 +1082,33 @@ class instrumenter ~keeps ~module_name =
             pexp_desc =
               Pexp_ifthenelse
                 ( self#mutate ~branches Condition condition,
-                  self#expression then_,
+                  (match else_ with
+                  | None -> self#unit_position In_tail then_
+                  | Some _ -> self#expression then_),
                   Option.map self#expression else_ );
           }
       | Pexp_while (condition, body) ->
           {
             e with
             pexp_desc =
-              Pexp_while (self#mutate Condition condition, self#expression body);
+              Pexp_while
+                ( self#mutate Condition condition,
+                  self#unit_position As_statement body );
           }
-      | Pexp_sequence (first, rest) -> (
-          (* [del] drops a statement: [(if armed then () else (e1; ())); e2],
-             where [e1; ()] types [e1] as the statement it was. *)
-          let deletable =
-            (not at_load)
-            && (not (is_opaque first))
-            && (not (is_release first))
-            &&
-            match first.pexp_desc with
-            | Pexp_construct ({ txt = Lident "()"; _ }, None) -> false
-            | _ -> true
+      | Pexp_for (index, start, stop, direction, body) ->
+          let index = self#pattern index in
+          let start = self#expression start in
+          let stop = self#expression stop in
+          let body = self#unit_position As_statement body in
+          { e with pexp_desc = Pexp_for (index, start, stop, direction, body) }
+      | Pexp_sequence (first, rest) ->
+          let first = self#dropped As_statement first in
+          let rest =
+            match last with
+            | Some drop -> self#unit_position drop rest
+            | None -> self#expression rest
           in
-          let off = off_reason first.pexp_attributes in
-          let index, first' =
-            self#statement (fun () ->
-                let index =
-                  if not deletable then None
-                  else
-                    let mutant =
-                      { guard = Delete; rewrite = "del"; after = "()" }
-                    in
-                    match self#site first mutant ~dismissed:off with
-                    | Some _ when Option.is_some off -> None
-                    | index -> index
-                in
-                (index, self#expression first))
-          in
-          let rest' = self#expression rest in
-          match index with
-          | None -> { e with pexp_desc = Pexp_sequence (first', rest') }
-          | Some index ->
-              let loc = { first.pexp_loc with loc_ghost = true } in
-              let dropped =
-                [%expr
-                  if [%e armed ~loc ~module_name index] then ()
-                  else (
-                    [%e first'];
-                    ())]
-              in
-              { e with pexp_desc = Pexp_sequence (dropped, rest') })
+          { e with pexp_desc = Pexp_sequence (first, rest) }
       | Pexp_apply (operator, [ (Nolabel, left); (Nolabel, right) ])
         when is_connective ~keeps e ->
           {

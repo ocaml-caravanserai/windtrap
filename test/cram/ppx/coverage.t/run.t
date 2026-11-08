@@ -872,16 +872,14 @@ dune builds for a stanza naming both backends:
     11: 807-808
     12: 814-819
     13: 792-819
-    14: 959-967
-    15: 959-967
-    16: 942-974
-    17: 1008-1011
-    18: 993-1012
-    19: 1143-1144
-    20: 1391-1396
-    21: 1386-1396
-    22: 1417-1420
-    23: 1424-1428
+    14: 942-974
+    15: 1008-1011
+    16: 993-1012
+    17: 1143-1144
+    18: 1391-1396
+    19: 1386-1396
+    20: 1417-1420
+    21: 1424-1428
   mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands:
     0: 9:34-9:35 "int" "0" -> "1"
     1: 9:27-9:28 "int" "1" -> "0"
@@ -893,11 +891,12 @@ dune builds for a stanza naming both backends:
     7: 21:39-21:44 "bool" "false" -> "true"
     8: 21:27-21:33 "or" "a && b" -> "a || b"
     9: 21:20-21:21 "not" "c" -> "not c"
-    10: 26:8-26:11 "not" "f x" -> "not (f x)"
-    11: 30:24-30:36 "or" "(f x) && (g x)" -> "(f x) || (g x)"
-    12: 34:17-34:23 "and" "a || b" -> "a && b"
-    13: 39:15-39:25 "none" "Some (f x)" -> "None"
-    14: 40:20-40:31 "tail" "(f x) :: (g xs)" -> "g xs"
+    10: 27:4-27:12 "del" "loop f x" -> "()"
+    11: 26:8-26:11 "not" "f x" -> "not (f x)"
+    12: 30:24-30:36 "or" "(f x) && (g x)" -> "(f x) || (g x)"
+    13: 34:17-34:23 "and" "a || b" -> "a && b"
+    14: 39:15-39:25 "none" "Some (f x)" -> "None"
+    15: 40:20-40:31 "tail" "(f x) :: (g xs)" -> "g xs"
   let lt a b =
     ___windtrap_visit___ 3;
     if
@@ -959,45 +958,47 @@ dune builds for a stanza naming both backends:
       then true
       else (___windtrap_visit___ 12; false)
   let rec loop f x =
-    ___windtrap_visit___ 16;
+    ___windtrap_visit___ 14;
     while
-      (let __windtrap_mut_10_p = f x in
-       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 10
-       then Stdlib.not __windtrap_mut_10_p
-       else __windtrap_mut_10_p)
-      do (___windtrap_visit___ 15; ___windtrap_post_visit___ 14 (loop f x))
-      done
-  let left f g x =
-    ___windtrap_visit___ 18;
-    ignore
       (let __windtrap_mut_11_p = f x in
-       if
-         Stdlib.(<>) (__windtrap_mut_11_p : Stdlib.Bool.t)
-           (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 11)
-       then (___windtrap_visit___ 17; ___windtrap_post_visit___ 17 (g x))
+       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 11
+       then Stdlib.not __windtrap_mut_11_p
        else __windtrap_mut_11_p)
+      do
+      if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 10
+      then ()
+      else (loop f x; ()) done
+  let left f g x =
+    ___windtrap_visit___ 16;
+    ignore
+      (let __windtrap_mut_12_p = f x in
+       if
+         Stdlib.(<>) (__windtrap_mut_12_p : Stdlib.Bool.t)
+           (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 12)
+       then (___windtrap_visit___ 15; ___windtrap_post_visit___ 15 (g x))
+       else __windtrap_mut_12_p)
   let either a b =
-    let __windtrap_mut_12_p = a in
+    let __windtrap_mut_13_p = a in
     if
-      Stdlib.(=) (__windtrap_mut_12_p : Stdlib.Bool.t)
-        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 12)
-    then (___windtrap_visit___ 19; b)
-    else __windtrap_mut_12_p
+      Stdlib.(=) (__windtrap_mut_13_p : Stdlib.Bool.t)
+        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 13)
+    then (___windtrap_visit___ 17; b)
+    else __windtrap_mut_13_p
   let wrap f x =
     if
       Stdlib.not
-        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 13)
-    then (___windtrap_visit___ 21; Some (___windtrap_post_visit___ 20 (f x)))
+        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 14)
+    then (___windtrap_visit___ 19; Some (___windtrap_post_visit___ 18 (f x)))
     else ((None)[@ocaml.warning "-18-41-42"])
   let push f g x xs =
     if
       Stdlib.not
-        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 14)
+        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 15)
     then
-      (___windtrap_visit___ 22;
-       (___windtrap_post_visit___ 22 (f x))
+      (___windtrap_visit___ 20;
+       (___windtrap_post_visit___ 20 (f x))
        ::
-       (___windtrap_post_visit___ 23 (g xs)))
+       (___windtrap_post_visit___ 21 (g xs)))
     else g xs
 
 A file is instrumented under its own name, and returned as parsed under

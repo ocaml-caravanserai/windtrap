@@ -154,10 +154,11 @@ before and after, and the reason of a dismissed site.
     1: 7:9-7:18 "tail" "x :: (!log)" -> "!log"
     2: 11:10-11:11 "int" "1" -> "0"
     3: 12:4-12:15 "del" "print_int i" -> "()"
-    4: 25:2-25:62 "del" "print_string \"x\"" -> "()", dismissed "the output is not checked"
-    5: 30:2-30:8 "del" "a || b" -> "()"
-    6: 30:2-30:8 "and" "a || b" -> "a && b"
-    7: 40:2-40:25 "del" "output_string oc \"done\"" -> "()"
+    4: 13:4-13:20 "del" "print_newline ()" -> "()"
+    5: 25:2-25:62 "del" "print_string \"x\"" -> "()", dismissed "the output is not checked"
+    6: 30:2-30:8 "del" "a || b" -> "()"
+    7: 30:2-30:8 "and" "a || b" -> "a && b"
+    8: 40:2-40:25 "del" "output_string oc \"done\"" -> "()"
   let log = ref []
   let push x =
     if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 0
@@ -179,27 +180,29 @@ before and after, and the reason of a dismissed site.
       if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 3
       then ()
       else (print_int i; ());
-      print_newline ()
+      if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 4
+      then ()
+      else (print_newline (); ())
     done
   let unit_first x = (); x
   let checked x = assert (x > 0); x
   let quiet x =
     ((print_string "x")[@mutate off "the output is not checked"]); x
   let either a b =
-    if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 5
+    if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 6
     then ()
     else
-      ((let __windtrap_mut_6_p = a in
+      ((let __windtrap_mut_7_p = a in
         if
-          Stdlib.(=) (__windtrap_mut_6_p : Stdlib.Bool.t)
-            (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 6)
+          Stdlib.(=) (__windtrap_mut_7_p : Stdlib.Bool.t)
+            (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 7)
         then b
-        else __windtrap_mut_6_p);
+        else __windtrap_mut_7_p);
        ());
     ()
   let () = print_string "loaded"; print_newline ()
   let finish oc ic fd dir =
-    if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 7
+    if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 8
     then ()
     else (output_string oc "done"; ());
     close_out oc;
@@ -207,6 +210,225 @@ before and after, and the reason of a dismissed site.
     (try Unix.close fd with | Unix.Unix_error _ -> ());
     ignore (Unix.closedir dir);
     flush stdout
+
+A then-branch with no else, a loop body and the last statement of a
+sequence there are statements too. The guard of a then-branch keeps the
+branch in tail position:
+
+  $ mut --impl ./fixture_del_units.ml | ../elide.exe
+  mutation sites of "./fixture_del_units.ml" in Windtrap_mut_________fixture_del_units___ml, with type 'a operands:
+    0: 6:29-6:39 "del" "incr count" -> "()"
+    1: 6:19-6:23 "not" "flag" -> "not flag"
+    2: 12:4-12:14 "del" "incr count" -> "()"
+    3: 13:4-13:20 "del" "print_int (!count)" -> "()"
+    4: 14:4-14:20 "del" "print_newline ()" -> "()"
+    5: 11:5-11:9 "not" "flag" -> "not flag"
+    6: 18:4-18:16 "del" "decr pending" -> "()"
+    7: 17:8-17:20 "ge" "(!pending) > 0" -> "(!pending) >= 0"
+    8: 17:19-17:20 "int" "0" -> "1"
+    9: 23:4-23:22 "del" "print_int (!pending)" -> "()"
+    10: 24:4-24:16 "del" "decr pending" -> "()"
+    11: 22:8-22:20 "ge" "(!pending) > 0" -> "(!pending) >= 0"
+    12: 22:19-22:20 "int" "0" -> "1"
+    13: 28:10-28:11 "int" "1" -> "0"
+    14: 29:4-29:15 "del" "print_int i" -> "()"
+    15: 33:19-33:20 "int" "1" -> "0"
+    16: 34:4-34:15 "del" "print_int i" -> "()"
+    17: 35:4-35:20 "del" "print_newline ()" -> "()"
+    18: 40:10-40:11 "int" "1" -> "0"
+    19: 41:4-41:10 "del" "!count" -> "()"
+    20: 45:36-45:53 "del" "countdown (n - 1)" -> "()"
+    21: 45:46-45:53 "add" "n - 1" -> "n + 1"
+    22: 45:25-45:30 "ge" "n > 0" -> "n >= 0"
+    23: 45:29-45:30 "int" "0" -> "1"
+    24: 48:21-48:25 "not" "flag" -> "not flag"
+    25: 51:22-51:26 "not" "flag" -> "not flag"
+    26: 52:22-52:26 "not" "flag" -> "not flag"
+    27: 53:24-53:28 "not" "flag" -> "not flag"
+    28: 56:8-56:15 "not" "more ()" -> "not (more ())"
+    29: 61:12-61:30 "ge" "Sys.word_size > 32" -> "Sys.word_size >= 32"
+    30: 70:15-70:75 "del" "print_string \"x\"" -> "()", dismissed "the output is not checked"
+    31: 70:5-70:9 "not" "flag" -> "not flag"
+    32: 74:4-74:14 "del" "incr count" -> "()"
+    33: 75:4-75:64 "del" "print_string \"x\"" -> "()", dismissed "the output is not checked"
+    34: 73:5-73:9 "not" "flag" -> "not flag"
+  let count = ref 0
+  let bump flag =
+    if
+      let __windtrap_mut_1_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 1
+       then Stdlib.not __windtrap_mut_1_p
+       else __windtrap_mut_1_p)
+    then
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 0
+       then ()
+       else incr count)
+  let both flag =
+    if
+      let __windtrap_mut_5_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 5
+       then Stdlib.not __windtrap_mut_5_p
+       else __windtrap_mut_5_p)
+    then
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 2
+       then ()
+       else (incr count; ());
+       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 3
+       then ()
+       else (print_int (!count); ());
+       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 4
+       then ()
+       else print_newline ())
+  let drain pending =
+    while
+      let (__windtrap_mut_7_l, __windtrap_mut_7_r) =
+        (((!pending),
+           (if
+              Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___
+                8
+            then 1
+            else 0)) : _ Windtrap_mut_________fixture_del_units___ml.operands) in
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 7
+      then Stdlib.not (__windtrap_mut_7_r > __windtrap_mut_7_l)
+      else __windtrap_mut_7_l > __windtrap_mut_7_r do
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 6
+      then ()
+      else (decr pending; ()) done
+  let drain_noisy pending =
+    while
+      let (__windtrap_mut_11_l, __windtrap_mut_11_r) =
+        (((!pending),
+           (if
+              Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___
+                12
+            then 1
+            else 0)) : _ Windtrap_mut_________fixture_del_units___ml.operands) in
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 11
+      then Stdlib.not (__windtrap_mut_11_r > __windtrap_mut_11_l)
+      else __windtrap_mut_11_l > __windtrap_mut_11_r do
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 9
+      then ()
+      else (print_int (!pending); ());
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 10
+      then ()
+      else (decr pending; ()) done
+  let up n =
+    for i =
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 13
+      then 0
+      else 1 to n do
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 14
+      then ()
+      else (print_int i; ())
+    done
+  let down n =
+    for i = n downto
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 15
+      then 0
+      else 1 do
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 16
+      then ()
+      else (print_int i; ());
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 17
+      then ()
+      else (print_newline (); ())
+    done
+  let peek n =
+    for _ =
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 18
+      then 0
+      else 1 to n do
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 19
+      then ()
+      else (!count; ())
+    done
+  let rec countdown n =
+    if
+      let (__windtrap_mut_22_l, __windtrap_mut_22_r) =
+        ((n,
+           (if
+              Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___
+                23
+            then 1
+            else 0)) : _ Windtrap_mut_________fixture_del_units___ml.operands) in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 22
+       then Stdlib.not (__windtrap_mut_22_r > __windtrap_mut_22_l)
+       else __windtrap_mut_22_l > __windtrap_mut_22_r)
+    then
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 20
+       then ()
+       else
+         countdown
+           (let (__windtrap_mut_21_l, __windtrap_mut_21_r) = (n, 1) in
+            if
+              Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___
+                21
+            then __windtrap_mut_21_l + __windtrap_mut_21_r
+            else __windtrap_mut_21_l - __windtrap_mut_21_r))
+  let either flag =
+    if
+      let __windtrap_mut_24_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 24
+       then Stdlib.not __windtrap_mut_24_p
+       else __windtrap_mut_24_p)
+    then print_string "a"
+    else print_string "b"
+  let nothing flag =
+    if
+      let __windtrap_mut_25_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 25
+       then Stdlib.not __windtrap_mut_25_p
+       else __windtrap_mut_25_p)
+    then ()
+  let checked flag =
+    if
+      let __windtrap_mut_26_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 26
+       then Stdlib.not __windtrap_mut_26_p
+       else __windtrap_mut_26_p)
+    then assert false
+  let finish flag oc =
+    if
+      let __windtrap_mut_27_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 27
+       then Stdlib.not __windtrap_mut_27_p
+       else __windtrap_mut_27_p)
+    then close_out oc
+  let finish_all more next =
+    while
+      let __windtrap_mut_28_p = more () in
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 28
+      then Stdlib.not __windtrap_mut_28_p
+      else __windtrap_mut_28_p do close_in (next ()) done
+  let () =
+    if
+      let (__windtrap_mut_29_l, __windtrap_mut_29_r) =
+        ((Sys.word_size, 32) : _
+                                 Windtrap_mut_________fixture_del_units___ml.operands) in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 29
+       then Stdlib.not (__windtrap_mut_29_r > __windtrap_mut_29_l)
+       else __windtrap_mut_29_l > __windtrap_mut_29_r)
+    then print_string "loaded"
+  let () = for _ = 1 to 2 do print_string "loaded" done
+  let quiet flag =
+    if
+      let __windtrap_mut_31_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 31
+       then Stdlib.not __windtrap_mut_31_p
+       else __windtrap_mut_31_p)
+    then ((print_string "x")[@mutate off "the output is not checked"])
+  let quiet_last flag =
+    if
+      let __windtrap_mut_34_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 34
+       then Stdlib.not __windtrap_mut_34_p
+       else __windtrap_mut_34_p)
+    then
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 32
+       then ()
+       else (incr count; ());
+       ((print_string "x")
+       [@mutate off "the output is not checked"]))
 
   $ mut --impl ./fixture_literals.ml | ../elide.exe
   mutation sites of "./fixture_literals.ml" in Windtrap_mut_________fixture_literals___ml, with type 'a operands:
@@ -1864,14 +2086,16 @@ and keeps its reason:
   $ mut --impl ./fixture_neg.ml | ../elide.exe
   mutation sites of "./fixture_neg.ml" in Windtrap_mut_________fixture_neg___ml:
     0: 8:23-8:27 "not" "flag" -> "not flag"
-    1: 9:23-9:27 "not" "flag" -> "not flag"
-    2: 12:8-12:16 "not" "ready ()" -> "not (ready ())"
-    3: 16:39-16:42 "not" "p y" -> "not (p y)"
-    4: 20:55-20:56 "int" "0" -> "1"
-    5: 20:48-20:49 "int" "1" -> "0"
-    6: 20:20-20:42 "not" "if a then b else false" -> "not (if a then b else false)"
-    7: 20:37-20:42 "bool" "false" -> "true"
-    8: 20:23-20:24 "not" "a" -> "not a"
+    1: 9:33-9:50 "del" "print_string \"on\"" -> "()"
+    2: 9:23-9:27 "not" "flag" -> "not flag"
+    3: 13:4-13:11 "del" "step ()" -> "()"
+    4: 12:8-12:16 "not" "ready ()" -> "not (ready ())"
+    5: 16:39-16:42 "not" "p y" -> "not (p y)"
+    6: 20:55-20:56 "int" "0" -> "1"
+    7: 20:48-20:49 "int" "1" -> "0"
+    8: 20:20-20:42 "not" "if a then b else false" -> "not (if a then b else false)"
+    9: 20:37-20:42 "bool" "false" -> "true"
+    10: 20:23-20:24 "not" "a" -> "not a"
   let pick flag x y =
     if
       let __windtrap_mut_0_p = flag in
@@ -1882,47 +2106,53 @@ and keeps its reason:
     else y
   let announce flag =
     if
-      let __windtrap_mut_1_p = flag in
+      let __windtrap_mut_2_p = flag in
+      (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 2
+       then Stdlib.not __windtrap_mut_2_p
+       else __windtrap_mut_2_p)
+    then
       (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 1
-       then Stdlib.not __windtrap_mut_1_p
-       else __windtrap_mut_1_p)
-    then print_string "on"
+       then ()
+       else print_string "on")
   let drain ready step =
     while
-      let __windtrap_mut_2_p = ready () in
-      if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 2
-      then Stdlib.not __windtrap_mut_2_p
-      else __windtrap_mut_2_p do step () done
+      let __windtrap_mut_4_p = ready () in
+      if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 4
+      then Stdlib.not __windtrap_mut_4_p
+      else __windtrap_mut_4_p do
+      if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 3
+      then ()
+      else (step (); ()) done
   let classify p x =
     match x with
     | y when
-        let __windtrap_mut_3_p = p y in
-        if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 3
-        then Stdlib.not __windtrap_mut_3_p
-        else __windtrap_mut_3_p -> "yes"
+        let __windtrap_mut_5_p = p y in
+        if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 5
+        then Stdlib.not __windtrap_mut_5_p
+        else __windtrap_mut_5_p -> "yes"
     | _ -> "no"
   let nested a b =
     if
-      let __windtrap_mut_6_p =
+      let __windtrap_mut_8_p =
         if
-          let __windtrap_mut_8_p = a in
-          (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 8
-           then Stdlib.not __windtrap_mut_8_p
-           else __windtrap_mut_8_p)
+          let __windtrap_mut_10_p = a in
+          (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 10
+           then Stdlib.not __windtrap_mut_10_p
+           else __windtrap_mut_10_p)
         then b
         else
-          if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 7
+          if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 9
           then true
           else false in
-      (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 6
-       then Stdlib.not __windtrap_mut_6_p
-       else __windtrap_mut_6_p)
+      (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 8
+       then Stdlib.not __windtrap_mut_8_p
+       else __windtrap_mut_8_p)
     then
-      (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 5
+      (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 7
        then 0
        else 1)
     else
-      if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 4
+      if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 6
       then 1
       else 0
 

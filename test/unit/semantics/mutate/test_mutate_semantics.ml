@@ -409,8 +409,9 @@ let laziness =
 (* Reach counts *)
 
 (* [sum_while n] evaluates its two initial counts and its loop once, its
-   condition [n + 1] times, and its sum and the statement that holds it [n]
-   times, so a guarded operand evaluated twice shows in the counts. *)
+   condition [n + 1] times, and its sum, the statement that holds it and its
+   [incr] [n] times, so a guarded operand evaluated twice shows in the
+   counts. *)
 let loops =
   [
     ( 10,
@@ -422,6 +423,7 @@ let loops =
           ("lt", 11);
           ("del", 10);
           ("sub", 10);
+          ("del", 10);
         ] ) );
     (0, (0, [ ("int", 1); ("int", 1); ("del", 1); ("lt", 1) ]));
   ]
