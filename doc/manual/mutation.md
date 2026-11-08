@@ -991,16 +991,16 @@ Each mutant gives one result or none:
   `--crash-kills` counts the mutant as killed, that mutant gives no
   result.
 - A mutant that was not evaluated gives a note.
-- A killed mutant, a mutant killed elsewhere, a never reached mutant
-  and a mutant evaluated outside tests give no result. The mutants of a suite that was not
-  mutation-tested give no result.
+- A killed mutant, a mutant killed elsewhere, a never reached mutant and
+  a mutant evaluated outside tests give no result. A mutant gives no
+  result when only suites that were not mutation-tested hold it.
 
 Each result has a rule, which is the rewrite of the mutant, and the
-location of the mutated expression. A column counts Unicode code
-points. When the command cannot read the source of the file, the
-location gives only the lines. A file path is relative to the root of
-the dune project. GitHub reads it relative to the root of the
-repository, so the two roots must be the same. The options act as they do for `--json`.
+location of the mutated expression. A column counts Unicode code points.
+When the command cannot read the source of the file, the location gives
+only the lines. A file path is relative to the root of the dune
+workspace. GitHub reads it relative to the root of the repository, so
+the two roots must be the same. The options act as they do for `--json`.
 `--lines` and `--diff` keep the mutants on their lines. Under a gate,
 the outcome line goes to standard error, and the exit code is that of
 the gates.
@@ -1017,7 +1017,8 @@ mutants:
     contents: read
     security-events: write
   steps:
-    # Check out, build, and run the mutation tests here.
+    # Put the steps that get the source, build the project and run
+    # the mutation tests here.
     - run: dune exec windtrap -- mutants --sarif > mutants.sarif
       continue-on-error: true
     - uses: github/codeql-action/upload-sarif@v4
@@ -1027,8 +1028,10 @@ mutants:
 
 Without a gate, the command exits 1 when a mutant survives or when a
 suite was not mutation-tested. Thus the first step has
-`continue-on-error: true`. Another way is a gate that the project
-meets. The upload uses the `security-events: write` permission. On a
+`continue-on-error: true`, so that the upload runs. Another way is to
+remove `continue-on-error` and to give the upload step
+`if: ${{ !cancelled() }}`. Then the job fails, but the upload occurs.
+The upload uses the `security-events: write` permission. On a
 private repository, it uses `actions: read` too. GitHub Code Security
 is probably also necessary on a private repository. We did not do a
 test of this.

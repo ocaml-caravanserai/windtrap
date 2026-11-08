@@ -1289,12 +1289,13 @@ The SARIF document
 --sarif writes the merge as one SARIF 2.1.0 document on standard output.
 A survivor is a warning, and an unknown mutant and a mutant that was not
 evaluated are notes. A killed mutant, a mutant that no test reached and
-the mutants of a refused suite give no result. The results keep the order
-of identifiers. A tree that dune subst did not substitute knows no
-version, but a release gives one in the driver, so the sessions drop that
-line. A column counts code points, so the two characters before the
-mutant of text.ml count one each. The column of and is after the end of
-its line, so its region gives only the lines:
+a mutant that only a refused suite holds give no result. The results
+keep the order of identifiers. A tree that dune subst did not substitute
+knows no version, but a release gives one in the driver, so the sarif
+function drops that line. A column counts code points, so the two
+characters before the mutant of text.ml count one each. The column of
+the mutant of the rewrite and is after the end of its line, so its region
+gives only the lines:
 
   $ plant "$scratch/sarif" && cd "$scratch/sarif"
   $ printf 'let f x y = "\303\251\342\202\254" <> "" && x < y\n' > lib/text.ml
@@ -1405,6 +1406,17 @@ and the outcome line goes to standard error:
   windtrap: mutants: 3 survived of 7 reached, 1 killed, 1 not evaluated, 2 unknown, 3 executables, 1 suite not mutation-tested, score 20.0% (1/5), minimum 50%: FAILED, reach 100.0% (7/7), total 20.0% (1/5)
   [1]
   $ diff sarif "$bin/out"
+
+With no refused suite, a survivor makes the command exit 1, and a gate
+that the merge meets makes it exit 0:
+
+  $ cd "$scratch/sarif-none"
+  $ mkdata mutants _build/_mutants/a.mutants "$add=survived:t/adds"
+  $ sarif > /dev/null
+  [1]
+  $ errs windtrap mutants --sarif --max-survivors 5
+  windtrap: mutants: 1 survived of 1 reached, 1 executable, score 0.0% (0/1), reach 100.0% (1/1), total 0.0% (0/1), maximum 5 survivors: ok
+  $ cd "$scratch/sarif"
 
 A repeated --sarif is the same as one. --sarif with --json is a usage
 error, in either order:

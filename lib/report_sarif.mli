@@ -5,9 +5,11 @@
 
 (** The SARIF 2.1.0 document of [windtrap mutants --sarif].
 
-    {!document} writes the document. [bin/mutate_cmd.mli] states which mutants
-    give a result. The other functions are the parts of a result, for the tests.
-*)
+    {!val-document} writes the document. [bin/mutate_cmd.mli] states which
+    mutants give a result. The other functions are the parts of a result, for
+    the tests.
+
+    @canonical Windtrap.Private.Report_sarif *)
 
 module Sections = Report_sections
 
