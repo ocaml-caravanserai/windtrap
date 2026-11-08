@@ -212,9 +212,9 @@ val execute_and_report :
 
     One type of survivor is an exception. A kill in a retry can give a survivor
     when its check does not trust the kill. In a run that tests each mutant,
-    this survivor prints after the checks. When the loop reuses it, it prints in
-    the last pass. Except for this survivor, the [reproduce:] line arms the same
-    survivor.
+    this survivor prints when its check ends, after the last pass. When the loop
+    reuses it, it prints in the last pass. Except for this survivor, the
+    [reproduce:] line arms the same survivor.
 
     A probe that disagrees, or a signal before the probe ends, commits none. A
     later signal stops the commits after the stopped job, as it stops the jobs.

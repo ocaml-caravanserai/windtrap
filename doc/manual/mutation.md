@@ -807,9 +807,9 @@ that tests each mutant.
 
 One type of survivor is an exception. A kill in a retry can give a
 survivor when its check does not trust the kill. This survivor prints
-after the checks. When the run uses it again, it prints with the
-survivors of the last pass. Thus, except for this survivor, the
-`reproduce:` line arms the same survivor.
+when its check ends, after the last pass. When the run uses it again, it
+prints with the survivors of the last pass. Thus, except for this
+survivor, the `reproduce:` line arms the same survivor.
 
 A verdict that the run used again is not a change for the unstable
 section.

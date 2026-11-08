@@ -7,8 +7,9 @@
   Their source files must not change. Under `--mutate-retry`, a kill is
   used again only from a run with enough retries. A survivor is used
   again when the same tests reach it, with unchanged source files and no
-  higher `--mutate-retry`. The run that tested the mutant and this run
-  must have the same seed, `--prop-count`, `--replay`, `--case` and
+  higher `--mutate-retry`.
+- Under `--incremental`, the run that tested a mutant and this run must
+  have the same seed, `--prop-count`, `--replay`, `--case` and
   `--timeout`. They must also have the same `--mutate-memory`,
   `--mutate-workers` and windtrap version. The report gives
   `reused: N verdicts from the last run` above the outcome line, and the
