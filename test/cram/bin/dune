@@ -48,6 +48,16 @@
   (<> %{os_type} Win32))
  (deps pins_add.exe pins_sub.exe calc.ml))
 
+; incremental.t runs the mutation loop, which Windows refuses for want of
+; fork, and reads the source of the tests of pins_add.exe.
+
+(cram
+ (package ppx_windtrap)
+ (applies_to incremental)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps pins_add.exe calc.ml pins_add.ml))
+
 ; two_suites.t runs the mutation loop, which Windows refuses for want of fork.
 
 (cram

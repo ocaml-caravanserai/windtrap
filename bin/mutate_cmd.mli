@@ -127,6 +127,15 @@
     [--diff] only the records on the lines give rows. The rows do not change the
     score or the exit code.
 
+    {b Reused verdicts.} A merged record is reused when each record of the
+    highest rank that it merges is reused ([Windtrap_runtime.Verdicts.merge]): a
+    run under [--incremental] took the verdict from its last run. The block of a
+    reused survivor has [(reused)] after its title. When the merge has reused
+    records, after [--lines] or [--diff] and after the skips are judged, one
+    line above the [reproduce:] line, or above the outcome line, gives their
+    number, as in [reused: 2 verdicts from earlier runs]. A merge with none has
+    no line.
+
     {b Reaching tests.} The reaching tests of a survivor are the union of those
     of every file in which the mutant survived. Each is paired with the label of
     its file, and the pairs are sorted by label and then by test, without
@@ -251,6 +260,9 @@
     - ["verdict"] is one of ["killed"], ["survived"], ["not_evaluated"],
       ["unknown"], ["outside_tests"] and ["unreached"]. A mutant killed
       elsewhere ({{!section-merge}the merge}) is ["killed"].
+    - ["reused"] is [true], directly after ["verdict"], in the object of a
+      reused mutant only ({{!section-merge}the merge}). The other objects do not
+      have the key.
     - ["tests"] is in the object of a survivor only. It is an array of the tests
       that reached the survivor.
     - ["killed_by"] is in the object of a killed mutant only. It is an array of
