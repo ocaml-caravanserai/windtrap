@@ -793,8 +793,8 @@ let json ~crash_kills files merged (m : Sections.mutation) =
 
 (* A survivor, an unknown mutant that does not count as killed and a
    mutant that a child did not evaluate give a result, in the order of
-   [merged]. An unknown mutant that only a refused suite holds
-   as unknown is not in [m]. *)
+   [merged]. An unknown mutant that only a refused suite holds as
+   unknown is not in [m]. *)
 let sarif merged (m : Sections.mutation) =
   let verdicts =
     List.fold_left
