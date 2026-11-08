@@ -70,6 +70,11 @@ type parsed = {
           [Windtrap_runtime.Mutate.rewrites], and the list is not empty. With no
           flag, it is {!Run.Every_rewrite}. *)
   skip_killed : bool;  (** [--skip-killed]. *)
+  sample : float option;
+      (** [--sample PCT]: the percent of the sample, above [0.] and below
+          [100.]. The parser reads [PCT] with [float_of_string]. It accepts only
+          a finite value above [0] and at most [100]. [100] is no sample,
+          [None]. *)
   case : string option;
       (** [--case PATH]: a path, read by {!settings}. It has no mirror. *)
   list_only : bool;
@@ -112,8 +117,8 @@ type error =
       (** The command line gave the first flag, which scopes the second, and no
           layer gave the second: [("--lines", "--mutate")],
           [("--diff", "--mutate")], [("--rewrites", "--mutate")],
-          [("--skip-rewrites", "--mutate")] or [("--skip-killed", "--mutate")].
-      *)
+          [("--skip-rewrites", "--mutate")], [("--skip-killed", "--mutate")] or
+          [("--sample", "--mutate")]. *)
   | Requires_any of string * string list
       (** The command line gave the flag, which acts only with one of the
           others, and no layer gave any of them:
@@ -171,10 +176,12 @@ val settings : parsed -> (Run.config, error) result
       [Error (Invalid_value _)]. The [rewrites] of the scope is [rewrites].
       [--rewrites] with [--skip-rewrites] is [Error (Incompatible_flags _)],
       whichever layer gave each. The [skip_killed] of the scope is [true] when a
-      layer gives [--skip-killed]. [--lines], [--diff], [--rewrites],
-      [--skip-rewrites] or [--skip-killed] from the command line without
-      [--mutate] is [Error (Requires _)]; from their mirrors alone they are
-      ignored. But an invalid value of a mirror, or the two mirrors of the
+      layer gives [--skip-killed]. The [sample] of the scope is
+      [Some (sample, seed)] when the layers give a [sample], where [seed] is the
+      [seed] of the result. [--lines], [--diff], [--rewrites],
+      [--skip-rewrites], [--skip-killed] or [--sample] from the command line
+      without [--mutate] is [Error (Requires _)]; from their mirrors alone they
+      are ignored. But an invalid value of a mirror, or the two mirrors of the
       rewrite filter together, is an error also without [--mutate]. [mutate] and
       [arm] at once is [Error (Incompatible_flags _)], whichever layer gave
       each, and it is checked after every mirror. A prefix that spells a boolean

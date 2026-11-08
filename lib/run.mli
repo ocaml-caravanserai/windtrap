@@ -59,13 +59,22 @@ type scope = {
           the verdict file of another suite killed, and records it as
           [Windtrap_runtime.Verdicts.Killed_elsewhere]. The mutant stays in
           scope. *)
+  sample : (float * int64) option;
+      (** [--sample]: [Some (percent, seed)] tests only the reached mutants that
+          [skip_killed] does not skip and that the sample of [percent] percent
+          and the root seed [seed] holds
+          ([Windtrap_runtime.Verdicts.in_sample]). The loop records each other
+          such mutant as [Windtrap_runtime.Verdicts.Not_sampled]. [percent] is
+          above [0.] and below [100.], and [seed] is the [seed] of the run. The
+          mutants stay in scope. *)
 }
 (** The type for the mutants that a mutation loop tests: those that [prefixes],
-    [lines] and [rewrites] keep, less those that [skip_killed] skips. *)
+    [lines] and [rewrites] keep, less those that [skip_killed] skips, and of the
+    rest those that [sample] holds. *)
 
 val every_mutant : scope
-(** [every_mutant] keeps every mutant: no prefix, no line set, each rewrite and
-    no skip. *)
+(** [every_mutant] keeps every mutant: no prefix, no line set, each rewrite, no
+    skip and no sample. *)
 
 (** The type for what a run does with the mutants of an executable built for
     mutation testing. *)

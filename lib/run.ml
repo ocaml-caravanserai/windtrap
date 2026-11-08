@@ -23,12 +23,19 @@ type scope = {
   lines : Lines.t option;
   rewrites : rewrite_filter;
   skip_killed : bool;
+  sample : (float * int64) option;
 }
 
 type mutation = No_mutation | Loop of scope | Armed of string
 
 let every_mutant =
-  { prefixes = []; lines = None; rewrites = Every_rewrite; skip_killed = false }
+  {
+    prefixes = [];
+    lines = None;
+    rewrites = Every_rewrite;
+    skip_killed = false;
+    sample = None;
+  }
 
 type broadcast = { selection : bool; mutate : bool }
 type case_file = { file : string; choices : int64 array }
