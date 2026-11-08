@@ -2389,6 +2389,8 @@ let loop_report =
     outside_tests = [];
     killed = 3;
     not_tested = 0;
+    not_sampled = 0;
+    sample = None;
     scope = Sections.Suite;
   }
 
@@ -2438,6 +2440,8 @@ let merge_report =
     outside_tests = [];
     killed = 16;
     not_tested = 0;
+    not_sampled = 0;
+    sample = None;
     scope = Sections.Executables 3;
   }
 
@@ -2583,6 +2587,8 @@ let mutation_entries () =
           outside_tests = [];
           killed = 1;
           not_tested = 0;
+          not_sampled = 0;
+          sample = None;
           scope = Sections.Executables 1;
         } );
     ( "not evaluated: each mutant with the command that arms it",
@@ -2676,6 +2682,8 @@ let mutation_entries () =
           Sections.survivors = [ add_survivor ];
           killed = 0;
           not_tested = 2;
+          not_sampled = 0;
+          sample = None;
         } );
   ]
 
@@ -2692,6 +2700,8 @@ let report ?(survivors = []) ?(not_evaluated = []) ?(unknown = [])
     outside_tests;
     killed;
     not_tested;
+    not_sampled = 0;
+    sample = None;
     scope;
   }
 
@@ -3014,6 +3024,143 @@ let zero_measures () =
        { Sections.no_gates with min_reach = Some 100.; min_total = Some 100. }
        none)
 
+(* The sample *)
+
+(* [killed] kills and [survived] survivors of a sample, among [judged]
+   mutants of which [sampled] are in the sample. *)
+let sampled ?(mixed = false) ?(percent = 50.) ?(survived = 0) ?(unreached = 0)
+    ~killed ~judged ~sampled () =
+  {
+    (report
+       ~survivors:(List.init survived (fun _ -> add_survivor))
+       ~unreached:(List.init unreached (fun i -> ("lib/calc.ml", i + 1)))
+       ~killed Sections.Suite)
+    with
+    not_sampled = judged - sampled;
+    sample =
+      Some
+        (if mixed then Sections.Mixed { judged; sampled }
+         else Sections.Uniform { percent; seed = 42L; judged; sampled });
+  }
+
+let pct x = strf "%.1f" (100. *. x)
+
+let wilson_rows =
+  [
+    ("70 of 100 of 195", (70, 100, 195.), ("63.4", "75.9"));
+    ("5 of 5 of a large population", (5, 5, 1e9), ("56.6", "100.0"));
+    ("5 of 5 of 10", (5, 5, 10.), ("70.1", "100.0"));
+    ("0 of 5 of 10", (0, 5, 10.), ("0.0", "29.9"));
+    ("no scored mutant", (0, 0, 0.), ("0.0", "100.0"));
+    ("a sample that is the population", (3, 4, 4.), ("75.0", "75.0"));
+  ]
+
+let wilson_row (_, (killed, scored, population), expected) =
+  let low, high = Sections.wilson ~killed ~scored ~population in
+  equal (pair string string) expected (pct low, pct high)
+
+let wilson_exact () =
+  let low, _ = Sections.wilson ~killed:0 ~scored:7 ~population:100. in
+  let _, high = Sections.wilson ~killed:7 ~scored:7 ~population:100. in
+  equal (pair float_exact float_exact) (0., 1.) (low, high)
+
+let wilson_holds_the_fraction ((scored, killed), extra) =
+  let killed = killed mod (scored + 1) in
+  let population = float_of_int scored +. extra in
+  let low, high = Sections.wilson ~killed ~scored ~population in
+  let p = float_of_int killed /. float_of_int scored in
+  is_true (0. <= low && low <= p +. 1e-12 && p -. 1e-12 <= high && high <= 1.)
+
+let plan =
+  sampled ~survived:30 ~unreached:20 ~killed:70 ~judged:195 ~sampled:100 ()
+
+let sample_bounds () =
+  let (low, high), (total_low, total_high) =
+    require_some (Sections.mutation_bounds plan)
+  in
+  equal (list string)
+    [ "63.4"; "75.9"; "63.5"; "57.5"; "68.8" ]
+    (List.map
+       (fun x -> pct (x /. 100.))
+       [ low; high; Sections.mutation_total plan; total_low; total_high ]);
+  equal
+    (pair (float 1e-9) (float 1e-9))
+    (low, total_low)
+    (Sections.mutation_lower plan);
+  is_none
+    (Sections.mutation_bounds
+       (sampled ~mixed:true ~killed:1 ~judged:2 ~sampled:1 ()));
+  is_none (Sections.mutation_bounds (sampled ~killed:0 ~judged:0 ~sampled:0 ()))
+
+let plan_gates min min_total = last_line (at_rest ?min ?min_total plan)
+
+let sample_rows =
+  [
+    ( "a sample gives the score and the total with their intervals",
+      (fun () -> last_line (at_rest plan)),
+      "mutants: 30 survived of 195 reached by this suite, 70 killed, 20 never \
+       reached, 95 not sampled, score 70.0% (70/100, 63.4% to 75.9%), reach \
+       90.7% (195/215), total 63.5% (57.5% to 68.8%)" );
+    ( "a gate compares the lower bound",
+      (fun () -> plan_gates (Some 63.) (Some 58.)),
+      "mutants: 30 survived of 195 reached by this suite, 70 killed, 20 never \
+       reached, 95 not sampled, score 70.0% (70/100, 63.4% to 75.9%), minimum \
+       63% of the lower bound: ok, reach 90.7% (195/215), total 63.5% (57.5% \
+       to 68.8%), minimum 58% of the lower bound: FAILED" );
+    ( "a gate above the lower bound fails below the estimate",
+      (fun () -> plan_gates (Some 64.) None),
+      "mutants: 30 survived of 195 reached by this suite, 70 killed, 20 never \
+       reached, 95 not sampled, score 70.0% (70/100, 63.4% to 75.9%), minimum \
+       64% of the lower bound: FAILED, reach 90.7% (195/215), total 63.5% \
+       (57.5% to 68.8%)" );
+    ( "mixed samples give the bounds that are always true",
+      (fun () ->
+        last_line
+          (at_rest ~min:35.
+             (sampled ~mixed:true ~survived:30 ~unreached:20 ~killed:70
+                ~judged:195 ~sampled:100 ()))),
+      "mutants: 30 survived of 195 reached by this suite, 70 killed, 20 never \
+       reached, 95 not sampled, score 70.0% (70/100, at least 35.9%), minimum \
+       35% of the lower bound: ok, reach 90.7% (195/215), total 63.5% (at \
+       least 32.6%)" );
+    ( "a sample of no scored mutant",
+      (fun () ->
+        last_line (at_rest (sampled ~killed:0 ~judged:3 ~sampled:0 ()))),
+      "mutants: 3 reached by this suite, 3 not sampled, no scored mutant, \
+       reach 100.0% (3/3)" );
+    ( "a sample of no scored mutant meets only a gate of 0",
+      (fun () ->
+        last_line
+          (at_rest ~min:0. ~min_total:1.
+             (sampled ~unreached:1 ~killed:0 ~judged:3 ~sampled:0 ()))),
+      "mutants: 3 reached by this suite, 1 never reached, 3 not sampled, no \
+       scored mutant, minimum 0% of the lower bound: ok, reach 75.0% (3/4), \
+       total: no scored mutant, minimum 1% of the lower bound: FAILED" );
+    ( "a sample that judged no mutant gives the measures of no sample",
+      (fun () ->
+        last_line
+          (at_rest (sampled ~unreached:2 ~killed:0 ~judged:0 ~sampled:0 ()))),
+      "mutants: 0 reached by this suite, 2 never reached, reach 0.0% (0/2), \
+       total 0.0% (0/2)" );
+  ]
+
+let sample_lines () =
+  equal
+    (list (option string))
+    [
+      Some "sample: 50% of the reached mutants, seed s1:000000000000002a";
+      Some "sample: 12.5% of the reached mutants, seed s1:000000000000002a";
+      None;
+      None;
+    ]
+    (List.map Sections.sample_line
+       [
+         sampled ~killed:1 ~judged:2 ~sampled:1 ();
+         sampled ~percent:12.5 ~killed:0 ~judged:0 ~sampled:0 ();
+         sampled ~mixed:true ~killed:1 ~judged:2 ~sampled:1 ();
+         report ~killed:1 Sections.Suite;
+       ])
+
 let block witnesses =
   printed
     (Sections.survivor_block ~exe_width:None
@@ -3291,6 +3438,23 @@ let mutation_group =
         ~id:(fun (name, _, _) -> name)
         measure_rows measures;
       test "a measure over a zero denominator is 100%" zero_measures;
+      cases "the Wilson interval of a sample"
+        ~id:(fun (name, _, _) -> name)
+        wilson_rows wilson_row;
+      test "the Wilson interval is exact at no kill and at each kill"
+        wilson_exact;
+      Windtrap.prop "the Wilson interval holds the fraction of the sample"
+        (Gen.pair
+           (Gen.pair (Gen.int_range 1 300) Gen.nat)
+           (Gen.float_range 0. 1000.))
+        wilson_holds_the_fraction;
+      test "the bounds of a sample, of the score and of the total" sample_bounds;
+      cases "the outcome line under a sample"
+        ~id:(fun (name, _, _) -> name)
+        sample_rows
+        (fun (_, summary, expected) -> equal string expected (summary ()));
+      test "the sample line gives the percent and the seed of one sample"
+        sample_lines;
       cases "the sentence counts the reaching tests and their executables"
         ~id:fst sentence_rows sentence;
       test "the reaching tests' names are padded to the widest" padded_names;

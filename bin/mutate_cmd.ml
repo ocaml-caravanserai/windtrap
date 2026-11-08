@@ -446,6 +446,11 @@ let merge ~crash_kills ~source files merged =
       outside_tests;
       killed;
       not_tested = 0;
+      not_sampled =
+        List.length
+          (pick (fun r ->
+               match r.verdict with Not_sampled -> Some () | _ -> None));
+      sample = None;
       scope =
         Executables
           (List.length

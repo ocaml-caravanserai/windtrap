@@ -547,6 +547,22 @@ type scope =
       (** A merge over the verdict files of this many executables. The files of
           the suites of one executable count as one. *)
 
+(** The type for the sample of a report ([--sample]). [judged] is the reached
+    mutants whose sample the hash judged: those of a run less the mutants that
+    it skipped under [--skip-killed], or the reached mutants of a merge.
+    [sampled] is the members of [judged] in the sample, unknown and not tested
+    mutants included. *)
+type sample =
+  | Uniform of {
+      percent : float;  (** The percent of the sample. *)
+      seed : Seed.seed;  (** The root seed of the runs. *)
+      judged : int;
+      sampled : int;
+    }  (** One sample: each tested suite has the same percent and seed. *)
+  | Mixed of { judged : int; sampled : int }
+      (** The tested suites of a merge have different samples, or a sample and
+          no sample. *)
+
 type mutation = {
   survivors : survivor list;
       (** Every survivor, in the order in which its block prints. *)
@@ -576,13 +592,18 @@ type mutation = {
   not_tested : int;
       (** The number of reached mutants that no worker of the loop tested: those
           that an interrupted loop did not finish, and those that the loop
-          skipped under [--skip-killed]. It is [0] in a merge. *)
+          skipped under [--skip-killed]. It is [0] in a merge. Each mutant out
+          of the sample is in [not_sampled] instead. *)
+  not_sampled : int;
+      (** The number of reached mutants out of the sample
+          ([Windtrap_runtime.Verdicts.Not_sampled]). *)
+  sample : sample option;  (** The sample, or [None] for a run of no sample. *)
   scope : scope;  (** What the reached count is relative to. *)
 }
 (** The type for a whole mutation report. Its reached count is
     [killed + List.length survivors + List.length not_evaluated + unknown +
-     not_tested], where [unknown] is [List.length unknown] plus the [mutants] of
-    each of [refused].
+     not_tested + not_sampled], where [unknown] is [List.length unknown] plus
+    the [mutants] of each of [refused].
 
     Each measure, gate and line counts an unknown mutant counted as killed with
     the killed mutants, and not with the unknown mutants. The reached count does
@@ -610,12 +631,57 @@ val mutation_total : mutation -> float
 (** [mutation_total m] is the percentage of killed mutants among the scored
     mutants, the mutants that no test reached and the mutants evaluated outside
     tests of [m], unrounded. It is {!percent}, and thus [100.] when [m] has none
-    of them. *)
+    of them.
+
+    Under a sample whose [judged] is above [0], with [n] scored mutants above
+    [0], it is an estimate: [score *. pop /. (pop +. u)]. [score] is
+    {!mutation_score} and [u] the mutants that no test reached and those
+    evaluated outside tests. [pop] is the estimated number of scored mutants of
+    the population, [n *. judged /. sampled], unrounded. *)
+
+val wilson : killed:int -> scored:int -> population:float -> float * float
+(** [wilson ~killed ~scored ~population] is the two-sided 95% Wilson score
+    interval of the fraction [killed / scored], as [(low, high)] in \[[0];[1]\].
+    The sample of [scored] mutants comes from a population of [population]
+    scored mutants. Thus [z{^ 2}], with [z = 1.959963984540054], is multiplied
+    by the finite population correction
+    [(population - scored) / (population - 1)], or by [0] when [population] is
+    at most [scored]. The bounds are clamped to \[[0];[1]\]. [low] is [0] when
+    [killed] is [0], and [high] is [1] when [killed] is [scored]. It is
+    [(0., 1.)] when [scored] is [0]. *)
+
+val mutation_bounds : mutation -> ((float * float) * (float * float)) option
+(** [mutation_bounds m] is the interval of {!mutation_score} and the interval of
+    {!mutation_total}, as percentages, under a [Uniform] sample whose [judged]
+    is above [0]. The first is {!wilson} with the population of
+    {!mutation_total}. The second maps each bound of the first as
+    {!mutation_total} maps the score. With no scored mutant, each interval is
+    [(0., 100.)]. It is [None] for each other report. *)
+
+val mutation_lower : mutation -> float * float
+(** [mutation_lower m] is what the gates [min] and [min_total] compare: the
+    lower bounds of {!mutation_bounds} when it is [Some _]. Under a [Mixed]
+    sample whose [judged] is above [0], it is the bounds that are always true:
+    each mutant out of a sample counts as survived, so the score is the killed
+    mutants among the scored mutants and [not_sampled], and the total adds the
+    mutants that no test reached and those evaluated outside tests. Both are
+    [0.] when there is no scored mutant. In each other case it is
+    [(mutation_score m, mutation_total m)]. *)
+
+val sample_line : mutation -> string option
+(** [sample_line m] is the line of a [Uniform] sample, as in
+    [sample: 50% of the reached mutants, seed s1:000000000000002a], with the
+    percent by {!Pp.decimal} and the seed by {!Seed.to_string}. It is [None] for
+    a [Mixed] sample and for no sample. *)
 
 type gates = {
-  min : float option;  (** The minimum of {!mutation_score}. *)
+  min : float option;
+      (** The minimum of {!mutation_score}, or of its lower bound under a sample
+          ({!mutation_lower}). *)
   min_reach : float option;  (** The minimum of {!mutation_reach}. *)
-  min_total : float option;  (** The minimum of {!mutation_total}. *)
+  min_total : float option;
+      (** The minimum of {!mutation_total}, or of its lower bound under a sample
+          ({!mutation_lower}). *)
   max_survivors : int option;  (** The maximum number of survivors. *)
 }
 (** The type for the gates of a mutation report. *)
@@ -629,8 +695,9 @@ val gated : gates -> bool
 val mutation_gates_met : gates -> mutation -> bool
 (** [mutation_gates_met g m] is [true] iff [m] meets each gate of [g] and
     [m.refused] is empty, or [g] has no gate. A measure meets its minimum when
-    it is at least the minimum. A merge without the verdicts of a refused suite
-    fails every gate. *)
+    it is at least the minimum. The score and the total are those of
+    {!mutation_lower}. A merge without the verdicts of a refused suite fails
+    every gate. *)
 
 val mutation_line : gates:gates -> mutation -> span list
 (** [mutation_line ~gates m] is the outcome line of a mutation report. It gives
@@ -645,7 +712,18 @@ val mutation_line : gates:gates -> mutation -> span list
     Under [max_survivors] the line ends with the maximum, as in
     [maximum 2 survivors: ok]. A gate is [FAILED] when [m] does not meet it or
     [m.refused] is not empty. A measure is styled as failing only when it is
-    below its minimum. *)
+    below its minimum.
+
+    The count [N not sampled] follows [not tested]. Under a sample whose
+    [judged] is above [0], the score and the total are estimates. A [Uniform]
+    sample gives each with its interval ({!mutation_bounds}), as in
+    [score 70.0% (70/100, 63.4% to 75.9%)] and [total 60.2% (54.5% to 65.5%)]. A
+    [Mixed] sample gives the bound of {!mutation_lower}, as in
+    [score 70.0% (70/100, at least 52.0%)] and [total 60.2% (at least 45.0%)].
+    With no scored mutant, the score is [no scored mutant], and the total is
+    [total: no scored mutant] under its gate and absent without it. A gate on
+    the two names the bound, as in [minimum 65% of the lower bound: FAILED], and
+    the bound decides the style and the result. *)
 
 val reaching_sentence : witness list -> string option
 (** [reaching_sentence ws] is the sentence that counts the reaching tests [ws],

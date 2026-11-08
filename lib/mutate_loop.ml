@@ -1079,6 +1079,8 @@ let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside found
              match r.verdict with Verdicts.Killed _ -> true | _ -> false)
            found.records);
     not_tested = List.length reached - List.length found.records;
+    not_sampled = 0;
+    sample = None;
     scope =
       (if narrowed then Report_sections.Selected (List.length dry_run)
        else Report_sections.Suite);
