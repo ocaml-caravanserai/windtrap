@@ -2311,6 +2311,12 @@ val run : ?argv:string array -> string -> test list -> int
     interface and carries no stability guarantee. [open Windtrap] brings none of
     it into scope. *)
 module Private : sig
+  val version : string option
+  (** [version] is the version of the release that this build comes from, as
+      [--version] prints it. It is [None] for a build of a tree that
+      [dune subst] did not substitute, such as a checkout, for which [--version]
+      prints [dev]. *)
+
   module Baseline = Baseline
   module Capture = Capture
   module Check = Check
@@ -2330,6 +2336,7 @@ module Private : sig
   module Report = Report
   module Report_junit = Report_junit
   module Report_json = Report_json
+  module Report_sarif = Report_sarif
   module Report_sections = Report_sections
   module Run = Run
   module Seed = Seed

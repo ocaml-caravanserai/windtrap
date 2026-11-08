@@ -973,6 +973,70 @@ $ dune exec windtrap -- mutants --json --lines=calc.ml:10
   "unstable": [ ] }
 ```
 
+## Exporting SARIF
+
+`--sarif` prints the merge as one SARIF 2.1.0 document on standard
+output, in place of the report. GitHub code scanning and the SARIF
+viewer of VS Code read this format:
+
+```
+$ dune exec windtrap -- mutants --sarif > mutants.sarif
+```
+
+Each mutant gives one result or none:
+
+- A survivor gives a warning. Its message gives the original and the
+  mutated expression, and the number of tests that ran the line.
+- An unknown mutant gives a note with the reason of the report. When
+  `--crash-kills` counts the mutant as killed, that mutant gives no
+  result.
+- A mutant that was not evaluated gives a note.
+- A killed mutant, a mutant killed elsewhere, a never reached mutant and
+  a mutant evaluated outside tests give no result. An unknown mutant
+  gives no result when only suites that were not mutation-tested hold it
+  as unknown.
+
+Each result has a rule, which is the rewrite of the mutant, and the
+location of the mutated expression. A column counts Unicode code points.
+When the command cannot read the source of the file, or the source has
+no such column, the location gives only the lines. A file path is
+relative to the root of the dune workspace. GitHub reads it relative to
+the root of the repository, so the two roots must be the same. The
+options act as they do for `--json`. `--lines` and `--diff` keep the
+mutants on their lines. Under a gate, the outcome line goes to standard
+error, and the exit code is that of the gates.
+
+This GitHub Actions job uploads the document to code scanning. The
+steps that build the project and run the mutation tests come before
+the two steps of the example:
+
+```yaml
+mutants:
+  runs-on: ubuntu-latest
+  permissions:
+    actions: read
+    contents: read
+    security-events: write
+  steps:
+    # Put the steps that get the source, build the project and run
+    # the mutation tests here.
+    - run: dune exec windtrap -- mutants --sarif > mutants.sarif
+      continue-on-error: true
+    - uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: mutants.sarif
+```
+
+Without a gate, the command exits 1 when a mutant survives or when a
+suite was not mutation-tested. With a gate, it exits 1 when a gate
+fails. Thus the `windtrap` step has `continue-on-error: true`, so that
+the upload runs. Another way is to remove `continue-on-error` and to
+give the upload step `if: ${{ !cancelled() }}`. Then the job fails, but
+the upload occurs. The upload uses the `security-events: write`
+permission. On a private repository, it uses `actions: read` too. GitHub
+Code Security is probably also necessary on a private repository. We did
+not do a test of this.
+
 ## Killing a survivor
 
 A survivor names a behaviour no test checks. To kill the three survivors
@@ -1196,6 +1260,10 @@ OPTIONS:
 
   --json
       Machine-readable report on standard output.
+
+  --sarif
+      SARIF 2.1.0 document of the survivors, the unknown and the
+      not-evaluated mutants on standard output, for code scanning.
 
   --lines=FILE:A-B,...
       Report only the mutants on these lines of these files.

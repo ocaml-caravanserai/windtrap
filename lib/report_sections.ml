@@ -1616,6 +1616,22 @@ type mutation = {
 let arm_command ~invocation ~tests id =
   command ~armed:id ~force:true ~invocation ~flags:[] tests
 
+let reaching_sentence = function
+  | [] -> None
+  | witnesses ->
+      let n = List.length witnesses in
+      let executables =
+        List.length
+          (List.sort_uniq String.compare
+             (List.filter_map (fun (w : witness) -> w.exe) witnesses))
+      in
+      Some
+        (if n = 1 then "1 test ran this line and did not fail"
+         else if executables > 1 then
+           strf "%d tests in %d executables ran this line and none failed" n
+             executables
+         else strf "%d tests ran this line and none failed" n)
+
 (* A survivor is drawn as a failure block is: it is a defect report about the
    tests it names. *)
 let survivor_block ?(runs = 1) ?(early = []) ~exe_width (s : survivor) =
@@ -1638,22 +1654,9 @@ let survivor_block ?(runs = 1) ?(early = []) ~exe_width (s : survivor) =
     | Some _ | None -> []
   in
   let reaching =
-    match s.witnesses with
-    | [] -> []
-    | witnesses ->
-        let n = List.length witnesses in
-        let executables =
-          List.length
-            (List.sort_uniq String.compare
-               (List.filter_map (fun (w : witness) -> w.exe) witnesses))
-        in
-        let sentence =
-          if n = 1 then "1 test ran this line and did not fail:"
-          else if executables > 1 then
-            strf "%d tests in %d executables ran this line and none failed:" n
-              executables
-          else strf "%d tests ran this line and none failed:" n
-        in
+    match reaching_sentence s.witnesses with
+    | None -> []
+    | Some sentence ->
         let left gap width = { gap; align = `Left; width } in
         let test (w : witness) =
           [
@@ -1672,9 +1675,13 @@ let survivor_block ?(runs = 1) ?(early = []) ~exe_width (s : survivor) =
         in
         [
           Line [];
-          Line [ plain (indent ^ sentence) ];
+          Line [ plain (indent ^ sentence ^ ":") ];
           Rows
-            { margin = indent ^ "  "; columns; rows = List.map cells witnesses };
+            {
+              margin = indent ^ "  ";
+              columns;
+              rows = List.map cells s.witnesses;
+            };
         ]
   in
   let early =

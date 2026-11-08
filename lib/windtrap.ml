@@ -151,10 +151,12 @@ let chdir = Run.chdir
 
 (* [dune subst], which [dune-release distrib] runs in the clone it archives,
    replaces the watermark with the tag's version. A tree built unsubstituted,
-   such as a checkout, still holds it and reports "dev". *)
-let version =
+   such as a checkout, still holds it, has no release and reports "dev". *)
+let release =
   let watermark = "%%VERSION%%" in
-  if String.starts_with ~prefix:"%" watermark then "dev" else watermark
+  if String.starts_with ~prefix:"%" watermark then None else Some watermark
+
+let version = Option.value release ~default:"dev"
 
 (* Under dune, where [dune runtest] and [dune exec] both set [INSIDE_DUNE],
    the command is a [dune exec] of this executable. An executable with
@@ -305,6 +307,8 @@ let run ?(argv = Sys.argv) suite tests =
 (* Private *)
 
 module Private = struct
+  let version = release
+
   module Baseline = Baseline
   module Capture = Capture
   module Check = Check
@@ -324,6 +328,7 @@ module Private = struct
   module Report = Report
   module Report_junit = Report_junit
   module Report_json = Report_json
+  module Report_sarif = Report_sarif
   module Report_sections = Report_sections
   module Run = Run
   module Seed = Seed

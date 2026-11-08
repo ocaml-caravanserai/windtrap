@@ -293,3 +293,8 @@
  (name test_choice)
  (modules test_choice)
  (libraries windtrap))
+
+(test
+ (name test_report_sarif)
+ (modules test_report_sarif)
+ (libraries windtrap))
