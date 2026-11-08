@@ -662,9 +662,11 @@ type estimate = {
   bounds : ((float * float) * (float * float)) option;
       (** Under a [Uniform] sample, the interval of the score and the interval
           of the total, as percentages. When [n] is [0], each judged mutant can
-          be killed or not: the score is from [x / (x + judged)] to [100.], and
-          the total from [x / (x + judged + u)] to
-          [(x + judged) / (x + judged + u)]. It is [None] under a [Mixed]
+          be killed or not. Then, where [u] is the mutants that no test reached
+          and those evaluated outside tests, the score is from
+          [100 * x / (x + judged)] to [100], and the total is from
+          [100 * x / (x + judged + u)] to
+          [100 * (x + judged) / (x + judged + u)]. It is [None] under a [Mixed]
           sample. *)
   lower : float * float;
       (** What the gates [min] and [min_total] compare: the lower bounds of
@@ -673,8 +675,8 @@ type estimate = {
           killed mutants among the scored mutants and [not_sampled], and the
           total adds the mutants that no test reached and those evaluated
           outside tests. When [n] is [0], under each sample, they are
-          [x / (x + judged)] and [x / (x + judged + u)], thus [0.] when [x] is
-          [0]. *)
+          [100 * x / (x + judged)] and [100 * x / (x + judged + u)], thus [0.]
+          when [x] is [0]. *)
 }
 (** The type for the estimates of a sample. *)
 
@@ -755,7 +757,8 @@ val mutation_line : gates:gates -> mutation -> span list
 
     With no scored mutant, the score is [no scored mutant], and the total is
     [total: no scored mutant] under its gate and absent without it. When [x] is
-    above [0], the two give [x] and the lower bound, as in
+    above [0], the score gives [x] and its lower bound, and the total gives its
+    lower bound, as in
     [score: no scored mutant in the sample (50 killed elsewhere, at least
      96.2%)] and [total: no scored mutant in the sample (at least 96.2%)]. *)
 

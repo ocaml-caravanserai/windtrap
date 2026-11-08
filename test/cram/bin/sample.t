@@ -134,10 +134,10 @@ not sampled as survived:
   >   'lib/b.ml:1:0:add:a + b:a - b=killed' 'lib/b.ml:2:0:add:a + b:a - b=not_sampled'
   $ run windtrap mutants --min=50 a.mutants b.mutants | grep -e '^mutants:' -e '^windtrap:'
   mutants: 1 survived of 5 reached, 2 killed, 1 never reached, 2 not sampled, 2 executables, score 66.7% (2/3, at least 40.0%), minimum 50% of the lower bound: FAILED, reach 83.3% (5/6), total 55.6% (at least 33.3%)
-  windtrap: the verdict files that tested their suite have different samples, so the score and the total have no interval: --min and --min-total count each mutant that is not sampled as survived
+  windtrap: the verdict files that tested their suite have different samples, so the score and the total have no interval: --min and --min-total count each mutant that is not sampled as survived, and with no scored mutant in the sample, each mutant that the hash judged
   $ run windtrap mutants --min=20 a.mutants b.mutants | grep -e '^mutants:' -e '^windtrap:'
   mutants: 1 survived of 5 reached, 2 killed, 1 never reached, 2 not sampled, 2 executables, score 66.7% (2/3, at least 40.0%), minimum 20% of the lower bound: ok, reach 83.3% (5/6), total 55.6% (at least 33.3%)
-  windtrap: the verdict files that tested their suite have different samples, so the score and the total have no interval: --min and --min-total count each mutant that is not sampled as survived
+  windtrap: the verdict files that tested their suite have different samples, so the score and the total have no interval: --min and --min-total count each mutant that is not sampled as survived, and with no scored mutant in the sample, each mutant that the hash judged
   $ run windtrap mutants --json a.mutants b.mutants | grep -E '"(not_sampled|sample_percent|score_low|sample)"'
       "not_sampled": 2 },
         "sample": { "percent": 50, "seed": "s1:000000000000002a" } },
@@ -192,7 +192,7 @@ also hide the survivor of a full file:
   [1]
   $ grep '^mutants:' "$bin/out"; cat "$bin/err"
   mutants: 3 reached, 1 killed, 2 not sampled, 2 executables, score 100.0% (1/1, at least 33.3%), reach 100.0% (3/3), total 100.0% (at least 33.3%)
-  windtrap: the verdict files that tested their suite have different samples, so the score and the total have no interval: --min and --min-total count each mutant that is not sampled as survived
+  windtrap: the verdict files that tested their suite have different samples, so the score and the total have no interval: --min and --min-total count each mutant that is not sampled as survived, and with no scored mutant in the sample, each mutant that the hash judged
   windtrap: 2 mutants are not sampled, so no gate tells that each mutant was killed: give --min or --min-total to gate a sample
 
 A gate gives the exit code, also for a sample:

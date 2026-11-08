@@ -374,8 +374,8 @@ mutants that no test reached and those that ran outside every test,
 which are exact counts. The interval of the total maps each bound of
 `p` in the same way.
 
-When the sample has no scored mutant, the line gives `no scored mutant`
-for the score, and the total has no estimate. With `--min-total`, the
+When the sample has no scored mutant and no exact kill, the line gives
+`no scored mutant` for the score, and the total has no estimate. With `--min-total`, the
 line gives `total: no scored mutant`. Each mutant that the hash judged
 can then be killed or not. With no exact kill, the interval of the
 score is 0% to 100%, and `--min` and `--min-total` fail unless the
@@ -404,11 +404,13 @@ mutants: 12 survived of 487 reached, 84 killed, 31 never reached, 391 not sample
 Files with different samples, or a sample and no sample, give the
 estimates with no interval. A note on standard error tells why. `--min`
 and `--min-total` then compare a bound that is always true: each mutant
-that is not sampled counts as survived. The line gives this bound, as
-`score 87.5% (84/96, at least 17.2%)`. A file of a suite that was not
-mutation-tested does not count for this rule. In a merge of one sample,
-such a file counts its unknown mutants in the estimate, and the merge
-fails anyway.
+that is not sampled counts as survived. With no scored mutant in the
+sample, each mutant that the hash judged counts as survived. The line
+gives this bound, as `score 87.5% (84/96, at least 17.2%)`.
+
+A file of a suite that was not mutation-tested does not count for the
+rule of different samples. In a merge of one sample, such a file counts
+its unknown mutants in the estimate, and the merge fails anyway.
 
 Without a gate, a merge with a mutant that is not sampled exits 1. The
 sample does not tell that each mutant was killed, and a sampled file
@@ -420,8 +422,8 @@ sample does not count each survivor.
 In the document of `--json`, a mutant out of the sample has the verdict
 `not_sampled`. When the merge has a sample, `summary` gives their count
 in `not_sampled`. Under one sample, when the hash judged a reached
-mutant that was not killed elsewhere, it also gives the sample and the
-bounds. With no scored mutant, `score` and `total_percent` are `null`.
+mutant that was not killed elsewhere, `summary` also gives the sample
+and the bounds. With no scored mutant, `score` and `total_percent` are `null`.
 `--sarif` gives no result for a mutant that is not sampled.
 
 ### Samples and the last run
