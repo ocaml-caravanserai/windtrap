@@ -269,24 +269,30 @@ $ dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --mutate --
 ```
 
 The two flags narrow `--mutate` as `--lines` does, and they combine
-with its prefixes and with `--lines` or `--diff`. A mutant of another
-rewrite is not tested and not recorded. Thus the run keeps the verdicts
-outside its scope only when the same build wrote the verdict file (see
+with the prefixes of `--mutate` and with `--lines` or `--diff`. The run
+does not test or record a mutant of another rewrite. Thus the run keeps
+the verdicts outside its scope only when the same build wrote the
+verdict file and tested its suite (see
 [Unstable verdicts](#unstable-verdicts)). A mutant that `[@mutate off]`
 dismisses stays out of the run. `windtrap mutants` does not take the
 two flags.
 
 An unknown name or an empty list is a usage error. The message gives
-the names of the rewrites. The two flags together are a usage error,
-from the command line or from a mirror. If a flag occurs two times, the
-last value applies. If neither the command line nor a mirror gives
-`--mutate`, a flag on the command line is a usage error. A mirror alone
-has no effect on a suite that does not mutate.
+the names of the rewrites. A repeated name counts one time. The two
+flags together are a usage error, from the command line or from a
+mirror. If a flag occurs two times, the last value applies. If neither
+the command line nor a mirror gives `--mutate`, a flag on the command
+line is a usage error. A mirror alone has no effect on a suite that
+does not mutate. But an invalid value, or the two mirrors together, is
+a usage error on each suite.
 
-A filter that keeps no mutant of the executable is refused, as a prefix
-that keeps none is. Under `--lines` or `--diff`, lines with no site of
-the selected rewrites are not an error: the suite runs without mutation,
-as for lines with no site.
+A filter that keeps no site of the scope is not an error. The scope is
+the prefixes of `--mutate` and the lines of `--lines` or `--diff`. The
+run tells it on standard error, runs the suite without mutation, exits
+as the suite does and saves no verdict file. Under `--lines` or
+`--diff`, lines with no site of the selected rewrites follow the same
+rule, as lines with no site do. A scope that has no site before the
+filter is refused, as with no filter.
 
 ## What a mutation run runs
 
@@ -864,8 +870,9 @@ highest verdict has it. Thus a fresh kill in another file removes the
 mark.
 
 Under `--lines`, `--diff`, `--rewrites`, `--skip-rewrites` or
-`--mutate=PREFIX`, the run uses again only the verdicts in its scope. The records outside the scope follow the rule
-of a scoped run (see [Unstable verdicts](#unstable-verdicts)). Thus after
+`--mutate=PREFIX`, the run uses again only the verdicts in its scope.
+The records outside the scope follow the rule of a scoped run (see
+[Unstable verdicts](#unstable-verdicts)). Thus after
 a new build, a run under `--diff` keeps only the records of the diff, and
 the next full run can use again only these records. Under
 `--skip-killed`, the run first skips the mutants that another suite
@@ -889,8 +896,9 @@ the tests. It does not find a change to:
 - A file that a test reads, for example a baseline file or a fixture.
 - The environment, a library that the project uses, or the compiler.
 
-The rule also cannot see a direct run of a stale executable with
-`--lines` or `--diff`, after a change to a test file. Such a run records
+The rule also cannot find a direct run of a stale executable under a
+scope (`--lines`, `--diff`, `--rewrites`, `--skip-rewrites` or
+`--mutate=PREFIX`) after a change to a test file. Such a run records
 the new test digests for the old verdicts outside the scope.
 
 Thus a verdict that the run uses again can be incorrect. A full run
@@ -943,8 +951,8 @@ again. It must come from the same suite.
 These runs show no section: a run whose selection narrows the suite, a
 refused run, a run that a signal stopped, and a run whose file cannot
 be written. Under `--lines`, `--diff`, `--rewrites`, `--skip-rewrites`
-or `--mutate=PREFIX`, the section has only the mutants of the scope. The section does not change the
-score or the exit code.
+or `--mutate=PREFIX`, the section has only the mutants of the scope.
+The section does not change the score or the exit code.
 
 A scoped run keeps the records outside its scope only when the same
 build wrote the earlier file and tested its suite. In all other cases
