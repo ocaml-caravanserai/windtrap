@@ -291,13 +291,13 @@ A filter that keeps no site of the scope is not an error. The scope is
 the prefixes of `--mutate` and the lines of `--lines` or `--diff`. When
 the suite passes, the run gives a message on standard error, runs the
 suite without mutation, exits 0 and saves no verdict file. From the
-command line, a red suite is refused, as always. Under
+command line, the run refuses a red suite, as always. Under
 `WINDTRAP_MUTATE`, the suite runs as usual (see [Mutation testing a
 project](#mutation-testing-a-project)).
 
 Lines with no site, or with no site of the selected rewrites, follow the
-same rule. A prefix with no site, or lines that name no instrumented
-file, are refused, as with no filter.
+same rule. The run refuses a prefix with no site, or lines that name no
+instrumented file under the prefixes, as with no filter.
 
 ## What a mutation run runs
 
@@ -382,9 +382,10 @@ reached, and an `--arm` run of its mutant ends on `mutant not reached`.
 
 The mutation run exits 0 whatever it finds. It exits 1, with a sentence
 on standard error, when a pass fails or no mutant is left to test. Lines
-(`--lines` or `--diff`) with no site, and a rewrite filter that keeps no
-site of a scope that has sites, are no such failure (see [Testing the
-mutants of some rewrites](#testing-the-mutants-of-some-rewrites)).
+(`--lines` or `--diff`) of an instrumented file with no site, and a
+rewrite filter that keeps no site of a scope that has sites, are no such
+failure (see [Testing the mutants of some
+rewrites](#testing-the-mutants-of-some-rewrites)).
 
 ## Running a survivor again
 
