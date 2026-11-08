@@ -5459,6 +5459,178 @@ let incremental_reuse =
         probe_stopped;
     ]
 
+(* The rewrite filter *)
+
+(* A rewrite names what the site becomes: [add] gives the mutants of lines 15
+   and 27, and [sub] those of lines 18 and 21 and the two dismissed sites. *)
+let only_add = "--rewrites=add"
+let skip_add = "--skip-rewrites=add"
+let add_rows = [ List.nth green_rows 0; List.nth green_rows 3 ]
+let sub_rows = [ List.nth green_rows 1; List.nth green_rows 2 ]
+
+let add_outcome =
+  "mutants: 1 reached by this suite, 1 killed, 1 never reached, score 100.0% \
+   (1/1), reach 50.0% (1/2), total 50.0% (1/2)"
+
+let sub_outcome =
+  "mutants: 1 survived of 1 reached by this suite, 1 never reached, score 0.0% \
+   (0/1), reach 50.0% (1/2), total 0.0% (0/2)"
+
+let filtered (env, args) =
+  let r = spawn ~env (mutate :: args) in
+  equal (pair string text) ("exited 0", "") (r.status, r.err);
+  (outcome r.out, rows r)
+
+let filter_rows () =
+  equal
+    (list (pair string (option (list string))))
+    [
+      (add_outcome, Some add_rows);
+      (add_outcome, Some add_rows);
+      (sub_outcome, Some sub_rows);
+      (sub_outcome, Some sub_rows);
+      (green_outcome, Some green_rows);
+    ]
+    (List.map filtered
+       [
+         ([], [ only_add ]);
+         ([ ("WINDTRAP_REWRITES", "add") ], []);
+         ([], [ skip_add ]);
+         ([ ("WINDTRAP_SKIP_REWRITES", "add") ], []);
+         ([], [ "--rewrites=add,sub" ]);
+       ])
+
+let mirror_alone () =
+  let r = spawn ~env:[ ("WINDTRAP_REWRITES", "add") ] [] in
+  equal (pair string text) ("exited 0", "") (r.status, r.err);
+  is_true (Option.is_none r.file);
+  is_false
+    (List.exists
+       (fun l -> String.starts_with ~prefix:"mutants:" (String.trim l))
+       (lines r.out))
+
+(* A filter that keeps no mutant is refused as a prefix that keeps none. A
+   line scope with no site that the filter keeps runs the suite without
+   mutation, as a line scope with no site does. *)
+let filter_refusals () =
+  let none = spawn [ mutate; "--rewrites=del,not" ] in
+  equal (pair string text)
+    ( "exited 1",
+      "windtrap: --mutate=test/unit/mutate_loop/ --rewrites=del,not leaves no \
+       mutant in this executable's catalogue: no instrumented file matches the \
+       prefix (is the library under test instrumented with \
+       ppx_windtrap.mutate?), or the matched files have no mutation sites of \
+       the selected rewrites\n" )
+    (none.status, none.err);
+  let off_lines =
+    spawn [ mutate; only_add; "--lines=test/unit/mutate_loop/subject.ml:18" ]
+  in
+  equal
+    (triple string text (option (list string)))
+    ( "exited 0",
+      "windtrap: the selected lines hold no mutation site of the selected \
+       rewrites, so nothing on them is mutation-tested\n",
+      None )
+    (off_lines.status, off_lines.err, rows off_lines);
+  let broadcast =
+    spawn ~env:[ mutate_mirror; ("WINDTRAP_SKIP_REWRITES", "add,sub") ] []
+  in
+  equal (pair string text)
+    ( "exited 0",
+      "windtrap: WINDTRAP_MUTATE is set, but no mutant of this executable's \
+       catalogue is under test/unit/mutate_loop/ of a rewrite other than \
+       add,sub, so the suite runs without mutation\n" )
+    (broadcast.status, broadcast.err)
+
+(* The record of line 18 is planted as killed, so a kept record shows. *)
+let filter_save () =
+  let planted () =
+    remove (verdicts_path ());
+    whole (rerun [ mutate ]);
+    at_line 18 (Verdicts.killed [])
+  in
+  let change = planted () in
+  rewrite change;
+  let r = rerun [ mutate; only_add ] in
+  equal (pair string text) ("exited 0", "") (r.status, r.err);
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 killed";
+         "subject.ml:18 killed";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r);
+  let change = planted () in
+  rewrite ~digest:(String.make 32 '0') change;
+  let r = rerun [ mutate; only_add ] in
+  equal (pair string text) ("exited 0", "") (r.status, r.err);
+  equal (option (list string)) (Some add_rows) (rows r)
+
+let filter_reuse () =
+  ignore (first_run ());
+  let r = second_run ~args:[ only_add ] () in
+  equal string "exited 0" r.status;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option (list string)) (marked "reused" "fresh") (marks r);
+  ignore (first_run ());
+  let r = second_run ~args:[ skip_add ] () in
+  equal string "exited 0" r.status;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option (list string)) (marked "fresh" "reused") (marks r)
+
+let filter_skip () =
+  let p = skip_project () in
+  let skipped args =
+    plant_other p "windtrap-other.mutants"
+      [ (15, Verdicts.killed []); (18, Verdicts.killed []) ];
+    let r = skip_run p (skip_killed :: args) in
+    equal (pair string text) ("exited 0", "") (r.status, r.err);
+    equal (option string)
+      (Some (one_skip "default/other.exe"))
+      (elsewhere_line r.out);
+    rows r
+  in
+  equal
+    (list (option (list string)))
+    [
+      Some
+        [
+          "subject.ml:15 killed elsewhere by default/other.exe";
+          "subject.ml:27 unreached";
+        ];
+      Some
+        [
+          "subject.ml:18 killed elsewhere by default/other.exe";
+          "subject.ml:21 unreached";
+        ];
+    ]
+    [ skipped [ only_add ]; skipped [ skip_add ] ]
+
+let rewrite_filter =
+  group "The rewrite filter"
+    [
+      test
+        "--rewrites tests and records only the mutants of its rewrites, and \
+         --skip-rewrites only the others, from the flag or the mirror"
+        filter_rows;
+      test "a mirror of the filter without --mutate runs no mutant" mirror_alone;
+      test
+        "a filter that keeps no mutant is refused, and lines with no site that \
+         it keeps run the suite without mutation"
+        filter_refusals;
+      test "a filtered run keeps the other records only from its own build"
+        filter_save;
+      test "a filtered run reuses only the mutants that the filter keeps"
+        filter_reuse;
+      test "--skip-killed skips only the mutants that the filter keeps"
+        filter_skip;
+    ]
+
 (* Evidence *)
 
 module Loop = Windtrap.Private.Mutate_loop
@@ -5573,5 +5745,6 @@ let () =
          memory_records;
          killing_tests;
          incremental_reuse;
+         rewrite_filter;
          evidence;
        ])
