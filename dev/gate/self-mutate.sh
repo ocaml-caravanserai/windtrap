@@ -78,7 +78,7 @@ echo "gate: $took min, $used_mb MB more memory, exit $code"
 echo "gate: ${line:-no merge line}"
 
 fail=0
-if [ "$code" -eq 124 ]; then
+if [ $(( end - start )) -ge $(( minutes * 60 )) ]; then
   echo "gate: the run took more than its bound of $minutes min" >&2
   fail=1
 fi

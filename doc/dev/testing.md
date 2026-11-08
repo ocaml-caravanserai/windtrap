@@ -506,7 +506,8 @@ hand, and a pull request that changes the gate runs it. The script
 `dev/gate/self-mutate.sh` runs the build and reads the line of the
 merge. It gives a failure in these conditions:
 
-- The run takes more than its bound of minutes.
+- The run takes more than its bound of minutes. At the bound, the script
+  stops the build, and it kills the build 5 min later.
 - The used memory of the machine grows more than its bound of MB. The
   script reads the memory each 5 s, thus it can miss a short peak.
 - The merge gives no line, or a line with no count of mutants, for
