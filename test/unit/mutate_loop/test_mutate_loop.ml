@@ -5145,6 +5145,10 @@ let chain () =
     (efforts_of "retries 1 pass 1" "retries 1 pass 2")
     (efforts r3)
 
+let other_settings_at line =
+  on_line line (fun r ->
+      { r with effort = { r.effort with settings = String.make 32 '0' } })
+
 let not_unstable () =
   ignore (first_run ());
   rewrite (at_line 15 (Verdicts.survived [ positives; to_zero; negatives ]));
@@ -5161,6 +5165,25 @@ let not_unstable () =
     (option (list string))
     (listed [ (15, "survived \u{2192} killed") ])
     (unstable r.out)
+
+(* In [held], lines 15 and 18 survive. A run that tests line 15 and reuses
+   line 18 prints the blocks and arms the survivor that a whole run does, with
+   and without a retry. *)
+let reused_in_order () =
+  let env = [ suite "held" ] in
+  List.iter
+    (fun args ->
+      remove (verdicts_path ());
+      let whole_run = rerun ~env (mutate :: args) in
+      equal string "exited 0" whole_run.status;
+      equal (list string) [ site 15; site 18 ] (survivors whole_run.out);
+      rewrite (other_settings_at 15);
+      let r = rerun ~env (mutate :: incremental :: args) in
+      equal string "exited 0" r.status;
+      equal (option (list string)) (marked "fresh" "reused") (marks r);
+      equal (list string) (survivors whole_run.out) (survivors r.out);
+      equal (option string) (reproduce whole_run.out) (reproduce r.out))
+    [ []; [ retry_once ] ]
 
 let ignored_warning text =
   strf
@@ -5315,6 +5338,10 @@ let incremental_reuse =
         rising_retries;
       test "a reused verdict is reused again, with the effort of the first run"
         chain;
+      test
+        "a reused survivor prints in the order of a whole run, which arms the \
+         same survivor"
+        reused_in_order;
       test
         "a reused verdict is not unstable, and the next full run lists its \
          change"

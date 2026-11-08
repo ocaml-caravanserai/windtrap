@@ -722,9 +722,10 @@ type check = {
    survivor waits for its verdict until its last run. Under a retry, a kill
    with a killing test waits for the check of its tests, which runs in up to
    [check_runs] passes after the last retry. The loop starts no pass after a
-   signal. *)
-let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
-    tests ~dry_run ~pooled ~wall ~save reached =
+   signal. [reached] holds a reused verdict in place of the job of its
+   mutant. *)
+let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
+    ~dry_run ~pooled ~wall ~save reached =
   let durations = Hashtbl.create 256 in
   List.iter
     (fun (r : Run.result) -> Hashtbl.replace durations r.path r.duration)
@@ -738,7 +739,17 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
   let found =
     { records = []; survivors = []; not_evaluated = []; unknown = [] }
   in
-  let mutants = Array.of_list reached in
+  let reused, fresh =
+    List.partition_map
+      (fun (k, entry) ->
+        match entry with
+        | Either.Left verdict -> Either.Left (k, verdict)
+        | Right mutant -> Right (k, mutant))
+      (List.mapi (fun k entry -> (k, entry)) reached)
+  in
+  (* The catalogue index of each job. *)
+  let indices = Array.of_list (List.map fst fresh) in
+  let mutants = Array.of_list (List.map snd fresh) in
   let total = Array.length mutants in
   let judged = Array.make total false in
   let probed = ref false in
@@ -765,10 +776,31 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
     in
     found_verdict renderer config ~locations ~failed ~runs:run
       ~early:(List.rev early.(i))
-      found (i, mutant)
+      found
+      (indices.(i), mutant)
       (Verdicts.record_of_mutant
          ~effort:{ effort with Verdicts.pass = run }
          ?prefix mutant verdict)
+  in
+  let reused = ref reused in
+  let commit_reused due =
+    let due, rest = List.partition due !reused in
+    reused := rest;
+    List.iter
+      (fun (k, (mutant, record)) ->
+        found_verdict renderer config ~locations ~failed:None ~runs:1 ~early:[]
+          found (k, mutant) record)
+      due
+  in
+  (* A reused verdict counts in the pass where its job would give it, a kill
+     in the first and a survivor in the last, before the job [!next]. *)
+  let reused_before ~run =
+    let pass (record : Verdicts.record) =
+      match record.verdict with Verdicts.Survived _ -> last | _ -> 1
+    in
+    commit_reused (fun (k, (_, record)) ->
+        pass record = run
+        && Option.fold ~none:true ~some:(fun i -> k < indices.(i)) !next)
   in
   (* The checks by their paths, and the mutants that wait for one. *)
   let checks = Hashtbl.create 16 in
@@ -904,10 +936,12 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
           | `Done -> ());
           next :=
             if j + 1 < Array.length waiting then Some waiting.(j + 1) else None;
+          reused_before ~run;
           measured_job "pass" run (j + 1) (Array.length waiting);
           Option.iter testing !next
         in
         next := Some waiting.(0);
+        reused_before ~run;
         testing waiting.(0);
         let jobs =
           Array.to_list
@@ -928,14 +962,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
       measured "probe";
       match probe ~dry_run ran with
       | Ok () ->
-          (* A reused verdict counts only once the probe agrees. Its index
-             orders nothing, because only a kill or a survivor is reused. *)
-          List.iter
-            (fun ((mutant : Mutate.mutant), record) ->
-              found_verdict renderer config ~locations ~failed:None ~runs:1
-                ~early:[] found (-1, mutant) record)
-            reused;
           if total > 0 then next := Some 0;
+          (* A reused verdict counts only once the probe agrees. *)
+          reused_before ~run:1;
           testing 0
       | Error message -> raise (Refused message)
     end
@@ -944,6 +973,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
       | `Again -> again := (index - 1) :: !again
       | `Done -> ());
       next := if index < total then Some index else None;
+      reused_before ~run:1;
       measured_job "pass" 1 index total;
       testing index
     end
@@ -955,7 +985,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
     with_interrupts @@ fun () ->
     let jobs =
       probe_job ~deadline ~pooled dry_run
-      :: List.map (mutant_job ~deadline ~pooled) reached
+      :: List.map (mutant_job ~deadline ~pooled) (Array.to_list mutants)
     in
     starting jobs;
     match pass config ~suite tests jobs ~on_ran with
@@ -963,6 +993,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
     | () -> (
         measured_pass "pass" 1;
         passes ~run:2 !again;
+        if Option.is_none !signal then commit_reused (fun _ -> true);
         check_passes ~run:1
           (List.sort
              (fun a b -> Int.compare (first a) (first b))
@@ -976,7 +1007,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
         | Some s, None, Some i when checking.(i) ->
             Interrupted (s, `Check (fst mutants.(i)))
         | Some s, None, Some i -> Interrupted (s, `Wait (fst mutants.(i)))
-        | (Some _ | None), _, _ -> Finished (save (List.rev found.records)))
+        | (Some _ | None), _, _ ->
+            commit_reused (fun _ -> true);
+            Finished (save (List.rev found.records)))
   in
   (ended, found)
 
@@ -1225,13 +1258,13 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   in
                   (skipped, to_test, [ elsewhere_line ~used skipped ])
               in
-              let reused, to_test =
+              let to_test =
                 match if config.incremental then last_run ~suite else None with
-                | None -> ([], to_test)
+                | None -> List.map Either.right to_test
                 | Some last ->
                     let recorded = Verdicts.lookup last.test_digests
                     and digest = Verdicts.lookup test_digests in
-                    List.partition_map
+                    List.map
                       (fun (((m : Mutate.mutant), site) as mutant) ->
                         match
                           Verdicts.reuse ~last ~recorded ~digest ~effort
@@ -1261,7 +1294,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                     @ recorded ~effort Verdicts.Unreached unreached)
               in
               match
-                test_mutants renderer ~meter ~suite config ~effort ~reused tests
+                test_mutants renderer ~meter ~suite config ~effort tests
                   ~dry_run ~pooled ~wall ~save to_test
               with
               | exception Sys_error _ when !signal = Some Sys.sigpipe ->

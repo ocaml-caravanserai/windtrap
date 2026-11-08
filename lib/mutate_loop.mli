@@ -202,16 +202,22 @@ val execute_and_report :
       that had retries too, and a kill from a retry needs at least as many
       retries.
 
-    A reused mutant gets no job, no retry and no check. The loop commits each
-    reused verdict once the probe agrees, in catalogue order, before the first
-    job ends. A reused survivor prints its block, with [(reused)] after its
-    title. A probe that disagrees, or a signal before the probe ends, commits
-    none. Above the outcome line and its [reproduce:] line, after the line of
-    [--skip-killed], one line gives the number of verdicts that the run reused,
-    as in [reused: 2 verdicts from the last run]. It prints in a finished and in
-    an interrupted report, also when the number is [0]. A narrowed run reuses
-    too, and saves no verdict. When no file of this build exists, it writes a
-    refused file, so the next run reuses no verdict.
+    A reused mutant gets no job, no retry and no check. Once the probe agrees,
+    the loop commits each reused verdict in the pass where its job would give
+    it: a kill in the first pass, and a survivor in the pass of the last retry.
+    It commits it before the job of the next mutant in catalogue order. When the
+    pass of the last retry does not run, a reused survivor comes after the
+    retries. Thus, for the same verdicts, the blocks print in the order of a run
+    that tests each mutant, and the [reproduce:] line arms the same survivor. A
+    reused survivor prints its block, with [(reused)] after its title. A probe
+    that disagrees, or a signal before the probe ends, commits none. A signal
+    stops the commits that come after it, as it stops the jobs. Above the
+    outcome line and its [reproduce:] line, after the line of [--skip-killed],
+    one line gives the number of verdicts that the run reused, as in
+    [reused: 2 verdicts from the last run]. It prints in a finished and in an
+    interrupted report, also when the number is [0]. A narrowed run reuses too,
+    and saves no verdict. When no file of this build exists, it writes a refused
+    file, so the next run reuses no verdict.
 
     {b Tests marked xfail.} A test marked xfail ({!Test_tree.val-xfail}) reaches
     no mutant and kills none. The dry run and the probe run it, no mutant's job
