@@ -802,15 +802,23 @@ reused: 41 verdicts from the last run
 ```
 
 The block of a survivor that the run used again has `(reused)` after its
-title. The blocks print in the order of a run that tests each mutant,
-and the `reproduce:` line arms the same survivor. The verdict file marks each such verdict, and `windtrap mutants`
-marks it too: its report gives `reused: 41 verdicts from earlier runs`,
-and its `--json` gives `"reused": true` to each such mutant. When the
-merge combines records of one mutant, the mutant has the mark only when
-each record of the highest verdict has it. Thus a fresh kill in another
-file removes the mark. A verdict that the run used again is not a change
-for the unstable section. When a signal stops the run before the probe
-ends, the run uses no verdict again.
+title. For the same verdicts, the blocks print in the order of a run
+that tests each mutant. Thus the `reproduce:` line arms the same
+survivor. A verdict that the run used again is not a change for the
+unstable section.
+
+When a signal stops the run before the probe ends, the run uses no
+verdict again. A later signal stops the use of the verdicts that come
+after the stopped job, as it stops the jobs. But when the run ends with
+each verdict known, it uses again the verdicts that remain.
+
+The verdict file marks each verdict that the run used again, and
+`windtrap mutants` marks it too: its report gives
+`reused: 41 verdicts from earlier runs`, and its `--json` gives
+`"reused": true` to each such mutant. When the merge combines records
+of one mutant, the mutant has the mark only when each record of the
+highest verdict has it. Thus a fresh kill in another file removes the
+mark.
 
 Under `--lines`, `--diff` or `--mutate=PREFIX`, the run uses again only
 the verdicts in its scope. The records outside the scope follow the rule

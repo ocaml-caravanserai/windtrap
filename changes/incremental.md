@@ -4,8 +4,10 @@
   use the verdict of the last run of the same suite again, with no job for
   the mutant. A kill is used again when its killing test, and each test
   before it in the job, reach the mutant in the same order. Their source
-  files must not change. A survivor is used again when the same tests
-  reach it, with unchanged source files and no higher `--mutate-retry`.
+  files must not change. Under `--mutate-retry`, a kill is used again
+  only from a run with enough retries. A survivor is used again when the
+  same tests reach it, with unchanged source files and no higher
+  `--mutate-retry`.
   The run that tested the mutant and this run must have the same seed,
   `--prop-count`, `--replay`, `--case` and `--timeout`. They must also
   have the same `--mutate-memory`, `--mutate-workers` and windtrap

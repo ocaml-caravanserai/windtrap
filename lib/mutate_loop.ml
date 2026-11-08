@@ -792,8 +792,8 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
           found (k, mutant) record)
       due
   in
-  (* A reused verdict counts in the pass where its job would give it, a kill
-     in the first and a survivor in the last, before the job [!next]. *)
+  (* The loop commits a reused kill in the first pass and a reused survivor in
+     the last, before the job [!next]. *)
   let reused_before ~run =
     let pass (record : Verdicts.record) =
       match record.verdict with Verdicts.Survived _ -> last | _ -> 1
