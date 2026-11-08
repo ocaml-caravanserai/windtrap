@@ -858,45 +858,59 @@ dune builds for a stanza naming both backends:
 
   $ ../pp.exe -apply windtrap_mutate,windtrap_coverage --impl ./fixture_guards.ml | ../elide.exe
   coverage points of "./fixture_guards.ml" in Windtrap_cov_________fixture_guards___ml, with ___windtrap_post_visit___:
-    0: 456-461
-    1: 467-468
-    2: 474-475
-    3: 453-475
-    4: 490-495
-    5: 746-747
-    6: 679-698
-    7: 703-729
-    8: 734-756
-    9: 761-773
-    10: 662-773
-    11: 807-808
-    12: 814-819
-    13: 792-819
-    14: 942-974
-    15: 1008-1011
-    16: 993-1012
-    17: 1143-1144
-    18: 1391-1396
-    19: 1386-1396
-    20: 1417-1420
-    21: 1424-1428
+    0: 689-694
+    1: 700-701
+    2: 707-708
+    3: 686-708
+    4: 723-728
+    5: 979-980
+    6: 912-931
+    7: 936-962
+    8: 967-989
+    9: 994-1006
+    10: 895-1006
+    11: 1040-1041
+    12: 1047-1052
+    13: 1025-1052
+    14: 1192-1200
+    15: 1192-1200
+    16: 1175-1207
+    17: 1241-1244
+    18: 1226-1245
+    19: 1376-1377
+    20: 1624-1629
+    21: 1619-1629
+    22: 1650-1653
+    23: 1657-1661
+    24: 1778-1781
+    25: 1778-1788
+    26: 1829-1836
+    27: 1829-1836
+    28: 1812-1841
+    29: 1882-1885
+    30: 1882-1885
+    31: 1862-1890
   mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands:
-    0: 9:34-9:35 "int" "0" -> "1"
-    1: 9:27-9:28 "int" "1" -> "0"
-    2: 9:16-9:21 "le" "a < b" -> "a <= b"
-    3: 10:14-10:19 "sub" "a + b" -> "a - b"
-    4: 16:11-16:14 "not" "p x" -> "not (p x)"
-    5: 17:11-17:16 "neq" "a = b" -> "a <> b"
-    6: 18:11-18:17 "or" "a && b" -> "a || b"
-    7: 21:39-21:44 "bool" "false" -> "true"
-    8: 21:27-21:33 "or" "a && b" -> "a || b"
-    9: 21:20-21:21 "not" "c" -> "not c"
-    10: 27:4-27:12 "del" "loop f x" -> "()"
-    11: 26:8-26:11 "not" "f x" -> "not (f x)"
-    12: 30:24-30:36 "or" "(f x) && (g x)" -> "(f x) || (g x)"
-    13: 34:17-34:23 "and" "a || b" -> "a && b"
-    14: 39:15-39:25 "none" "Some (f x)" -> "None"
-    15: 40:20-40:31 "tail" "(f x) :: (g xs)" -> "g xs"
+    0: 12:34-12:35 "int" "0" -> "1"
+    1: 12:27-12:28 "int" "1" -> "0"
+    2: 12:16-12:21 "le" "a < b" -> "a <= b"
+    3: 13:14-13:19 "sub" "a + b" -> "a - b"
+    4: 19:11-19:14 "not" "p x" -> "not (p x)"
+    5: 20:11-20:16 "neq" "a = b" -> "a <> b"
+    6: 21:11-21:17 "or" "a && b" -> "a || b"
+    7: 24:39-24:44 "bool" "false" -> "true"
+    8: 24:27-24:33 "or" "a && b" -> "a || b"
+    9: 24:20-24:21 "not" "c" -> "not c"
+    10: 30:4-30:12 "del" "loop f x" -> "()"
+    11: 29:8-29:11 "not" "f x" -> "not (f x)"
+    12: 33:24-33:36 "or" "(f x) && (g x)" -> "(f x) || (g x)"
+    13: 37:17-37:23 "and" "a || b" -> "a && b"
+    14: 42:15-42:25 "none" "Some (f x)" -> "None"
+    15: 43:20-43:31 "tail" "(f x) :: (g xs)" -> "g xs"
+    16: 48:2-48:5 "del" "f x" -> "()"
+    17: 51:39-51:46 "del" "step ()" -> "()"
+    18: 51:28-51:35 "not" "more ()" -> "not (more ())"
+    19: 52:40-52:43 "del" "f i" -> "()"
   let lt a b =
     ___windtrap_visit___ 3;
     if
@@ -958,7 +972,7 @@ dune builds for a stanza naming both backends:
       then true
       else (___windtrap_visit___ 12; false)
   let rec loop f x =
-    ___windtrap_visit___ 14;
+    ___windtrap_visit___ 16;
     while
       (let __windtrap_mut_11_p = f x in
        if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 11
@@ -967,39 +981,67 @@ dune builds for a stanza naming both backends:
       do
       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 10
       then ()
-      else (loop f x; ()) done
+      else
+        (___windtrap_visit___ 15; ___windtrap_post_visit___ 14 (loop f x); ())
+      done
   let left f g x =
-    ___windtrap_visit___ 16;
+    ___windtrap_visit___ 18;
     ignore
       (let __windtrap_mut_12_p = f x in
        if
          Stdlib.(<>) (__windtrap_mut_12_p : Stdlib.Bool.t)
            (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 12)
-       then (___windtrap_visit___ 15; ___windtrap_post_visit___ 15 (g x))
+       then (___windtrap_visit___ 17; ___windtrap_post_visit___ 17 (g x))
        else __windtrap_mut_12_p)
   let either a b =
     let __windtrap_mut_13_p = a in
     if
       Stdlib.(=) (__windtrap_mut_13_p : Stdlib.Bool.t)
         (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 13)
-    then (___windtrap_visit___ 17; b)
+    then (___windtrap_visit___ 19; b)
     else __windtrap_mut_13_p
   let wrap f x =
     if
       Stdlib.not
         (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 14)
-    then (___windtrap_visit___ 19; Some (___windtrap_post_visit___ 18 (f x)))
+    then (___windtrap_visit___ 21; Some (___windtrap_post_visit___ 20 (f x)))
     else ((None)[@ocaml.warning "-18-41-42"])
   let push f g x xs =
     if
       Stdlib.not
         (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 15)
     then
-      (___windtrap_visit___ 20;
-       (___windtrap_post_visit___ 20 (f x))
+      (___windtrap_visit___ 22;
+       (___windtrap_post_visit___ 22 (f x))
        ::
-       (___windtrap_post_visit___ 21 (g xs)))
+       (___windtrap_post_visit___ 23 (g xs)))
     else g xs
+  let twice f x =
+    ___windtrap_visit___ 25;
+    if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 16
+    then ()
+    else (___windtrap_post_visit___ 24 (f x); ());
+    f x
+  let drain more step =
+    ___windtrap_visit___ 28;
+    while
+      (let __windtrap_mut_18_p = more () in
+       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 18
+       then Stdlib.not __windtrap_mut_18_p
+       else __windtrap_mut_18_p)
+      do
+      if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 17
+      then ()
+      else
+        (___windtrap_visit___ 27; ___windtrap_post_visit___ 26 (step ()); ())
+      done
+  let count f lo hi =
+    ___windtrap_visit___ 31;
+    for i = lo to hi do
+      if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 19
+      then ()
+      else (___windtrap_visit___ 30; ___windtrap_post_visit___ 29 (f i); ())
+    done
 
 A file is instrumented under its own name, and returned as parsed under
 an input name that is not a source file's:

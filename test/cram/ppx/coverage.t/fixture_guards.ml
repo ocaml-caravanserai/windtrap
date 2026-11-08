@@ -1,7 +1,10 @@
 (* The coverage rewriter over a file that holds the mutation rewriter's guards.
    A guard is generated code and takes no mark: every node of a guard is
    ghost but its disarmed arm, which keeps its site's location, so that arm
-   alone is marked. *)
+   alone is marked. The disarmed arm of a [del] guard is [e; ()]: [e] keeps
+   its location, and [()] has a location at the end of [e], where the
+   coverage rewriter keys the out-edge of [e]. On a loop body, the arm
+   [e; ()] has the location of [e]. *)
 
 (* The disarmed arm of an ordering or [ari] guard is marked as the branch of
    an [if], whether or not the site is a block: [a < b] is a condition, and
@@ -38,3 +41,12 @@ let either a b = a || b
    guard is a copy of the tail with ghost locations, which has no point. *)
 let wrap f x = Some (f x)
 let push f g x xs = f x :: g xs
+
+(* A statement keeps its out-edge, and a loop body keeps its entry point and
+   its out-edge. *)
+let twice f x =
+  f x;
+  f x
+
+let drain more step = while more () do step () done
+let count f lo hi = for i = lo to hi do f i done

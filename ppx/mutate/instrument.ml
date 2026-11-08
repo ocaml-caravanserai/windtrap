@@ -687,8 +687,16 @@ let is_opaque e =
    which keeps [e] in the tail position of an [if] with no [else], so a tail
    call in [e] stays a tail call. [As_statement] is
    [if armed then () else (e; ())], where [e; ()] types [e] as the statement
-   that it was: a loop body can have a type other than [unit]. *)
-type drop = In_tail | As_statement
+   that it was: a loop body can have a type other than [unit]. [In_body] is
+   the guard of [As_statement] on a whole loop body.
+
+   The coverage rewriter marks only the disarmed arm. The [()] of [e; ()]
+   takes the location of the end of [e], where the coverage rewriter keys
+   the out-edge of [e]. In [In_body], [e; ()] takes the location of [e],
+   where the coverage rewriter marks the entry of the body. In
+   [As_statement], [e; ()] stays ghost: an entry there would have the key
+   of the entry of a block that starts with [e]. *)
+type drop = In_tail | In_body | As_statement
 
 type site = {
   line : int;
@@ -1050,23 +1058,28 @@ class instrumenter ~keeps ~module_name =
           let armed = armed ~loc ~module_name index in
           match drop with
           | In_tail -> [%expr if [%e armed] then () else [%e rewritten]]
-          | As_statement ->
-              [%expr
-                if [%e armed] then ()
-                else (
-                  [%e rewritten];
-                  ())])
+          | In_body | As_statement ->
+              let stop = e.pexp_loc.loc_end in
+              let unit = eunit ~loc:{ e.pexp_loc with loc_start = stop } in
+              let arm = if drop = In_body then e.pexp_loc else loc in
+              let disarmed = pexp_sequence ~loc:arm rewritten unit in
+              [%expr if [%e armed] then () else [%e disarmed]])
 
     (* [unit_position drop e] rewrites [e], a then-branch with no [else], a
        loop body or the last statement of a sequence there, as a statement.
        A sequence there carries no [del] of its own: each of its statements
-       carries one, and its last statement is in the position of [e]. *)
+       carries one, and its last statement is in the position of [e]. In a
+       loop body, that statement is not the whole body. *)
     method private unit_position drop e =
       match e.pexp_desc with
       | Pexp_sequence _ when Option.is_some (off_reason e.pexp_attributes) -> e
       | Pexp_sequence (first, rest) ->
           let first = self#dropped As_statement first in
-          let rest = self#unit_position drop rest in
+          let rest =
+            self#unit_position
+              (if drop = In_tail then In_tail else As_statement)
+              rest
+          in
           { e with pexp_desc = Pexp_sequence (first, rest) }
       | _ -> self#dropped drop e
 
@@ -1095,13 +1108,13 @@ class instrumenter ~keeps ~module_name =
             pexp_desc =
               Pexp_while
                 ( self#mutate Condition condition,
-                  self#unit_position As_statement body );
+                  self#unit_position In_body body );
           }
       | Pexp_for (index, start, stop, direction, body) ->
           let index = self#pattern index in
           let start = self#expression start in
           let stop = self#expression stop in
-          let body = self#unit_position As_statement body in
+          let body = self#unit_position In_body body in
           { e with pexp_desc = Pexp_for (index, start, stop, direction, body) }
       | Pexp_sequence (first, rest) ->
           let first = self#dropped As_statement first in
