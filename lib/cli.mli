@@ -72,9 +72,9 @@ type parsed = {
   skip_killed : bool;  (** [--skip-killed]. *)
   sample : float option;
       (** [--sample PCT]: the percent of the sample, above [0.] and below
-          [100.]. The parser reads [PCT] with [float_of_string] and refuses a
-          value that is not finite, above [0] and at most [100]. [100] is no
-          sample, [None]. *)
+          [100.]. The parser reads [PCT] with [float_of_string]. It accepts only
+          a finite value above [0] and at most [100]. [100] is no sample,
+          [None]. *)
   case : string option;
       (** [--case PATH]: a path, read by {!settings}. It has no mirror. *)
   list_only : bool;

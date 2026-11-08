@@ -385,11 +385,12 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
    tests, and one record line for each record, in [Mutate.compare_id] order.
    [<source>] is a name: the digest of the source file that the instrumenter
    read, or empty when the instrumenter could not read it. A test is [<k>]
-   and then its [k] names. [<percent>] is a hexadecimal float above 0 and
-   below 100, and [<seed>] is [s1:] and 16 lowercase hexadecimal digits.
-   [<verdict>] is [unreached], [outside_tests], [killed <n>] and then [n]
-   killing tests, [killed_elsewhere <exe>] with a name that is not empty,
-   [not_evaluated], [not_sampled] in a file with a sample, [unknown <reason>], or
+   and then its [k] names. [<percent>] is a float above 0 and below 100,
+   which [save] writes in hexadecimal, and [<seed>] is [s1:] and 16
+   lowercase hexadecimal digits. [<verdict>] is [unreached],
+   [outside_tests], [killed <n>] and then [n] killing tests,
+   [killed_elsewhere <exe>] with a name that is not empty, [not_evaluated],
+   [not_sampled] in a file with a sample, [unknown <reason>], or
    [survived <n>] and then [n] reaching tests, with [n] above 0. [<reason>]
    is [deadline <seconds>] with a hexadecimal float, [crashed <signal>
    <status> <how>] where each of the two is [none] or an integer,

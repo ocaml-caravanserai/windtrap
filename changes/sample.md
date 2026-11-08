@@ -16,6 +16,10 @@
   suites have one sample. `--min` and `--min-total` then compare the
   lower bound. With different samples, the command gives no interval
   and a note, and the gates count each mutant out of a sample as
-  survived. `--max-survivors` with a sampled file is a usage error. The
-  `--json` document gives the verdict `not_sampled`, and the sample and
-  the bounds in `summary` (doc/manual/mutation.md#gates-on-a-sample).
+  survived. A mutant killed elsewhere is an exact kill beside the
+  estimate of the sample. Without a gate, a merge with a mutant that is
+  not sampled exits 1. `--max-survivors` with a sampled file is a usage
+  error. The `--json` document gives the verdict `not_sampled`, and the
+  sample and the bounds in `summary`. It gives `null` for the score and
+  the total of a sample with no scored mutant
+  (doc/manual/mutation.md#gates-on-a-sample).

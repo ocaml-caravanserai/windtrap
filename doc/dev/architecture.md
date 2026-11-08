@@ -437,6 +437,8 @@ a lossy `%g` spelling is asked for at the call site.
   sample. A record of each mutant out of the sample lets the merge count
   the population. `Not_sampled` outranks a survivor, as an unknown
   verdict does, because the suite reached the mutant and did not test it.
+  A skip that stands in a merge is an exact kill that the hash did not
+  judge, so the estimate adds it as it is and does not scale it.
 
 **The runtime (`Windtrap_runtime.Mutate`, `.Coverage`).**
 

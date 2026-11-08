@@ -189,12 +189,13 @@ val execute_and_report :
     {!Windtrap_runtime.Verdicts.in_sample} holds for [percent], [seed] and its
     identifier. The other such mutants get a
     {!Windtrap_runtime.Verdicts.Not_sampled} record, and the report counts them
-    as not sampled ({!Report_sections.type-sample}). Its sample is [Uniform],
-    with the mutants that the skip leaves as [judged]. Above the outcome line
-    and its [reproduce:] line, after the line of the reused verdicts, one line
-    gives the percent and the seed ({!Report_sections.sample_line}). The verdict
-    file records the sample. A mutant out of the sample is never reused, and the
-    job of a mutant in the sample is the job of a run with no sample.
+    as not sampled ({!Report_sections.type-sample}). The sample of the report is
+    [Uniform], and its [judged] is the mutants that the skip leaves. Above the
+    outcome line and its [reproduce:] line, after the line of the reused
+    verdicts, one line gives the percent and the seed
+    ({!Report_sections.sample_line}). The verdict file records the sample. A
+    mutant out of the sample is never reused, and the job of a mutant in the
+    sample is the job of a run with no sample.
 
     {b Incremental reuse.} Under [config.incremental] ([--incremental]), after
     the dry run, the loop loads {!Windtrap_runtime.Verdicts.output_file} of its
