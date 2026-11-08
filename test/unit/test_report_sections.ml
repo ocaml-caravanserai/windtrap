@@ -2346,6 +2346,19 @@ let hung =
     counted_as_killed = false;
   }
 
+(* [hung] as the report counts it under [--crash-kills]. *)
+let counted = { hung with Sections.counted_as_killed = true }
+
+let crashed =
+  {
+    counted with
+    Sections.mutant =
+      mutant
+        ~source:(source_of [ (3, "  if n = 0 then exit 1") ])
+        "lib/spin.ml:3:7:eq" 3 "n = 0" "n <> 0";
+    reason = "test_spin.exe: its run exited with status 1";
+  }
+
 let property_refused =
   {
     Sections.executable = "test_property.exe";
@@ -2863,6 +2876,91 @@ let summary_rows =
        FAILED" );
   ]
 
+let crash_rows =
+  [
+    ( "no mutant counted as killed: the line of today",
+      (fun () -> summary ~unknown:[ hung ] ~killed:2 Sections.Suite),
+      "mutants: 3 reached by this suite, 2 killed, 1 unknown, score 100.0% \
+       (2/2), reach 100.0% (3/3), total 100.0% (2/2)" );
+    ( "one mutant counted as killed",
+      (fun () -> summary ~unknown:[ counted ] ~killed:2 Sections.Suite),
+      "mutants: 3 reached by this suite, 3 killed (1 by --crash-kills), score \
+       100.0% (3/3), reach 100.0% (3/3), total 100.0% (3/3)" );
+    ( "two mutants counted as killed, beside one that is not",
+      (fun () ->
+        summary ~survivors:[ add_survivor ] ~unknown:[ counted; hung; crashed ]
+          ~unreached:two_lines ~killed:2 Sections.Suite),
+      "mutants: 1 survived of 6 reached by this suite, 4 killed (2 by \
+       --crash-kills), 1 unknown, 2 never reached, score 80.0% (4/5), reach \
+       75.0% (6/8), total 57.1% (4/7)" );
+    ( "only mutants counted as killed",
+      (fun () -> summary ~unknown:[ counted; crashed ] ~killed:0 Sections.Suite),
+      "mutants: 2 reached by this suite, 2 killed (2 by --crash-kills), score \
+       100.0% (2/2), reach 100.0% (2/2), total 100.0% (2/2)" );
+    ( "a gate that the mutants counted as killed meet",
+      (fun () ->
+        summary ~survivors:[ add_survivor ] ~unknown:[ counted; crashed ]
+          ~killed:1 ~min:75. ~min_total:75. Sections.Suite),
+      "mutants: 1 survived of 4 reached by this suite, 3 killed (2 by \
+       --crash-kills), score 75.0% (3/4), minimum 75%: ok, reach 100.0% (4/4), \
+       total 75.0% (3/4), minimum 75%: ok" );
+    ( "and the same gate without the option",
+      (fun () ->
+        summary ~survivors:[ add_survivor ] ~unknown:[ hung; hung ] ~killed:1
+          ~min:75. ~min_total:75. Sections.Suite),
+      "mutants: 1 survived of 4 reached by this suite, 1 killed, 2 unknown, \
+       score 50.0% (1/2), minimum 75%: FAILED, reach 100.0% (4/4), total 50.0% \
+       (1/2), minimum 75%: FAILED" );
+    ( "a refused suite fails each gate under the option",
+      (fun () ->
+        summary ~unknown:[ counted ] ~refused:[ property_refused ] ~killed:1
+          ~min:50. ~min_total:50. (Sections.Executables 2)),
+      "mutants: 29 reached, 2 killed (1 by --crash-kills), 27 unknown, 2 \
+       executables, 1 suite not mutation-tested, score 100.0% (2/2), minimum \
+       50%: FAILED, reach 100.0% (29/29), total 100.0% (2/2), minimum 50%: \
+       FAILED" );
+  ]
+
+(* Each reason kind under each value of the option. *)
+let reason_rows =
+  let module V = Windtrap_runtime.Verdicts in
+  [
+    ("a deadline", V.Deadline { seconds = 1.5 }, true);
+    ( "a crash",
+      V.Crashed { signal = Some Sys.sigsegv; status = None; how = "segv" },
+      true );
+    ("a memory limit", V.Memory { mb = 64 }, true);
+    ( "a flaky kill",
+      V.Flaky_kill { test = [ "t" ]; failure = "it failed" },
+      false );
+    ("another reason", V.Other "the suite is not deterministic", false);
+  ]
+
+let reason_kind (_, reason, under) =
+  equal bool under (Sections.counted_as_killed ~crash_kills:true reason);
+  equal bool false (Sections.counted_as_killed ~crash_kills:false reason)
+
+let marked () =
+  let out =
+    at_rest
+      (report ~unknown:[ hung; counted ] ~killed:0 (Sections.Executables 1))
+  in
+  let reasons =
+    List.filter
+      (fun l -> String.starts_with ~prefix:"    test_spin.exe: " l)
+      (lines out)
+  in
+  equal (list string)
+    [
+      "    test_spin.exe: its run passed its deadline of 1.5s";
+      "    test_spin.exe: its run passed its deadline of 1.5s (counted as \
+       killed)";
+    ]
+    reasons;
+  equal bool true
+    (List.mem "────────────────────── unknown (2) ───────────────────────"
+       (lines out))
+
 (* Each verdict as one mutant beside one killed mutant, with the score, the
    reach and the total, each as (numerator, denominator). *)
 let measure_rows =
@@ -2876,6 +2974,12 @@ let measure_rows =
       { one with not_evaluated = [ memo_missed ] },
       ((1, 2), (2, 2), (1, 2)) );
     ("unknown", { one with unknown = [ hung ] }, ((1, 1), (2, 2), (1, 1)));
+    ( "unknown, counted as killed",
+      { one with unknown = [ counted ] },
+      ((2, 2), (2, 2), (2, 2)) );
+    ( "unknown, counted as killed, beside a survivor",
+      { one with unknown = [ counted ]; survivors = [ add_survivor ] },
+      ((2, 3), (3, 3), (2, 3)) );
     ( "refused",
       { one with refused = [ property_refused ] },
       ((1, 1), (28, 28), (1, 1)) );
@@ -3124,6 +3228,14 @@ let mutation_group =
         ~id:(fun (name, _, _) -> name)
         summary_rows
         (fun (_, summary, expected) -> equal string expected (summary ()));
+      cases "the outcome line under --crash-kills"
+        ~id:(fun (name, _, _) -> name)
+        crash_rows
+        (fun (_, summary, expected) -> equal string expected (summary ()));
+      cases "--crash-kills counts a deadline, a crash and a memory limit"
+        ~id:(fun (name, _, _) -> name)
+        reason_rows reason_kind;
+      test "the unknown section marks a mutant counted as killed" marked;
       cases "each verdict in the score, the reach and the total"
         ~id:(fun (name, _, _) -> name)
         measure_rows measures;

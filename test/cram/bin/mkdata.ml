@@ -14,10 +14,12 @@
    mkdata mutants OUT [--exe EXE] [--suite NAME] [--refused REASON]
        FILE:LINE:COL:REWRITE:BEFORE:AFTER=VERDICT...
      VERDICT is killed, killed:TESTS, elsewhere:EXE, not_evaluated,
-     outside_tests, unreached, unknown:REASON, crashed:HOW or survived:TESTS,
-     where EXE is the identity of the killing executable and TESTS are
-     ';'-separated paths of '/'-separated names. A plain kill names no test.
-     REASON is a reason of the kind other. HOW is the phrase of a crash.
+     outside_tests, unreached, unknown:REASON, crashed:HOW, deadline:SECONDS,
+     memory:MB, flaky:TEST or survived:TESTS, where EXE is the identity of
+     the killing executable and TESTS are ';'-separated paths of
+     '/'-separated names. A plain kill names no test. REASON is a reason of
+     the kind other. HOW is the phrase of a crash. TEST is the killing test
+     of a flaky kill.
      VERDICT@PREVIOUS gives the record the previous outcome PREVIOUS:
      killed, survived or not_evaluated. --suite records the suite. No record
      has a source digest.
@@ -83,6 +85,16 @@ let verdict = function
       Verdicts.Unknown (Crashed { signal = None; status = None; how })
   | v -> (
       match String.split_on_char ':' v with
+      | [ "deadline"; seconds ] ->
+          Verdicts.Unknown (Deadline { seconds = float_of_string seconds })
+      | [ "memory"; mb ] -> Verdicts.Unknown (Memory { mb = int_of_string mb })
+      | [ "flaky"; test ] ->
+          Verdicts.Unknown
+            (Flaky_kill
+               {
+                 test = String.split_on_char '/' test;
+                 failure = "its killing test also fails with no mutant";
+               })
       | [ "survived"; tests ] -> Verdicts.survived (tests_of tests)
       | [ "killed"; tests ] -> Verdicts.killed (tests_of tests)
       | [ "elsewhere"; exe ] -> Verdicts.Killed_elsewhere { exe }

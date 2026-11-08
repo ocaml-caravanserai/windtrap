@@ -803,6 +803,169 @@ non-negative integer is a usage error too. Each flag needs its value:
   usage: windtrap mutants [OPTIONS] [PATH...]
   [2]
 
+Crash kills
+
+By default, an unknown mutant is not scored. --crash-kills counts an
+unknown mutant as killed when its run passed its deadline, crashed or
+passed its memory limit. A flaky kill and each other reason stay
+unknown. A mutant counted as killed stays in the unknown section, with
+a mark:
+
+  $ plant "$scratch/crash" && cd "$scratch/crash"
+  $ mkdata mutants _build/_mutants/c.mutants "$add=deadline:1.5" "$sub=crashed:was killed by SIGSEGV" \
+  >   "$lt=memory:64" "$or=flaky:calc/adds" "$and=unknown:its dry run is red"
+  $ run windtrap mutants > plain; echo "[$?]"; tail -n 1 plain
+  [0]
+  mutants: 5 reached, 5 unknown, 1 executable, reach 100.0% (5/5)
+  $ run windtrap mutants --crash-kills
+  ────────────────────── unknown (5) ───────────────────────
+  File "lib/calc.ml", line 1, characters 14-19:
+    lib/calc.ml:1:14:add  a + b → a - b
+      c.mutants: its run passed its deadline of 1.5s (counted as killed)
+      arm: WINDTRAP_MUTATE_ARM=lib/calc.ml:1:14:add dune runtest --force --instrument-with ppx_windtrap.mutate
+  File "lib/calc.ml", line 2, characters 14-19:
+    lib/calc.ml:2:14:sub  a - b → a + b
+      c.mutants: its run was killed by SIGSEGV (counted as killed)
+      arm: WINDTRAP_MUTATE_ARM=lib/calc.ml:2:14:sub dune runtest --force --instrument-with ppx_windtrap.mutate
+  File "lib/calc.ml", line 3, characters 14-19:
+    lib/calc.ml:3:14:lt  a < b → a <= b
+      c.mutants: its run passed its memory limit of 64 MB (counted as killed)
+      arm: WINDTRAP_MUTATE_ARM=lib/calc.ml:3:14:lt dune runtest --force --instrument-with ppx_windtrap.mutate
+  File "lib/util.ml", line 1, characters 13-19:
+    lib/util.ml:1:13:or  p || q → p && q
+      c.mutants: its killing test also fails with no mutant
+      arm: WINDTRAP_MUTATE_ARM=lib/util.ml:1:13:or dune runtest --force --instrument-with ppx_windtrap.mutate
+  File "lib/util.ml", line 3, characters 22-28:
+    lib/util.ml:3:22:and  p && q → p || q
+      c.mutants: its dry run is red
+      arm: WINDTRAP_MUTATE_ARM=lib/util.ml:3:22:and dune runtest --force --instrument-with ppx_windtrap.mutate
+  ──────────────────────────────────────────────────────────
+  
+  mutants: 5 reached, 3 killed (3 by --crash-kills), 2 unknown, 1 executable, score 100.0% (3/3), reach 100.0% (5/5), total 100.0% (3/3)
+  $ diff plain "$bin/out"
+  4c4
+  <     c.mutants: its run passed its deadline of 1.5s
+  ---
+  >     c.mutants: its run passed its deadline of 1.5s (counted as killed)
+  8c8
+  <     c.mutants: its run was killed by SIGSEGV
+  ---
+  >     c.mutants: its run was killed by SIGSEGV (counted as killed)
+  12c12
+  <     c.mutants: its run passed its memory limit of 64 MB
+  ---
+  >     c.mutants: its run passed its memory limit of 64 MB (counted as killed)
+  24c24
+  < mutants: 5 reached, 5 unknown, 1 executable, reach 100.0% (5/5)
+  ---
+  > mutants: 5 reached, 3 killed (3 by --crash-kills), 2 unknown, 1 executable, score 100.0% (3/3), reach 100.0% (5/5), total 100.0% (3/3)
+  [1]
+
+The killed term counts the mutants of the option among the killed
+mutants. With one such mutant, the line names it:
+
+  $ plant "$scratch/crash-one" && cd "$scratch/crash-one"
+  $ mkdata mutants _build/_mutants/c.mutants "$add=killed" "$sub=deadline:2" "$lt=survived:calc/compares"
+  $ for flag in '' --crash-kills; do
+  >   run windtrap mutants $flag > gated; echo "[$?] $(tail -n 1 gated)"
+  > done
+  [1] mutants: 1 survived of 3 reached, 1 killed, 1 unknown, 1 executable, score 50.0% (1/2), reach 100.0% (3/3), total 50.0% (1/2)
+  [1] mutants: 1 survived of 3 reached, 2 killed (1 by --crash-kills), 1 executable, score 66.7% (2/3), reach 100.0% (3/3), total 66.7% (2/3)
+
+A gate that fails without the option can pass with it. The reach does
+not change:
+
+  $ for flag in '' --crash-kills; do
+  >   run windtrap mutants --min 60 --min-total 60 --min-reach 100 $flag > gated; echo "[$?] $(tail -n 1 gated)"
+  > done
+  [1] mutants: 1 survived of 3 reached, 1 killed, 1 unknown, 1 executable, score 50.0% (1/2), minimum 60%: FAILED, reach 100.0% (3/3), minimum 100%: ok, total 50.0% (1/2), minimum 60%: FAILED
+  [0] mutants: 1 survived of 3 reached, 2 killed (1 by --crash-kills), 1 executable, score 66.7% (2/3), minimum 60%: ok, reach 100.0% (3/3), minimum 100%: ok, total 66.7% (2/3), minimum 60%: ok
+
+A repeated --crash-kills is the same as one:
+
+  $ run windtrap mutants --crash-kills --crash-kills > twice
+  [1]
+  $ run windtrap mutants --crash-kills > once
+  [1]
+  $ diff once twice
+
+A refused suite counts in no measure under the option, and it fails each
+gate. Its mutants stay unknown, whatever their reason:
+
+  $ plant "$scratch/crash-refused" && cd "$scratch/crash-refused"
+  $ mkdata mutants _build/_mutants/a.mutants "$add=killed"
+  $ mkdata mutants _build/_mutants/b.mutants --refused "the suite is not deterministic" \
+  >   "$sub=deadline:1"
+  $ for flag in '' --crash-kills; do
+  >   run windtrap mutants --min 50 $flag > gated; echo "[$?] $(tail -n 1 gated)"
+  > done
+  [1] mutants: 2 reached, 1 killed, 1 unknown, 2 executables, 1 suite not mutation-tested, score 100.0% (1/1), minimum 50%: FAILED, reach 100.0% (2/2), total 100.0% (1/1)
+  [1] mutants: 2 reached, 1 killed, 1 unknown, 2 executables, 1 suite not mutation-tested, score 100.0% (1/1), minimum 50%: FAILED, reach 100.0% (2/2), total 100.0% (1/1)
+
+In the document, each unknown mutant has counted_as_killed, and the
+summary counts the mutants of the option as killed:
+
+  $ cd "$scratch/crash"
+  $ run windtrap mutants --json --crash-kills
+  { "version": 1,
+    "summary": { "reached": 5, "killed": 3, "survived": 0,
+      "not_evaluated": 0, "unknown": 2, "outside_tests": 0,
+      "unreached": 0, "refused": 0, "score": 100.00,
+      "reach_percent": 100.00, "total_percent": 100.00 },
+    "executables": [
+      { "name": "c.mutants", "path": null, "suite": null, "refused": null } ],
+    "mutants": [
+      { "id": "lib/calc.ml:1:14:add",
+        "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
+        "end_line": 1, "end_col": 19,
+        "before": "a + b", "after": "a - b",
+        "verdict": "unknown", "executable": 0,
+        "reason": "its run passed its deadline of 1.5s", "reason_kind": "deadline",
+        "counted_as_killed": true },
+      { "id": "lib/calc.ml:2:14:sub",
+        "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
+        "end_line": 2, "end_col": 19,
+        "before": "a - b", "after": "a + b",
+        "verdict": "unknown", "executable": 0,
+        "reason": "its run was killed by SIGSEGV", "reason_kind": "crashed",
+        "counted_as_killed": true },
+      { "id": "lib/calc.ml:3:14:lt",
+        "file": "lib/calc.ml", "line": 3, "col": 14, "rewrite": "lt",
+        "end_line": 3, "end_col": 19,
+        "before": "a < b", "after": "a <= b",
+        "verdict": "unknown", "executable": 0,
+        "reason": "its run passed its memory limit of 64 MB", "reason_kind": "memory",
+        "counted_as_killed": true },
+      { "id": "lib/util.ml:1:13:or",
+        "file": "lib/util.ml", "line": 1, "col": 13, "rewrite": "or",
+        "end_line": 1, "end_col": 19,
+        "before": "p || q", "after": "p && q",
+        "verdict": "unknown", "executable": 0,
+        "reason": "its killing test also fails with no mutant", "reason_kind": "flaky_kill",
+        "counted_as_killed": false },
+      { "id": "lib/util.ml:3:22:and",
+        "file": "lib/util.ml", "line": 3, "col": 22, "rewrite": "and",
+        "end_line": 3, "end_col": 28,
+        "before": "p && q", "after": "p || q",
+        "verdict": "unknown", "executable": 0,
+        "reason": "its dry run is red", "reason_kind": "other",
+        "counted_as_killed": false } ],
+    "unstable": [ ] }
+  $ run windtrap mutants --json | grep -E '"(killed|unknown)"|counted_as_killed'
+    "summary": { "reached": 5, "killed": 0, "survived": 0,
+      "not_evaluated": 0, "unknown": 5, "outside_tests": 0,
+        "verdict": "unknown", "executable": 0,
+        "counted_as_killed": false },
+        "verdict": "unknown", "executable": 0,
+        "counted_as_killed": false },
+        "verdict": "unknown", "executable": 0,
+        "counted_as_killed": false },
+        "verdict": "unknown", "executable": 0,
+        "counted_as_killed": false },
+        "verdict": "unknown", "executable": 0,
+        "counted_as_killed": false } ],
+  $ cd "$scratch/three"
+
 The document
 
 --json writes the merge as one document on standard output. Each mutant
