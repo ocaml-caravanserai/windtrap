@@ -103,6 +103,9 @@ let family (m : Mutate.mutant) =
   | "lt" | "le" | "gt" | "ge" | "eq" | "neq" -> "cmp"
   | "and" | "or" -> "con"
   | "add" | "sub" | "fadd" | "fsub" -> "ari"
+  | "div" | "mul" | "mod" -> "mul"
+  | "fdiv" | "fmul" -> "fmul"
+  | "lor" | "land" | "xor" | "lsr" | "lsl" | "asr" -> "bit"
   | ("del" | "int" | "bool" | "none" | "tail") as rewrite -> rewrite
   | other -> "unknown " ^ other
 
@@ -141,9 +144,20 @@ let registration =
 let catalogue =
   group "The catalogue"
     [
-      test "the nine families are catalogued" (fun () ->
+      test "each family is catalogued" (fun () ->
           equal (list string)
-            [ "ari"; "bool"; "cmp"; "con"; "del"; "int"; "neg"; "none"; "tail" ]
+            [
+              "ari";
+              "bool";
+              "cmp";
+              "con";
+              "del";
+              "int";
+              "mul";
+              "neg";
+              "none";
+              "tail";
+            ]
             (families (fixture_catalogue ())));
       test "an identifier names one site" (fun () ->
           let id (m : Mutate.mutant) = Mutate.id_to_string m.id in

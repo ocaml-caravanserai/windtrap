@@ -111,8 +111,8 @@ before and after, and the reason of a dismissed site.
     2: 7:15-7:21 "fsub" "a +. b" -> "a -. b"
     3: 8:16-8:22 "fadd" "a -. b" -> "a +. b"
     4: 13:13-13:18 "sub" "1 + 2" -> "1 - 2"
-    5: 17:17-17:24 "sub" "a + b" -> "a - b"
-    6: 17:27-17:28 "int" "2" -> "3"
+    5: 17:17-17:28 "div" "(a + b) * 2" -> "(a + b) / 2"
+    6: 17:17-17:24 "sub" "a + b" -> "a - b"
   let sum a b =
     let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
       ((a, b) : Windtrap_mut_________fixture_ari___ml.ints) in
@@ -145,14 +145,15 @@ before and after, and the reason of a dismissed site.
     else __windtrap_mut_4_l + __windtrap_mut_4_r
   let negate x = - x
   let scaled a b =
-    (let (__windtrap_mut_5_l, __windtrap_mut_5_r) =
-       ((a, b) : Windtrap_mut_________fixture_ari___ml.ints) in
-     if Windtrap_mut_________fixture_ari___ml.___windtrap_armed___ 5
-     then __windtrap_mut_5_l - __windtrap_mut_5_r
-     else __windtrap_mut_5_l + __windtrap_mut_5_r) *
-      (if Windtrap_mut_________fixture_ari___ml.___windtrap_armed___ 6
-       then 3
-       else 2)
+    let (__windtrap_mut_5_l, __windtrap_mut_5_r) =
+      (((let (__windtrap_mut_6_l, __windtrap_mut_6_r) =
+           ((a, b) : Windtrap_mut_________fixture_ari___ml.ints) in
+         if Windtrap_mut_________fixture_ari___ml.___windtrap_armed___ 6
+         then __windtrap_mut_6_l - __windtrap_mut_6_r
+         else __windtrap_mut_6_l + __windtrap_mut_6_r), 2) : Windtrap_mut_________fixture_ari___ml.ints) in
+    if Windtrap_mut_________fixture_ari___ml.___windtrap_armed___ 5
+    then __windtrap_mut_5_l / __windtrap_mut_5_r
+    else __windtrap_mut_5_l * __windtrap_mut_5_r
 
   $ mut --impl ./fixture_ari_scope.ml | ../elide.exe
   mutation sites of "./fixture_ari_scope.ml" in Windtrap_mut_________fixture_ari_scope___ml, with type ints:
@@ -2592,7 +2593,8 @@ Over code a deriver generated, for which generated.ml stands in:
   $ ../pp.exe -apply windtrap_test_generated,windtrap_mutate --impl ./fixture_generated.ml | ../elide.exe
   mutation sites of "./fixture_generated.ml" in Windtrap_mut_________fixture_generated___ml, with type ints:
     0: 6:18-6:23 "add" "a - b" -> "a + b"
-    1: 11:21-11:28 "sub" "a + b" -> "a - b"
+    1: 11:17-11:28 "div" "a * (a + b)" -> "a / (a + b)"
+    2: 11:21-11:28 "sub" "a + b" -> "a - b"
   let generated a b = ((a + b)[@generated ])
   let written a b =
     let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
@@ -2601,12 +2603,16 @@ Over code a deriver generated, for which generated.ml stands in:
     then __windtrap_mut_0_l + __windtrap_mut_0_r
     else __windtrap_mut_0_l - __windtrap_mut_0_r
   let copied a b =
-    a *
-      (let (__windtrap_mut_1_l, __windtrap_mut_1_r) =
-         ((a, b) : Windtrap_mut_________fixture_generated___ml.ints) in
-       if Windtrap_mut_________fixture_generated___ml.___windtrap_armed___ 1
-       then __windtrap_mut_1_l - __windtrap_mut_1_r
-       else __windtrap_mut_1_l + __windtrap_mut_1_r)[@@duplicate ]
+    let (__windtrap_mut_1_l, __windtrap_mut_1_r) =
+      ((a,
+         (let (__windtrap_mut_2_l, __windtrap_mut_2_r) =
+            ((a, b) : Windtrap_mut_________fixture_generated___ml.ints) in
+          if Windtrap_mut_________fixture_generated___ml.___windtrap_armed___ 2
+          then __windtrap_mut_2_l - __windtrap_mut_2_r
+          else __windtrap_mut_2_l + __windtrap_mut_2_r)) : Windtrap_mut_________fixture_generated___ml.ints) in
+    if Windtrap_mut_________fixture_generated___ml.___windtrap_armed___ 1
+    then __windtrap_mut_1_l / __windtrap_mut_1_r
+    else __windtrap_mut_1_l * __windtrap_mut_1_r[@@duplicate ]
   let copied a b = a * (a + b)[@@duplicate ]
 
   $ ../pp.exe -apply windtrap_test_generated,windtrap_mutate --impl ./fixture_generated_chain.ml | ../elide.exe

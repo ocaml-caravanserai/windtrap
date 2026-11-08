@@ -25,6 +25,17 @@ let rewrites =
     "sub";
     "fadd";
     "fsub";
+    "div";
+    "mul";
+    "mod";
+    "fdiv";
+    "fmul";
+    "lor";
+    "land";
+    "xor";
+    "lsr";
+    "lsl";
+    "asr";
     "and";
     "or";
     "del";

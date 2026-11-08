@@ -61,15 +61,15 @@ An unknown name and an empty list are usage errors that give the names
 of the rewrites, from the flag and from its mirror:
 
   $ suite ./mutant_main.exe --mutate --rewrites=dell
-  windtrap: invalid value 'dell' for --rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+  windtrap: invalid value 'dell' for --rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, div, mul, mod, fdiv, fmul, lor, land, xor, lsr, lsl, asr, and, or, del, int, bool, none, tail
   usage: mutant_main.exe [OPTIONS] [PATTERN...]
   [2]
   $ suite ./mutant_main.exe --mutate --skip-rewrites=
-  windtrap: invalid value '' for --skip-rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+  windtrap: invalid value '' for --skip-rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, div, mul, mod, fdiv, fmul, lor, land, xor, lsr, lsl, asr, and, or, del, int, bool, none, tail
   usage: mutant_main.exe [OPTIONS] [PATTERN...]
   [2]
   $ suite WINDTRAP_REWRITES=sub,keep ./mutant_main.exe --mutate
-  windtrap: invalid value 'sub,keep' for WINDTRAP_REWRITES: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+  windtrap: invalid value 'sub,keep' for WINDTRAP_REWRITES: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, div, mul, mod, fdiv, fmul, lor, land, xor, lsr, lsl, asr, and, or, del, int, bool, none, tail
   usage: mutant_main.exe [OPTIONS] [PATTERN...]
   [2]
 

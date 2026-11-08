@@ -88,10 +88,16 @@ let is_test_item si =
 
 (* Operators *)
 
-(* [Log] is the rule of the logging call, which reads the module [Logs], and
+(* [Ari], [Mul], [Fmul] and [Bit] replace an operator with another one.
+   [Log] is the rule of the logging call, which reads the module [Logs], and
    [Message] the rule of the failure message, which reads [failwith] and
    [invalid_arg]. *)
-type family = Ari | Cmp | Con | Ret | Log | Message
+type family = Ari | Mul | Fmul | Bit | Cmp | Con | Ret | Log | Message
+
+(* The families whose sites need Stdlib scope: no opaque module is open. *)
+let stdlib_only = function
+  | Mul | Fmul | Bit -> true
+  | Ari | Cmp | Con | Ret | Log | Message -> false
 
 (* Each rewritten operator with its family, the name of its rewrite and the
    operator that replaces it. *)
@@ -101,6 +107,17 @@ let operators =
     ("-", (Ari, "add", "+"));
     ("+.", (Ari, "fsub", "-."));
     ("-.", (Ari, "fadd", "+."));
+    ("*", (Mul, "div", "/"));
+    ("/", (Mul, "mul", "*"));
+    ("mod", (Mul, "mod", "*"));
+    ("*.", (Fmul, "fdiv", "/."));
+    ("/.", (Fmul, "fmul", "*."));
+    ("land", (Bit, "lor", "lor"));
+    ("lor", (Bit, "land", "land"));
+    ("lxor", (Bit, "xor", "land"));
+    ("lsl", (Bit, "lsr", "lsr"));
+    ("lsr", (Bit, "lsl", "lsl"));
+    ("asr", (Bit, "asr", "lsl"));
     ("<", (Cmp, "le", "<="));
     ("<=", (Cmp, "lt", "<"));
     (">", (Cmp, "ge", ">="));
@@ -111,10 +128,11 @@ let operators =
     ("||", (Con, "and", "&&"));
   ]
 
-(* A family keeps its sites only where its operators are Stdlib's: [ari]
-   names its replacement, [con] turns [&&] into an [if], and [cmp] swaps
-   operands of one type. A binding that this pass sees loses the family of
-   its name; what an [open] brings in is not seen. The guards of [none] and
+(* A family keeps its sites only where its operators are Stdlib's: [ari],
+   [mul], [fmul] and [bit] name their replacement, [con] turns [&&] into an
+   [if], and [cmp] swaps operands of one type. A binding that this pass sees
+   loses the family of its name. What an [open] brings in is not seen, so
+   [mul], [fmul] and [bit] also need Stdlib scope at the site. The guards of [none] and
    [tail] name the predefined [None] and give [t] the type of [h :: t], so a
    file that declares a constructor [Some], [None] or [(::)], in a type or as
    an extension constructor, loses them. A file that binds [failwith] or
@@ -244,7 +262,7 @@ and operator_guard =
   | Negate (* [cmp] on an equality *)
   | Swap (* [cmp] on an ordering *)
   | Branch (* [con] *)
-  | Replace of string (* [ari], by this operator *)
+  | Replace of string (* [ari], [mul], [fmul] and [bit], by this operator *)
 
 type mutant = { guard : guard; rewrite : string; after : string }
 
@@ -276,7 +294,7 @@ let mutant ~keeps context e =
           | Cmp ->
               mutant
                 (if app.name = "=" || app.name = "<>" then Negate else Swap)
-          | Ari -> mutant (Replace replacement)
+          | Ari | Mul | Fmul | Bit -> mutant (Replace replacement)
           | Ret | Log | Message (* no operator *) -> neg ())
       | Some _ | None -> neg ())
 
@@ -369,11 +387,16 @@ let cons e =
 
 (* Equivalence *)
 
-(* [x + 0] and [x - 0] are equal on every [int]. On floats [-0. +. 0.] is
-   [0.] and [-0. -. 0.] is [-0.], so a float zero is no such operand. *)
-let is_zero e =
+(* [is_int n e] tells that [e] is the [int] literal [n], with no suffix. *)
+let is_int n e =
   match e.pexp_desc with
-  | Pexp_constant (Pconst_integer (s, None)) -> int_of_string_opt s = Some 0
+  | Pexp_constant (Pconst_integer (s, None)) -> int_of_string_opt s = Some n
+  | _ -> false
+
+let is_float x e =
+  match e.pexp_desc with
+  | Pexp_constant (Pconst_float (s, None)) ->
+      Option.equal Float.equal (float_of_string_opt s) (Some x)
   | _ -> false
 
 (* An operand that gives one value each time and does nothing else, so that
@@ -463,6 +486,22 @@ let same a b =
   same_size a b
   && erase_locations#expression a = erase_locations#expression b
   && not (locates#expression a false)
+
+(* [neutral app] tells that the replacement of the operator of [app] gives
+   the value of [app] on every operand. [x + 0] and [x - 0] are equal on every
+   [int], but on floats [-0. +. 0.] is [0.] and [-0. -. 0.] is [-0.]. [x * 1]
+   and [x / 1] are [x], and [x * -1] and [x / -1] are [-x], [min_int] too.
+   IEEE 754 gives the same rule for floats. A shift by [0] is [x], and a
+   shift of [0] is [0]. [a land a] and [a lor a] are [a]. [x mod 1] is [0] but
+   [x * 1] is [x], and [a lxor a] is [0] but [a land a] is [a]. *)
+let neutral app =
+  match app.name with
+  | "+" | "-" -> is_int 0 app.right
+  | "*" | "/" -> is_int 1 app.right || is_int (-1) app.right
+  | "*." | "/." -> is_float 1. app.right || is_float (-1.) app.right
+  | "lsl" | "lsr" | "asr" -> is_int 0 app.right || is_int 0 app.left
+  | "land" | "lor" -> is_pure app.left && same app.left app.right
+  | _ -> false
 
 (* Stdlib scope *)
 
@@ -575,9 +614,10 @@ let negation ~loc ~module_name ~index value =
     if [%e armed ~loc ~module_name index] then Stdlib.not [%e evar ~loc p]
     else [%e evar ~loc p]]
 
-(* [cmp] on an ordering, and [ari]: [let l, r = left, right in if armed then
-   ... else l op r], where the disarmed arm is the application of [e] rebuilt
-   over the binders, with its location and its attributes.
+(* [cmp] on an ordering, [ari], [mul], [fmul] and [bit]: [let l, r = left,
+   right in if armed then ... else l op r], where the disarmed arm is the
+   application of [e] rebuilt over the binders, with its location and its
+   attributes.
 
    The type-checker reads the tuple left to right, as it reads the arguments
    of an application, so a qualified field of the left operand still resolves
@@ -596,12 +636,13 @@ let negation ~loc ~module_name ~index value =
    so it would tie the phrase's sites together and keep a local
    [let lt x y = x < y] from generalizing.
 
-   An application of a Stdlib operator of [ari] also gives its operands their
-   expected type, which a GADT [match] or an existential in an operand needs.
-   [~pin] restores that by the annotation [ints] or [floats], with
-   [type ints = int * int] and [type floats = float * float]. Outside Stdlib
-   scope [ari] does not pin, since an [open]-provided [+] may take two
-   types.
+   An application of a Stdlib operator of [ari], [mul], [fmul] or [bit] also
+   gives its operands their expected type, which a GADT [match] or an
+   existential in an operand needs. [~pin] restores that by the annotation
+   [ints] or [floats], with [type ints = int * int] and
+   [type floats = float * float]. Outside Stdlib scope [ari] does not pin,
+   since an [open]-provided [+] may take two types. The other three have no
+   site there.
 
    The operands move out of [e], so the [let] takes the warning and alert
    attributes of [e], which also cover the operands.
@@ -615,7 +656,8 @@ let scoping = [ "ocaml.warning"; "warning"; "ocaml.alert"; "alert" ]
 type pin = Operands | Ints | Floats
 
 (* The pin of a Stdlib operator of [ari], from the type of its operands. *)
-let numbers name = match name with "+." | "-." -> Floats | _ -> Ints
+let numbers name =
+  match name with "+." | "-." | "*." | "/." -> Floats | _ -> Ints
 
 let pin_type ~loc ~module_name pin =
   let name, args =
@@ -807,6 +849,11 @@ class instrumenter ~keeps ~module_name =
     method sites = List.rev sites
     method pins = pins
 
+    (* [kept family] tells that a site of [family] is in a file that keeps
+       it, and, for a family of [stdlib_only], in Stdlib scope. *)
+    method private kept family =
+      keeps family && ((not (stdlib_only family)) || opens = [])
+
     method private pin p =
       if not (List.mem p pins) then pins <- p :: pins;
       Some p
@@ -850,7 +897,7 @@ class instrumenter ~keeps ~module_name =
       || (message && (mutant.rewrite = "int" || mutant.rewrite = "bool"))
       ||
       match mutant.guard with
-      | Operator (app, Replace _) -> is_zero app.right
+      | Operator (app, Replace _) -> neutral app
       | Operator (app, Branch) -> is_pure app.left && same app.left app.right
       | Neg | Operator (_, (Negate | Swap)) -> branches
       | Literal _ | Nothing | Tail _ | Delete -> false
@@ -885,8 +932,9 @@ class instrumenter ~keeps ~module_name =
     (* The mutant of a literal, when no arid rule drops it. Neither rewrite
        has a site that runs when the module is initialized, before any test,
        where no run can judge it. [int] skips a constant whose nudge is ROR's
-       own boundary move, an operand of [+] or [-], which AOR moves, and a
-       [create] argument. [bool] flips a literal outside a boolean context,
+       own boundary move, an operand of [+] or [-], which AOR moves, an
+       operand of [*], [/] or [mod] where [mul] can move it, and a [create]
+       argument. [bool] flips a literal outside a boolean context,
        where [neg] already acts, and skips an OS flag. *)
     method private literal context e =
       let is_child arg = arg == e in
@@ -904,6 +952,10 @@ class instrumenter ~keeps ~module_name =
                 at_load
                 || (match applied with
                   | Some (_, _, app) when app.name = "+" || app.name = "-" ->
+                      true
+                  | Some (_, _, app)
+                    when List.mem app.name [ "*"; "/"; "mod" ] && self#kept Mul
+                    ->
                       true
                   | Some (_, c, app) when keeps Cmp && c <> Ordinary ->
                       boundary_move ~constant_right:(is_child app.right)
@@ -973,7 +1025,7 @@ class instrumenter ~keeps ~module_name =
     method private mutate ?chained ?branches context e =
       let outer = (parent, at_load, recursive) in
       let mutant =
-        match mutant ~keeps context e with
+        match mutant ~keeps:self#kept context e with
         | Some _ as mutant -> mutant
         | None -> (
             match self#literal context e with
