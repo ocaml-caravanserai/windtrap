@@ -1072,7 +1072,9 @@ class instrumenter ~keeps ~module_name =
        loop body or the last statement of a sequence there, as a statement.
        A sequence there carries no [del] of its own: each of its statements
        carries one, and its last statement is in the position of [e]. In a
-       loop body, that statement is not the whole body. *)
+       loop body, that statement is not the whole body. Inside a log message
+       or a failure message, these positions carry no [del], and the rules of
+       the message reach into them. *)
     method private unit_position drop e =
       match e.pexp_desc with
       | Pexp_sequence _ when Option.is_some (off_reason e.pexp_attributes) -> e
@@ -1084,6 +1086,7 @@ class instrumenter ~keeps ~module_name =
               rest
           in
           { e with pexp_desc = Pexp_sequence (first, rest) }
+      | _ when logging || message -> self#expression e
       | _ -> self#dropped drop e
 
     (* [descend e] rewrites the children of [e], each in the context that [e]

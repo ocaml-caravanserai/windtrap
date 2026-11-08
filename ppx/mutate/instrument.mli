@@ -187,9 +187,10 @@
     [Logs.err ~src @@ fun m -> ...] keeps its mutants, and that of
     [Logs.err ~src (fun m -> ...)] does not. A statement in the arguments of a
     logging function, of [failwith] or of [invalid_arg] keeps its mutants, with
-    the sites inside it. A statement acts on the state of the program. A
-    statement is a statement of [del], as [e1] in [e1; e2], or the expression of
-    [let () = e in]. A logging call that is a statement keeps its own [del]
+    the sites inside it. A statement acts on the state of the program. Here a
+    statement is [e1] in [e1; e2], or the expression of [let () = e in]. A
+    then-branch with no [else] and a loop body are no statement here, and they
+    have no [del] site. A logging call that is a statement keeps its own [del]
     mutant. These two rules do not see other effects, for example of a function
     that the message calls.
 

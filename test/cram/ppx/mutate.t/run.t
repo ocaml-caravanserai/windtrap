@@ -1562,13 +1562,13 @@ Code that gives its location keeps the mutants of its two copies:
 
   $ mut --impl ./fixture_equivalent_log.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml:
-    0: 10:33-10:40 "sub" "x + 1" -> "x - 1"
-    1: 13:2-13:37 "del" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
-    2: 13:29-13:36 "sub" "x + 1" -> "x - 1"
-    3: 23:2-26:16 "del" "Logs.debug (fun m -> y := ((!y) + 1); (let () = incr y in m \"%d\" (!y)))" -> "()"
-    4: 24:6-24:17 "del" "y := ((!y) + 1)" -> "()"
-    5: 24:11-24:17 "sub" "(!y) + 1" -> "(!y) - 1"
-    6: 27:2-27:8 "sub" "(!y) + x" -> "(!y) - x"
+    0: 12:33-12:40 "sub" "x + 1" -> "x - 1"
+    1: 15:2-15:37 "del" "Log.debug (fun m -> m \"%d\" (x + 1))" -> "()"
+    2: 15:29-15:36 "sub" "x + 1" -> "x - 1"
+    3: 25:2-28:16 "del" "Logs.debug (fun m -> y := ((!y) + 1); (let () = incr y in m \"%d\" (!y)))" -> "()"
+    4: 26:6-26:17 "del" "y := ((!y) + 1)" -> "()"
+    5: 26:11-26:17 "sub" "(!y) + 1" -> "(!y) - 1"
+    6: 29:2-29:8 "sub" "(!y) + x" -> "(!y) - x"
   let debug x =
     Logs.debug
       (fun m -> m "%d %a" (x + 1) (let open Fmt in option int) (Some x))
@@ -1626,6 +1626,8 @@ Code that gives its location keeps the mutants of its two copies:
      if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 6
      then __windtrap_mut_6_l - __windtrap_mut_6_r
      else __windtrap_mut_6_l + __windtrap_mut_6_r)
+  let guarded c n = Logs.debug (fun m -> if c then m "%d" (n + 1))
+  let looped n = Logs.debug (fun m -> for i = 1 to n do m "%d" (i + 1) done)
 
   $ sites --impl ./fixture_equivalent_log_bound.ml
     0: 8:37-8:44 "sub" "x + 1" -> "x - 1"
