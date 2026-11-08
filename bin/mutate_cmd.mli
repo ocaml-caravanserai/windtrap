@@ -173,7 +173,7 @@
     [--crash-kills] counts an unknown mutant as killed when the file that names
     it ({{!section-merge}the merge}) tested its suite and its reason is a
     deadline, a crash or a memory limit
-    ({!Windtrap.Private.Report_sections.counted_as_killed}). The score, the
+    ({!Windtrap.Private.Report_sections.val-counted_as_killed}). The score, the
     total, each gate and the outcome line then count it with the killed mutants,
     and the unknown section marks it [(counted as killed)]. The reach does not
     change. A flaky kill and each other reason stay unknown. A repeated

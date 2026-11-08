@@ -175,7 +175,7 @@ type config = {
   crash_kills : bool;
       (** [--crash-kills]: under {!Loop}, the report counts a mutant whose run
           passed its deadline, crashed or passed its memory limit as killed
-          ({!Report_sections.counted_as_killed}). The verdict file does not
+          ({!Report_sections.val-counted_as_killed}). The verdict file does not
           change. *)
   github : bool;
       (** Whether the report is written for GitHub Actions, with its group and

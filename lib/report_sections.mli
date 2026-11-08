@@ -491,8 +491,8 @@ type unknown = {
       (** How to run again an executable that armed it. *)
   counted_as_killed : bool;
       (** [true] when the report counts the mutant as killed, under
-          [--crash-kills] ({!counted_as_killed}). The unknown section gives it
-          with the mark [(counted as killed)] after its reason. *)
+          [--crash-kills] ({!val-counted_as_killed}). The unknown section gives
+          it with the mark [(counted as killed)] after its reason. *)
 }
 (** The type for a reached mutant whose run ended before its tests did, which is
     no survivor. *)
