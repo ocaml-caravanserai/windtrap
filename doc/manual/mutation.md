@@ -1232,6 +1232,14 @@ identifier names the rewrite:
 - `tail` replaces `h :: t` with `t`, and `h` does not run. A list
   literal is one site, at its bracket: `[a; b; c]` becomes `[b; c]`. In
   a chain, as `a :: b :: t`, the outermost `::` alone is a site.
+- `keep` drops one field of a record update. Each field `f = v` of
+  `{ r with f = v; g = w }` is a site, and its mutant is
+  `{ r with g = w }`. When `f` is the only field, the mutant is `r`. A
+  survivor shows that no test reads the field `f` after the update. An
+  update of more than eight fields has no `keep` site, because each site
+  holds a copy of the update. An update that is the argument of a
+  constructor, as `C { r with f = v }`, keeps its constructor in the
+  mutant.
 
 Some code carries no mutant, because no test should pin it or none can
 run it. `del` leaves a resource release alone: a call of `close`,
@@ -1241,12 +1249,13 @@ already; an argument of a function whose name ends in `create`, as the
 capacity of `Hashtbl.create 16`; the constant of a comparison in a
 condition when the nudge is the comparison's own boundary move, as the
 `0` of `x < 0`, since `x < 1` is `x <= 0`. `bool` leaves alone the
-argument of `~cloexec`. None of these five rewrites has a mutant in code
-that runs when the module is initialized, before any test, as in a
-top-level `let limit = 64` or `let () = setup (); main ()`, since no run
-can judge it. `none` and `tail` also leave alone the right-hand side of
-a `let rec` outside its functions and `lazy` bodies, as
-`let rec ones = 1 :: ones`, which the compiler accepts only as written.
+argument of `~cloexec`. These five rewrites and `keep` have no mutant
+in code that runs when the module is initialized, before any test, as
+in a top-level `let limit = 64` or `let () = setup (); main ()`, since
+no run can judge it. `none`, `tail`
+and `keep` also leave alone the right-hand side of a `let rec` outside
+its functions and `lazy` bodies, as `let rec ones = 1 :: ones`, which
+the compiler accepts only as written.
 When the head of a `tail` site written as `h :: t` is a list, as in
 `[x] :: acc` or `(x :: cur) :: acc`, it starts at the first byte of the
 site and has no `tail` mutant of its own, since one identifier names one
@@ -1308,6 +1317,14 @@ in `let f x : M.t = Some x`. If `M.t` has no `None`, or its `::` does
 not join two values of one type, the mutant does not compile. The
 compiler shows the error at the expression, and `[@mutate off "reason"]`
 on the expression removes the mutant.
+
+The `keep` mutant of a field must have the type of the original
+update. When the field is the only one that changes a type parameter of
+the record, the mutant has another type, and the file does not compile
+under instrumentation. An example is `{ r with x = "s"; y = 1 }` when
+`r : int t`: the mutant of `x` is `{ r with y = 1 }`, of type `int t`.
+To remove the mutants of the update, put `[@mutate off "reason"]` on
+it.
 
 ## Where the verdicts are
 

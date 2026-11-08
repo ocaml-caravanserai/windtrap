@@ -46,6 +46,16 @@
     has another type, fails to compile under instrumentation. [[@mutate off]] on
     the expression is the way out.
 
+    The armed arm of [keep] is a copy of the record update without one field, or
+    a copy of [r] when the field is the only one. It names only [r], the labels
+    and the values of the original. The type-checker reads the arm with the type
+    of the original, and can disambiguate its labels by that type, which the
+    source does not do. Thus the arm carries [[@ocaml.warning "-18-40-41-42"]].
+    When the dropped field is the only one that changes a type parameter, as
+    [{ r with x = "s"; y = 1 }] with [r : int t], the arm [{ r with y = 1 }] has
+    another type. Then the file fails to compile under instrumentation, and
+    [[@mutate off]] on the update is the way out.
+
     [ari] is the one exception, because [a + b] cannot become [a - b] without
     naming [-]. A file that rebinds an operator where the rewriter can see it
     thus loses the whole family of that operator: [ari] for [+], [-], [+.] and
@@ -96,6 +106,10 @@
       [[a; b]] is one site, at its bracket, and becomes [[b]]. In a chain of
       [(::)], as [a :: b :: t], the outermost [(::)] alone is a site, and
       becomes [b :: t]. A qualified constructor, as [Option.Some], is no site.
+    - [keep] drops one field of a record update, under the name [keep]. Each
+      field [f = v] of [{ r with f = v; ... }] is a site, and the update without
+      that field replaces the update. When [f] is the only field, [r] replaces
+      the update. An update of more than eight fields has no site.
 
     The guard of [del] in [e1; e2] is
     [(if armed then () else (e1; ()) : Stdlib.Unit.t); e2], which types [e1] as
@@ -122,6 +136,19 @@
 
     The guard of [tail] holds a copy of [t]. A site at each [(::)] of a chain
     would thus make the code grow as the square of the length of the chain.
+
+    The guard of the [keep] sites of an update [u] has one [if] for each site,
+    with the original first: [if Stdlib.not armed then u else u'], where [u'] is
+    the armed arm of the site. In each [if] but the innermost, [u] is the [if]
+    of the next site. [u'] is a copy of the source with no guard inside it, and
+    has the attributes of [u]. Thus [r] and each value run once, in the order
+    that the compiler gives to the update that runs. The guard of an update that
+    is the argument of a constructor, as [C { r with f = v }], goes around [C],
+    because an inline record takes no [if]. A qualified field qualifies the
+    other fields. When the dropped field is the only qualified field, its path
+    moves to the first field that stays, as [{ r with M.f = 1; g = 2 }] gives
+    [{ r with M.g = 2 }]. Each site copies the update, so the code grows as the
+    square of the number of fields. Thus an update has a limit of eight fields.
 
     A boolean context is the condition of an [if] or of a [while], the guard of
     an arm, or a direct operand of [&&] or [||] in a file that keeps the [con]
@@ -151,13 +178,13 @@
       [x <= c] and [x > c], and the mirror for a constant on the left. In
       [x < 0] the [0] is no site, since [x < 1] is [x <= 0], and in [x >= 1] the
       [1] is one.
-    - [del], [int], [bool], [none] and [tail] skip code that runs when the
-      module is initialized, before any test, so that no run can judge its
+    - [del], [int], [bool], [none], [tail] and [keep] skip code that runs when
+      the module is initialized, before any test, so that no run can judge its
       mutant: code outside every function, [lazy], method, class and functor
       body, as in a top-level [let limit = 64] or [let () = setup (); main ()].
-    - [none] and [tail] skip the right-hand side of a [let rec] outside every
-      function and [lazy] in it, because that expression cannot be an [if] that
-      reads a variable of the [let rec]. This applies to a [let rec] of a
+    - [none], [tail] and [keep] skip the right-hand side of a [let rec] outside
+      every function and [lazy] in it, because that expression cannot be an [if]
+      that reads a variable of the [let rec]. This applies to a [let rec] of a
       structure, of an expression and of a class.
     - [bool] skips the argument of a [~cloexec] or [?cloexec] label, an OS flag.
     - [ari] skips [x + 0] and [x - 0], where [0] is an integer literal without a
@@ -224,7 +251,8 @@
     - An expression carries at most one mutant, and [neg] comes last. A
       statement may carry [del] besides its own. A literal, [Some e] and
       [h :: t] carry no other mutant. A condition that is a comparison carries
-      [cmp], and one that is a connective carries [con].
+      [cmp], and one that is a connective carries [con]. A record update carries
+      a [keep] mutant at each field, and no other mutant.
     - No guard duplicates another site. A connective with a connective for an
       operand carries no mutant, neither [con] nor [neg], so [a && b && c]
       mutates [b && c] alone. Its operands are boolean contexts all the same.
@@ -258,9 +286,9 @@
       identifier, which must name one site.
 
     The code that runs when a module is initialized is mutated like any other,
-    but for the sites of [del], [int], [bool], [none] and [tail], so a top-level
-    [let origin = 1 + 2] carries a site. The [--mutate] loop lists a site that
-    ran outside tests alone as evaluated outside tests. *)
+    but for the sites of [del], [int], [bool], [none], [tail] and [keep], so a
+    top-level [let origin = 1 + 2] carries a site. The [--mutate] loop lists a
+    site that ran outside tests alone as evaluated outside tests. *)
 
 (** {1:dismissal Dismissal attributes}
 
@@ -275,7 +303,8 @@
       recorded in the table as dismissed, with the reason, or with [""] when
       none is given. It takes an index and no guard. When the expression is no
       site, as a [match], nothing is recorded. The sites inside the expression
-      are never recorded.
+      are never recorded. The [keep] sites of a record update are the sites of
+      the update, and of the constructor whose argument it is.
     - [[@@mutate off]] leaves as written a value binding at the top level of a
       structure, and a module binding, recursive or not. On a [let … in] binding
       and on any other structure item it is ignored and its payload is not
@@ -303,7 +332,8 @@
     site, and [<col>] is the zero-based column of that byte, counted in bytes. A
     site in brackets starts at its bracket, so bracketing a site, as
     [[@mutate off]] on an infix expression requires, moves its column by one.
-    Two sites may share a line and a column under two rewrites. The site also
+    Two sites may share a line and a column under two rewrites. A [keep] site
+    starts at the label of its field and ends with its value. The site also
     records where it ends, as the line and the column of the byte after its last
     one, which a report prints in the compiler's format and no identifier holds.
 
@@ -312,7 +342,9 @@
     site comes before the sites inside its operands, and the operands of a
     mutated operator come left to right. The else branch of an [if] comes before
     its then branch, and both before its condition. The body of a [while] comes
-    before its condition, and the bounds of a [for] come before its body.
+    before its condition, and the bounds of a [for] come before its body. The
+    [keep] sites of an update come in the order of its fields, before the sites
+    inside [r], and then those inside the values.
 
     The [before] and [after] texts of a site are printed from the parsetree and
     never cut out of the source. The attributes of the site are left out, and
@@ -320,7 +352,9 @@
     is one line. The brackets are those of the printer: [a + b + c] is recorded
     as [(a + b) + c], and its mutant as [(a + b) - c]. The printer gives a list
     as a list literal where it can, so [x :: [y]] is recorded as [[x; y]], and
-    its [tail] mutant as [[y]]. The [after] text of a [none] site is [None].
+    its [tail] mutant as [[y]]. The [after] text of a [none] site is [None]. The
+    [before] text of a [keep] site is the whole update, so the sites of one
+    update have one [before] text, and its [after] text is the armed arm.
 
     When the head of a [tail] site written as [h :: t] is a list, as in
     [[x] :: acc] or [(x :: cur) :: acc], it starts at the first byte of the
@@ -353,9 +387,9 @@
     the binders, and keeps its location and its attributes. The disarmed arm of
     the [del] guard of a statement or a loop body is [e; ()], whose [()] has a
     location of zero width at the end of [e]. On a loop body, the arm [e; ()]
-    has the location of [e]. The copy [t'] in the guard of [tail] is generated
-    code too, and each of its locations is ghost, so that no two nodes share a
-    location.
+    has the location of [e]. The copy [t'] in the guard of [tail] and each armed
+    arm of [keep] are generated code too. Each of their locations is ghost, so
+    that no two nodes share a location.
 
     In the driver that dune builds for a stanza naming both backends this
     rewriter runs first, so its sites are those stated here and the coverage

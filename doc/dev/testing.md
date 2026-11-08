@@ -83,7 +83,8 @@ what is non-obvious.
   instrumented build compiles and registers, one library per question:
   generated code under fatal warnings, a shadowed `not` and `bool`, a
   warning attribute on `h :: t`, a file that declares `Some` and `(::)`,
-  an opened `None`, the right-hand sides of `let rec`, the typing-order
+  an opened `None`, the right-hand sides of `let rec`, record updates
+  under fatal warnings and `-principal`, the typing-order
   and expected-type corpora, and a registration suite that arms each
   mutant and checks that the library then behaves as the mutant's text
   says. An instrumenter change that cannot keep the semantics suites

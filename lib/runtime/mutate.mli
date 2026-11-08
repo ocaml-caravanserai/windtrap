@@ -35,10 +35,11 @@ val rewrites : string list
     the arithmetic ["add"], ["sub"], ["fadd"] and ["fsub"], the connectives
     ["and"] and ["or"], then ["del"], which drops a statement, ["int"], which
     nudges an integer literal, ["bool"], which flips a boolean one, ["none"],
-    which replaces [Some e] with [None], and ["tail"], which replaces [h :: t]
-    with [t]. A name is that of the replacement, never that of the operator in
-    the source, but for ["del"], ["int"] and ["bool"], which name what they
-    change. *)
+    which replaces [Some e] with [None], ["tail"], which replaces [h :: t] with
+    [t], and ["keep"], which keeps the value that [r] gives to a field that
+    [{ r with ... }] sets. A name is that of the replacement, never that of the
+    operator in the source, but for ["del"], ["int"] and ["bool"], which name
+    what they change. *)
 
 val id_to_string : id -> string
 (** [id_to_string id] is [<file>:<line>:<col>:<rewrite>], as
