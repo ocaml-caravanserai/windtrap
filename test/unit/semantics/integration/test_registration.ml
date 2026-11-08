@@ -19,6 +19,7 @@ module Arid = Windtrap_mutate_forced.Arid
 module Loose = Windtrap_mutate_loose.Loose
 module Disambiguate = Windtrap_mutate_disambiguate.Disambiguate
 module Expected_type = Windtrap_mutate_disambiguate.Expected_type
+module Own_unit = Windtrap_mutate_disambiguate.Own_unit
 
 let strf = Printf.sprintf
 
@@ -110,6 +111,7 @@ let originals =
       fun () -> String.concat "," (ints (Oracle.del_downto 3)) );
     ("Loose.sum_for 4", "10", fun () -> Int.to_string (Loose.sum_for 4));
     ("Loose.sum_while 4", "10", fun () -> Int.to_string (Loose.sum_while 4));
+    ("Own_unit.count 3", "5", fun () -> Int.to_string (Own_unit.count 3));
     ("int_up", "41", fun () -> Int.to_string (Oracle.int_up ()));
     ("int_down", "1", fun () -> Int64.to_string (Oracle.int_down ()));
     ( "bool_flip",

@@ -20,7 +20,7 @@
 
 (library
  (name windtrap_mutate_disambiguate)
- (modules codec disambiguate expected_type opened_none)
+ (modules codec disambiguate expected_type opened_none own_unit)
  (preprocess
   (pps ppx_windtrap.mutate)))
 

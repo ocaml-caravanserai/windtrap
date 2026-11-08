@@ -161,50 +161,50 @@ before and after, and the reason of a dismissed site.
     8: 40:2-40:25 "del" "output_string oc \"done\"" -> "()"
   let log = ref []
   let push x =
-    if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 0
-    then ()
-    else
-      (log :=
-         (if
-            Stdlib.not
-              (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 1)
-          then x :: (!log)
-          else !log);
-       ());
+    (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 0
+     then ()
+     else
+       (log :=
+          (if
+             Stdlib.not
+               (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 1)
+           then x :: (!log)
+           else !log);
+        ()) : Stdlib.Unit.t);
     List.length (!log)
   let loop n =
     for i =
       if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 2
       then 0
       else 1 to n do
-      if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 3
-      then ()
-      else (print_int i; ());
-      if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 4
-      then ()
-      else (print_newline (); ())
+      (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 3
+       then ()
+       else (print_int i; ()) : Stdlib.Unit.t);
+      (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 4
+       then ()
+       else (print_newline (); ()) : Stdlib.Unit.t)
     done
   let unit_first x = (); x
   let checked x = assert (x > 0); x
   let quiet x =
     ((print_string "x")[@mutate off "the output is not checked"]); x
   let either a b =
-    if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 6
-    then ()
-    else
-      ((let __windtrap_mut_7_p = a in
-        if
-          Stdlib.(=) (__windtrap_mut_7_p : Stdlib.Bool.t)
-            (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 7)
-        then b
-        else __windtrap_mut_7_p);
-       ());
+    (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 6
+     then ()
+     else
+       ((let __windtrap_mut_7_p = a in
+         if
+           Stdlib.(=) (__windtrap_mut_7_p : Stdlib.Bool.t)
+             (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 7)
+         then b
+         else __windtrap_mut_7_p);
+        ()) : Stdlib.Unit.t);
     ()
   let () = print_string "loaded"; print_newline ()
   let finish oc ic fd dir =
-    if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 8
-    then ()
-    else (output_string oc "done"; ());
+    (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 8
+     then ()
+     else (output_string oc "done"; ()) : Stdlib.Unit.t);
     close_out oc;
     close_in_noerr ic;
     (try Unix.close fd with | Unix.Unix_error _ -> ());
@@ -270,12 +270,12 @@ branch in tail position:
        then Stdlib.not __windtrap_mut_5_p
        else __windtrap_mut_5_p)
     then
-      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 2
-       then ()
-       else (incr count; ());
-       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 3
-       then ()
-       else (print_int (!count); ());
+      ((if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 2
+        then ()
+        else (incr count; ()) : Stdlib.Unit.t);
+       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 3
+        then ()
+        else (print_int (!count); ()) : Stdlib.Unit.t);
        if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 4
        then ()
        else print_newline ())
@@ -291,9 +291,10 @@ branch in tail position:
       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 7
       then Stdlib.not (__windtrap_mut_7_r > __windtrap_mut_7_l)
       else __windtrap_mut_7_l > __windtrap_mut_7_r do
-      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 6
-      then ()
-      else (decr pending; ()) done
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 6
+       then ()
+       else (decr pending; ()) : Stdlib.Unit.t)
+      done
   let drain_noisy pending =
     while
       let (__windtrap_mut_11_l, __windtrap_mut_11_r) =
@@ -306,41 +307,42 @@ branch in tail position:
       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 11
       then Stdlib.not (__windtrap_mut_11_r > __windtrap_mut_11_l)
       else __windtrap_mut_11_l > __windtrap_mut_11_r do
-      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 9
-      then ()
-      else (print_int (!pending); ());
-      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 10
-      then ()
-      else (decr pending; ()) done
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 9
+       then ()
+       else (print_int (!pending); ()) : Stdlib.Unit.t);
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 10
+       then ()
+       else (decr pending; ()) : Stdlib.Unit.t)
+      done
   let up n =
     for i =
       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 13
       then 0
       else 1 to n do
-      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 14
-      then ()
-      else (print_int i; ())
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 14
+       then ()
+       else (print_int i; ()) : Stdlib.Unit.t)
     done
   let down n =
     for i = n downto
       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 15
       then 0
       else 1 do
-      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 16
-      then ()
-      else (print_int i; ());
-      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 17
-      then ()
-      else (print_newline (); ())
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 16
+       then ()
+       else (print_int i; ()) : Stdlib.Unit.t);
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 17
+       then ()
+       else (print_newline (); ()) : Stdlib.Unit.t)
     done
   let peek n =
     for _ =
       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 18
       then 0
       else 1 to n do
-      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 19
-      then ()
-      else (!count; ())
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 19
+       then ()
+       else (!count; ()) : Stdlib.Unit.t)
     done
   let rec countdown n =
     if
@@ -424,9 +426,9 @@ branch in tail position:
        then Stdlib.not __windtrap_mut_34_p
        else __windtrap_mut_34_p)
     then
-      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 32
-       then ()
-       else (incr count; ());
+      ((if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 32
+        then ()
+        else (incr count; ()) : Stdlib.Unit.t);
        ((print_string "x")
        [@mutate off "the output is not checked"]))
 
@@ -1580,19 +1582,19 @@ Code that gives its location keeps the mutants of its two copies:
        then __windtrap_mut_0_l - __windtrap_mut_0_r
        else __windtrap_mut_0_l + __windtrap_mut_0_r)
   let local x =
-    if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 1
-    then ()
-    else
-      (Log.debug
-         (fun m ->
-            m "%d"
-              (let (__windtrap_mut_2_l, __windtrap_mut_2_r) = (x, 1) in
-               if
-                 Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
-                   2
-               then __windtrap_mut_2_l - __windtrap_mut_2_r
-               else __windtrap_mut_2_l + __windtrap_mut_2_r));
-       ());
+    (if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 1
+     then ()
+     else
+       (Log.debug
+          (fun m ->
+             m "%d"
+               (let (__windtrap_mut_2_l, __windtrap_mut_2_r) = (x, 1) in
+                if
+                  Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
+                    2
+                then __windtrap_mut_2_l - __windtrap_mut_2_r
+                else __windtrap_mut_2_l + __windtrap_mut_2_r));
+        ()) : Stdlib.Unit.t);
     x
   let app x = Logs.app (fun m -> m "%d" (x + 1))
   let err x = Logs.err (fun m -> m "%d" (x + 1))
@@ -1600,26 +1602,26 @@ Code that gives its location keeps the mutants of its two copies:
   let msg x = Logs.msg Logs.Info (fun m -> m "%d" (x + 1))
   let listed x = Logs.debug (fun m -> m "%a" (let open Fmt in list int) [x; 2])
   let counted y x =
-    if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 3
-    then ()
-    else
-      (Logs.debug
-         (fun m ->
-            if
-              Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
-                4
-            then ()
-            else
-              (y :=
-                 ((let (__windtrap_mut_5_l, __windtrap_mut_5_r) = ((!y), 1) in
-                   if
-                     Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
-                       5
-                   then __windtrap_mut_5_l - __windtrap_mut_5_r
-                   else __windtrap_mut_5_l + __windtrap_mut_5_r));
-               ());
-            (let () = incr y in m "%d" (!y)));
-       ());
+    (if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 3
+     then ()
+     else
+       (Logs.debug
+          (fun m ->
+             (if
+                Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
+                  4
+              then ()
+              else
+                (y :=
+                   ((let (__windtrap_mut_5_l, __windtrap_mut_5_r) = ((!y), 1) in
+                     if
+                       Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
+                         5
+                     then __windtrap_mut_5_l - __windtrap_mut_5_r
+                     else __windtrap_mut_5_l + __windtrap_mut_5_r));
+                 ()) : Stdlib.Unit.t);
+             (let () = incr y in m "%d" (!y)));
+        ()) : Stdlib.Unit.t);
     (let (__windtrap_mut_6_l, __windtrap_mut_6_r) = ((!y), x) in
      if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 6
      then __windtrap_mut_6_l - __windtrap_mut_6_r
@@ -1684,18 +1686,18 @@ Code that gives its location keeps the mutants of its two copies:
           else ((None)[@ocaml.warning "-18-41-42"])))
   let stated r =
     failwith
-      (if
-         Windtrap_mut_________fixture_equivalent_message___ml.___windtrap_armed___
-           3
-       then ()
-       else
-         (r :=
-            (if
-               Windtrap_mut_________fixture_equivalent_message___ml.___windtrap_armed___
-                 4
-             then 6
-             else 5);
-          ());
+      ((if
+          Windtrap_mut_________fixture_equivalent_message___ml.___windtrap_armed___
+            3
+        then ()
+        else
+          (r :=
+             (if
+                Windtrap_mut_________fixture_equivalent_message___ml.___windtrap_armed___
+                  4
+              then 6
+              else 5);
+           ()) : Stdlib.Unit.t);
        "boom")
   let bound r =
     invalid_arg
@@ -2120,9 +2122,10 @@ and keeps its reason:
       if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 4
       then Stdlib.not __windtrap_mut_4_p
       else __windtrap_mut_4_p do
-      if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 3
-      then ()
-      else (step (); ()) done
+      (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 3
+       then ()
+       else (step (); ()) : Stdlib.Unit.t)
+      done
   let classify p x =
     match x with
     | y when

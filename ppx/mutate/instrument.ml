@@ -686,9 +686,11 @@ let is_opaque e =
 (* How [del] drops a statement [e]. [In_tail] is [if armed then () else e],
    which keeps [e] in the tail position of an [if] with no [else], so a tail
    call in [e] stays a tail call. [As_statement] is
-   [if armed then () else (e; ())], where [e; ()] types [e] as the statement
-   that it was: a loop body can have a type other than [unit]. [In_body] is
-   the guard of [As_statement] on a whole loop body.
+   [(if armed then () else (e; ()) : Stdlib.Unit.t)], where [e; ()] types [e]
+   as the statement that it was: a loop body can have a type other than
+   [unit]. The constraint names [Stdlib.Unit.t] because a file can declare
+   its own [()]. [In_body] is the guard of [As_statement] on a whole loop
+   body.
 
    The coverage rewriter marks only the disarmed arm. The [()] of [e; ()]
    takes the location of the end of [e], where the coverage rewriter keys
@@ -1063,7 +1065,8 @@ class instrumenter ~keeps ~module_name =
               let unit = eunit ~loc:{ e.pexp_loc with loc_start = stop } in
               let arm = if drop = In_body then e.pexp_loc else loc in
               let disarmed = pexp_sequence ~loc:arm rewritten unit in
-              [%expr if [%e armed] then () else [%e disarmed]])
+              [%expr (if [%e armed] then () else [%e disarmed] : Stdlib.Unit.t)]
+          )
 
     (* [unit_position drop e] rewrites [e], a then-branch with no [else], a
        loop body or the last statement of a sequence there, as a statement.
