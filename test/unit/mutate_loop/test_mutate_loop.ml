@@ -157,7 +157,7 @@ let saved path =
   else
     let raw = read path in
     match Verdicts.load path with
-    | Ok { verdicts; identity = writer; suite; refused } ->
+    | Ok { verdicts; identity = writer; suite; refused; test_digests = _ } ->
         Some
           {
             raw;
@@ -1495,6 +1495,9 @@ let elsewhere =
     source_digest = None;
     verdict = Verdicts.killed [];
     previous = Some `Survived;
+    effort = { retries = 0; pass = 1; settings = String.make 32 '0' };
+    prefix = None;
+    reused = false;
   }
 
 let rerun_over ?identity ?suite collection =
@@ -2712,7 +2715,7 @@ let plant_old p =
 let old_warning p =
   strf
     "windtrap: warning: --skip-killed ignores %s/%s: not a windtrap verdict \
-     file (expected header \"windtrap-mutants-v14\", found \
+     file (expected header \"windtrap-mutants-v15\", found \
      \"windtrap-mutants-v13\"); files written by other windtrap versions are \
      not readable - delete the stale verdict files, then re-run the mutation \
      tests\n"
@@ -3414,8 +3417,8 @@ let refused_between () =
    run replaces it. *)
 let unloadable_earlier =
   [
-    ("a file of the format before", "windtrap-mutants-v13\ntested\n0\n");
-    ("a corrupt file", "windtrap-mutants-v14\ntested\n1\njunk\n");
+    ("a file of the format before", "windtrap-mutants-v14\ntested\n0\n");
+    ("a corrupt file", "windtrap-mutants-v15\ntested\n0\n1\njunk\n");
   ]
 
 let unloadable_earlier_file (_, text) =
@@ -3426,7 +3429,7 @@ let unloadable_earlier_file (_, text) =
   equal (option (list string)) None (unstable r.out);
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option (list string)) (Some none_rows) (previous_rows r);
-  starts_with ~prefix:"windtrap-mutants-v14\n" (read path)
+  starts_with ~prefix:"windtrap-mutants-v15\n" (read path)
 
 let narrowed_run () =
   let path = verdicts_path () in
@@ -4814,6 +4817,85 @@ let killing_tests =
           equal (list string) [ "subject.ml:18 flaky_kill" ] (reason_kinds k.r));
     ]
 
+(* Evidence *)
+
+module Loop = Windtrap.Private.Mutate_loop
+module Run = Windtrap.Private.Run
+
+let config () =
+  { (Run.default_config ()) with seed = Windtrap.Private.Cli.mutation_seed }
+
+let changed_settings =
+  [
+    ("the seed", fun (c : Run.config) -> { c with seed = 1L });
+    ("--prop-count", fun c -> { c with prop_count = Some 1 });
+    ("--replay", fun c -> { c with replay = Some "1" });
+    ( "--case",
+      fun c -> { c with case_file = Some { file = "c"; choices = [| 1L |] } } );
+    ( "the choices of --case",
+      fun c -> { c with case_file = Some { file = "c"; choices = [| 2L |] } } );
+    ("--mutate-workers", fun c -> { c with mutate_workers = true });
+    ("--timeout", fun c -> { c with timeout = Some 1. });
+    ("the default timeout", fun c -> { c with default_timeout = 1. });
+    ("--mutate-memory", fun c -> { c with mutate_memory = 1 });
+  ]
+
+let settings_shape () =
+  let s = Loop.settings (config ()) in
+  is_true (Windtrap_runtime.Instr.is_digest s);
+  equal string s (Loop.settings (config ()));
+  (* The two settings that hold no value differ from one that holds it. *)
+  is_true
+    (Loop.settings { (config ()) with prop_count = Some 1 }
+    <> Loop.settings { (config ()) with replay = Some "1" })
+
+let settings_input (_, change) =
+  let c = config () in
+  is_true (Loop.settings c <> Loop.settings (change c))
+
+let file_digest path = Digest.to_hex (Digest.file path)
+let at file = Some { Windtrap.Private.Loc.file; line = 1; column = 0 }
+
+let test_digests () =
+  let dir = temp_dir () in
+  let file = Filename.concat dir "t.ml" in
+  write file "let x = 1\n";
+  equal (option string) None (Loop.test_digest None);
+  equal (option string) (Some (file_digest file)) (Loop.test_digest (at file));
+  equal (option string) None
+    (Loop.test_digest (at (Filename.concat dir "missing.ml")));
+  equal (option string) None (Loop.test_digest (at dir));
+  let fifo = Filename.concat dir "fifo.ml" in
+  Unix.mkfifo fifo 0o600;
+  equal (option string) None (Loop.test_digest (at fifo))
+
+let relative_test_digest () =
+  let root = temp_dir () in
+  Sys.mkdir (Filename.concat root "test") 0o755;
+  let file = Filename.concat root "test/t.ml" in
+  write file "let y = 2\n";
+  setenv "WINDTRAP_PROJECT_ROOT" (Some root);
+  equal (option string)
+    (Some (file_digest file))
+    (Loop.test_digest (at "test/t.ml"))
+
+let evidence =
+  group "Evidence"
+    [
+      test
+        "settings is 32 lowercase hexadecimal digits, the same for equal \
+         configurations"
+        settings_shape;
+      cases "settings changes with each of its inputs" ~id:fst changed_settings
+        settings_input;
+      test
+        "test_digest is the MD5 of a regular file, and None for no location, a \
+         missing file, a directory or a FIFO"
+        test_digests;
+      test "test_digest reads a relative path under the project root"
+        relative_test_digest;
+    ]
+
 (* The fixtures' verdict files land in the real _build/_mutants, where
    [windtrap mutants] would merge them into the tree's answer, and no rule
    runs these executables but this suite. A forked child ends past
@@ -4852,4 +4934,5 @@ let () =
          effects;
          memory_records;
          killing_tests;
+         evidence;
        ])

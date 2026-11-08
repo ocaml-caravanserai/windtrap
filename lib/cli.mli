@@ -198,6 +198,11 @@ val settings : parsed -> (Run.config, error) result
     seed that {!parse} drew is the result's when no layer gives one and no
     mutation is asked for. *)
 
+val release : string option
+(** [release] is the version of the release that this build comes from, as
+    [--version] prints it. It is [None] for a build of a tree that [dune subst]
+    did not substitute, such as a checkout. *)
+
 val mutation_seed : Seed.seed
 (** [mutation_seed] is the root seed of a mutation run that no layer gives one,
     [s1:6d7574616e747321]. *)

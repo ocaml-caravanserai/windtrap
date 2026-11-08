@@ -149,13 +149,8 @@ let chdir = Run.chdir
 
 (* Running *)
 
-(* [dune subst], which [dune-release distrib] runs in the clone it archives,
-   replaces the watermark with the tag's version. A tree built unsubstituted,
-   such as a checkout, still holds it, has no release and reports "dev". *)
-let release =
-  let watermark = "%%VERSION%%" in
-  if String.starts_with ~prefix:"%" watermark then None else Some watermark
-
+(* A tree with no release reports "dev". *)
+let release = Cli.release
 let version = Option.value release ~default:"dev"
 
 (* Under dune, where [dune runtest] and [dune exec] both set [INSIDE_DUNE],

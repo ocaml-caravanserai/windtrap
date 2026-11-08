@@ -113,7 +113,7 @@ let remedy excluded =
 let fresh files =
   let load path =
     match Verdicts.load path with
-    | Ok { Verdicts.verdicts; identity; suite; refused } ->
+    | Ok { Verdicts.verdicts; identity; suite; refused; test_digests = _ } ->
         Ok
           {
             path;

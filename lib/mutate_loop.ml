@@ -158,6 +158,78 @@ let observe reach ~xfail test sites =
 
 (* The verdict file *)
 
+(* Each value has a tag and a length, so that no two configurations share a
+   spelling. *)
+let settings (config : Run.config) =
+  let b = Buffer.create 256 in
+  let field tag = function
+    | None -> Printf.bprintf b "%s none\n" tag
+    | Some value ->
+        Printf.bprintf b "%s %d %s\n" tag (String.length value) value
+  in
+  field "version" (Some (Option.value Cli.release ~default:"dev"));
+  field "seed" (Some (Seed.to_string config.seed));
+  field "prop_count" (Option.map string_of_int config.prop_count);
+  field "replay" config.replay;
+  field "case"
+    (Option.map
+       (fun (case : Run.case_file) ->
+         String.concat " "
+           (Array.to_list (Array.map Int64.to_string case.choices)))
+       config.case_file);
+  field "mutate_workers" (Some (string_of_bool config.mutate_workers));
+  field "timeout" (Option.map (strf "%h") config.timeout);
+  field "default_timeout" (Some (strf "%h" config.default_timeout));
+  field "mutate_memory" (Some (string_of_int config.mutate_memory));
+  Digest.to_hex (Digest.string (Buffer.contents b))
+
+(* The loop opens only a regular file, because the read of a FIFO or of a
+   device can block. *)
+let regular path =
+  match Unix.stat path with
+  | { Unix.st_kind = Unix.S_REG; _ } -> true
+  | _ -> false
+  | exception Unix.Unix_error _ -> false
+
+(* As [read_source], under the project root first. *)
+let test_digest = function
+  | None -> None
+  | Some { Loc.file; _ } ->
+      let under_root =
+        match Os.project_root () with
+        | root -> Result.to_option (Os.reconstruct ~root file)
+        | exception Sys_error _ -> None
+      in
+      List.find_map
+        (fun path ->
+          if regular path then Windtrap_runtime.Instr.file_digest path else None)
+        (Option.to_list under_root @ [ file ])
+
+(* The entry of each test whose file has a digest: the file, and the limit
+   and the retries that the test declares. Each file is read once. *)
+let test_digests tests =
+  let files = Hashtbl.create 16 in
+  let file_digest (loc : Loc.t) =
+    match Hashtbl.find_opt files loc.file with
+    | Some digest -> digest
+    | None ->
+        let digest = test_digest (Some loc) in
+        Hashtbl.add files loc.file digest;
+        digest
+  in
+  List.filter_map
+    (fun (case : Test_tree.case) ->
+      Option.map
+        (fun digest ->
+          ( case.path,
+            Digest.to_hex
+              (Digest.string
+                 (strf "%s %s %d" digest
+                    (Option.fold ~none:"none" ~some:(strf "%h") case.timeout)
+                    case.retries)) ))
+        (Option.bind case.loc file_digest))
+    (Test_tree.flatten tests)
+
 let narrows_suite (config : Run.config) ~focus =
   config.filter <> [] || config.exclude <> [] || config.tags <> []
   || config.exclude_tags <> [] || config.failed_only || focus
@@ -182,7 +254,7 @@ let this_build ~suite = by_this_build (earlier ~suite)
 (* Under a scope, the records of the other files stay when this build wrote
    them and tested its suite. The result is the records of [records] whose
    verdict changed, and the note on a file that cannot be written. *)
-let save ~suite ~scope ?refused records =
+let save ~suite ~scope ?refused ?test_digests records =
   let exe = Windtrap_runtime.Instr.executable in
   let earlier = earlier ~suite in
   let kept =
@@ -204,7 +276,7 @@ let save ~suite ~scope ?refused records =
   match
     Verdicts.save
       ?identity:(Verdicts.writer_identity ~exe)
-      ~suite ?refused
+      ~suite ?refused ?test_digests
       (Verdicts.output_file ~exe ~suite)
       (List.fold_left Verdicts.add tested kept)
   with
@@ -216,12 +288,14 @@ let save ~suite ~scope ?refused records =
   | exception Sys_error message ->
       ([], Some (strf "could not write the verdict file: %s" message))
 
-let recorded verdict = List.map (fun m -> Verdicts.record_of_mutant m verdict)
+let recorded ~effort verdict =
+  List.map (fun m -> Verdicts.record_of_mutant ~effort m verdict)
 
 (* What a suite that could not be tested holds as unknown: what its run
    would have judged. A dry run that ran whole and green says what it never
    reached. *)
-let unknown_records ?reach population reason =
+let unknown_records ~effort ?reach population reason =
+  let recorded = recorded ~effort in
   match reach with
   | None -> recorded (Verdicts.Unknown (Other reason)) population
   | Some (reached, unreached, outside) ->
@@ -231,19 +305,19 @@ let unknown_records ?reach population reason =
 
 (* A refusal still writes the file, which says why, so the merge names the
    suite and its mutants never read as the other suites' survivors. *)
-let refuse ?(say = true) ?reach ~suite ~scope population message =
+let refuse ?(say = true) ?reach ~effort ~suite ~scope population message =
   if say then Os.say message;
   Option.iter Os.say
     (snd
        (save ~suite ~scope ~refused:message
-          (unknown_records ?reach population message)));
+          (unknown_records ~effort ?reach population message)));
   Error (Run.Mutation_refused message)
 
 let narrowing =
   "its selection narrowed the suite, so it saved no verdict: run it whole"
 
 (* A narrowed run cannot unsay what a whole run of the same build found. *)
-let save_narrowed ~suite ~scope population =
+let save_narrowed ~effort ~suite ~scope population =
   let note =
     "verdicts not saved: this run's selection narrows the suite, and a partial \
      run's verdicts would stand in the project merge as the whole."
@@ -254,7 +328,7 @@ let save_narrowed ~suite ~scope population =
       match
         snd
           (save ~suite ~scope ~refused:narrowing
-             (unknown_records population narrowing))
+             (unknown_records ~effort population narrowing))
       with
       | None -> Some note
       | Some failed -> Some (note ^ " " ^ failed))
@@ -457,8 +531,8 @@ type found = {
 
 (* A survivor's block is committed when its last run is given, so a loop
    that dies has printed what it found. *)
-let found_verdict renderer (config : Run.config) ~locations ~failed ~runs ~early
-    found (index, mutant) verdict =
+let found_verdict renderer (config : Run.config) ~effort ?prefix ~locations
+    ~failed ~runs ~early found (index, mutant) verdict =
   (match verdict with
   | Verdicts.Survived { first; others } ->
       let witness path : Report_sections.witness =
@@ -495,7 +569,8 @@ let found_verdict renderer (config : Run.config) ~locations ~failed ~runs ~early
           } )
         :: found.unknown
   | Killed _ | Killed_elsewhere _ | Outside_tests | Unreached -> ());
-  found.records <- Verdicts.record_of_mutant mutant verdict :: found.records
+  found.records <-
+    Verdicts.record_of_mutant ~effort ?prefix mutant verdict :: found.records
 
 (* Signals *)
 
@@ -663,8 +738,8 @@ type check = {
    with a killing test waits for the check of its tests, which runs in up to
    [check_runs] passes after the last retry. The loop starts no pass after a
    signal. *)
-let test_mutants renderer ~meter ~suite (config : Run.config) tests ~dry_run
-    ~pooled ~wall ~save reached =
+let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
+    ~dry_run ~pooled ~wall ~save reached =
   let durations = Hashtbl.create 256 in
   List.iter
     (fun (r : Run.result) -> Hashtbl.replace durations r.path r.duration)
@@ -693,9 +768,17 @@ let test_mutants renderer ~meter ~suite (config : Run.config) tests ~dry_run
   (* The retries of each mutant that ended early, newest first. *)
   let early = Array.make total [] in
   let paths i = List.rev (snd mutants.(i)).tests in
+  (* A kill that names a test keeps the tests of its job up to it. *)
   let commit ~failed ~run i verdict =
     judged.(i) <- true;
-    found_verdict renderer config ~locations ~failed ~runs:run
+    let prefix =
+      match verdict with
+      | Verdicts.Killed { by = [ test ] } -> Some (through test (paths i))
+      | _ -> None
+    in
+    found_verdict renderer config
+      ~effort:{ effort with Verdicts.pass = run }
+      ?prefix ~locations ~failed ~runs:run
       ~early:(List.rev early.(i))
       found
       (i, fst mutants.(i))
@@ -939,14 +1022,6 @@ let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside found
 
 (* Killed elsewhere *)
 
-(* The loop opens only a regular file, because the read of a FIFO or of a
-   device can block. *)
-let regular path =
-  match Unix.stat path with
-  | { Unix.st_kind = Unix.S_REG; _ } -> true
-  | _ -> false
-  | exception Unix.Unix_error _ -> false
-
 (* The executable of the verdict file that killed each mutant of [reached],
    and the executable of each file that the loop used. A kill counts for the
    mutant of this executable only when the two compiled the same source and
@@ -1045,8 +1120,15 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
   let all = Result.value population ~default:[] in
   let reach = { sites = Hashtbl.create 256; outside = Hashtbl.create 16 } in
   let started = Os.counter () in
+  let effort =
+    {
+      Verdicts.retries = config.mutate_retry;
+      pass = 1;
+      settings = settings config;
+    }
+  in
   let refuse ?say ?reach message =
-    refuse ?say ?reach ~suite ~scope all message
+    refuse ?say ?reach ~effort ~suite ~scope all message
   in
   let every = memory_every () in
   if Result.is_error every then refuse (Result.get_error every)
@@ -1110,6 +1192,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   unreached
               in
               let wall = Float.max 0.01 (Os.count_s started) in
+              let test_digests = test_digests tests in
               let skipped, to_test, lines =
                 if not scope.skip_killed then ([], reached, [])
                 else
@@ -1126,21 +1209,22 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
               in
               let narrowed = narrows_suite config ~focus:outcome.focus_active in
               let save records =
-                if narrowed then ([], save_narrowed ~suite ~scope population)
+                if narrowed then
+                  ([], save_narrowed ~effort ~suite ~scope population)
                 else
-                  save ~suite ~scope
+                  save ~suite ~scope ~test_digests
                     (records
                     @ List.map
                         (fun (m, exe) ->
-                          Verdicts.record_of_mutant m
+                          Verdicts.record_of_mutant ~effort m
                             (Verdicts.Killed_elsewhere { exe }))
                         skipped
-                    @ recorded Verdicts.Outside_tests outside
-                    @ recorded Verdicts.Unreached unreached)
+                    @ recorded ~effort Verdicts.Outside_tests outside
+                    @ recorded ~effort Verdicts.Unreached unreached)
               in
               match
-                test_mutants renderer ~meter ~suite config tests ~dry_run
-                  ~pooled ~wall ~save to_test
+                test_mutants renderer ~meter ~suite config ~effort tests
+                  ~dry_run ~pooled ~wall ~save to_test
               with
               | exception Sys_error _ when !signal = Some Sys.sigpipe ->
                   Os.die_by Sys.sigpipe

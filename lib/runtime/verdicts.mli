@@ -109,6 +109,24 @@ val outcome : verdict -> outcome option
 
 (** {1:collections Collections} *)
 
+type effort = {
+  retries : int;
+      (** The [--mutate-retry] count of the run that gave the verdict. *)
+  pass : int;
+      (** The pass of that run that gave the verdict: [1] for the first run of
+          the mutant, and [k] for its [k - 1]-th retry. *)
+  settings : string;
+      (** The lowercase hexadecimal MD5 of the settings of that run that change
+          what a test does ([Mutate_loop.settings]). *)
+}
+(** The type for what a run did to give a verdict. A later run reuses a verdict
+    only when it asks for no more ({!effort_covers}). *)
+
+val prefix_digest : reaching_test list -> string
+(** [prefix_digest paths] is the lowercase hexadecimal MD5 of an injective
+    spelling of [paths], in order: the tests of a job up to and with its killing
+    test. *)
+
 type record = {
   id : Mutate.id;  (** The identifier of the mutant. *)
   end_line : int;  (** The [end_line] of its site ({!Mutate.type-site}). *)
@@ -124,20 +142,39 @@ type record = {
   previous : outcome option;
       (** The last outcome that the suite gave to the same mutant before this
           run, or [None]. {!with_previous} sets it. *)
+  effort : effort;
+      (** The effort of the run that gave [verdict]. For a reused verdict it is
+          the effort of the run that tested the mutant. *)
+  prefix : string option;
+      (** For a {!Killed} that names a test, the {!prefix_digest} of the tests
+          of its job up to and with the killing test, when it is known. It is
+          [None] for every other verdict. *)
+  reused : bool;
+      (** [true] when a run took [verdict] from the verdict file of the last run
+          ({!reuse}) and did not test the mutant. Only a {!Killed} that names a
+          test and a {!Survived} can be reused. *)
 }
 (** The type for the record of one mutant. A record is self-describing: it
     carries the two renderings and the extent that a report draws the mutant
     with, so a report needs no catalogue and outlives the executable that
     produced it. *)
 
-val record_of_mutant : Mutate.mutant -> verdict -> record
-(** [record_of_mutant m v] is the record of [m] with the verdict [v] and no
-    previous outcome. [m.dismissed] is dropped. *)
+val record_of_mutant :
+  effort:effort ->
+  ?prefix:reaching_test list ->
+  Mutate.mutant ->
+  verdict ->
+  record
+(** [record_of_mutant ~effort ?prefix m v] is the record of [m] with the verdict
+    [v], the effort [effort], no previous outcome and no mark. Its prefix is the
+    {!prefix_digest} of [prefix] when [v] is a {!Killed} that names a test, and
+    [None] if not. [m.dismissed] is dropped. *)
 
 val changed : record -> (outcome * outcome) option
 (** [changed r] is [Some (was, is)] when [r.previous] is [Some was],
-    {!val-outcome} of [r.verdict] is [Some is], and [was] is not [is]. It is
-    [None] if not. *)
+    {!val-outcome} of [r.verdict] is [Some is], [was] is not [is], and [r] is
+    not reused. It is [None] if not. A reused verdict is no change, because no
+    run tested the mutant. *)
 
 type t
 (** The type for verdict collections: finite maps from {!Mutate.type-id} to
@@ -148,11 +185,12 @@ val empty : t
 
 val add : t -> record -> t
 (** [add t r] is [t] with [r] recorded. A {!Survived} or {!Killed} verdict is
-    sorted on its way in. When [t] already holds a record under [r.id], the
-    smaller [(before, after, end_line, end_col, source_digest)] in lexicographic
-    order is kept, and the two verdicts combine into the verdict of a mutant
-    that one executable saw one way and another the other way. It is {!Killed}
-    if either is, with the killing tests of both. Otherwise it is
+    sorted on its way in, and the prefix of a verdict that is not a {!Killed}
+    that names a test is dropped. When [t] already holds a record under [r.id],
+    the smaller [(before, after, end_line, end_col, source_digest)] in
+    lexicographic order is kept, and the two verdicts combine into the verdict
+    of a mutant that one executable saw one way and another the other way. It is
+    {!Killed} if either is, with the killing tests of both. Otherwise it is
     {!Killed_elsewhere} if either is, with the smaller [exe] in [String.compare]
     order when both are. Otherwise it is {!Unknown} if either is, with the
     reason whose {!reason_text} is smaller in [String.compare] order when both
@@ -160,13 +198,17 @@ val add : t -> record -> t
     {!Not_evaluated} if either is, then {!Survived} with the reaching tests of
     both if either is, then {!Outside_tests} if either is, and {!Unreached} if
     both are. The two previous outcomes combine in the same order, and a missing
-    one leaves the other unchanged.
+    one leaves the other unchanged. The effort and the prefix are the smallest
+    pair, in [compare] order, of the records whose verdict has the higher rank
+    in this order, or of the two records when the two ranks are equal. The
+    result is reused when each of these records is reused.
 
-    [add] checks nothing of [r.id], of the end, of [r.source_digest] or of the
-    [exe] of a {!Killed_elsewhere}. It accepts an empty [file], a [line] below
-    [1], a negative [col], an end before the start, a [rewrite] outside
-    {!Mutate.rewrites}, a digest that is not 32 lowercase hexadecimal digits and
-    an empty [exe], and {!load} then refuses the file that {!save} writes for
+    [add] checks nothing of [r.id], of the end, of [r.source_digest], of the
+    [exe] of a {!Killed_elsewhere}, of [r.effort], of [r.prefix] or of the mark.
+    It accepts an empty [file], a [line] below [1], a negative [col], an end
+    before the start, a [rewrite] outside {!Mutate.rewrites}, a digest that is
+    not 32 lowercase hexadecimal digits, an empty [exe] and a record that
+    {!load} refuses, and {!load} then refuses the file that {!save} writes for
     the collection. *)
 
 val records : t -> record list
@@ -177,8 +219,9 @@ val merge : t -> t -> t
     identifier are combined as {!add} does. [merge] is commutative, associative
     and idempotent, {!empty} is its unit, and an {!Unreached} verdict leaves the
     verdict it is combined with unchanged, so merging any number of files in any
-    order gives one answer. The previous outcome of a merged record tells
-    nothing of one suite. *)
+    order gives one answer. The previous outcome, the effort and the prefix of a
+    merged record tell nothing of one suite. A merged record is reused only when
+    no fresh record of the same rank is present. *)
 
 val with_previous : prior:t -> t -> t
 (** [with_previous ~prior t] is [t] in which each record [r] gets its previous
@@ -193,7 +236,7 @@ val with_previous : prior:t -> t -> t
 
     Each suite of an executable has one verdict file, at {!output_file}.
 
-    The first line of a file is the magic line [windtrap-mutants-v14], which
+    The first line of a file is the magic line [windtrap-mutants-v15], which
     carries the version of the format. A file with another first line is
     refused, never converted, and nothing is promised from one version to the
     next. *)
@@ -237,6 +280,11 @@ type file = {
       (** [Some reason] when the writer could not mutation-test its suite, and
           [reason] says why. Its records then hold what it could not judge as
           {!Unknown}. *)
+  test_digests : (reaching_test * string) list;
+      (** The lowercase hexadecimal MD5 of what the writer knew of each test of
+          the suite whose source file it could read, sorted by test with
+          [List.compare String.compare], one entry for each test. A test with no
+          entry has no known digest. *)
 }
 (** The type for what a verdict file holds. *)
 
@@ -246,6 +294,14 @@ val load : string -> (file, error) result
     is the error of the read, [Error (Unknown_format _)] for another first line,
     or [Error (Corrupt _)] for data that is truncated or invalid:
     - a negative count, or a count larger than the input,
+    - a test digest that is not 32 lowercase hexadecimal digits, or test digests
+      that are not sorted or that name one test two times,
+    - a missing or negative retries count, a pass below [1] or above the retries
+      count plus [1], a settings word or a prefix that is not 32 lowercase
+      hexadecimal digits, a prefix on a verdict that is not a {!Killed} that
+      names a test, or a mark that is not [fresh] or [reused],
+    - a [reused] mark on a verdict that is not a {!Survived} or a {!Killed} that
+      names a test,
     - an empty file name, a line below [1] or a negative column,
     - a rewrite outside {!Mutate.rewrites}, an unknown verdict, an unknown or
       invalid reason, or a missing or unknown previous outcome,
@@ -260,21 +316,30 @@ val load : string -> (file, error) result
     all. *)
 
 val save :
-  ?identity:identity -> ?suite:string -> ?refused:string -> string -> t -> unit
-(** [save ?identity ?suite ?refused path t] writes [t] to [path] in the format
-    of a verdict file, with {!Instr.write_file}. Records are ordered by
-    {!Mutate.compare_id} and reaching tests are sorted, so equal collections
-    give equal files. [identity] is recorded after the magic line when it is
-    given, and then [suite] when it is given. A merged collection has no single
-    writer and is written without the two. The status line follows: [tested], or
-    [refused] and [refused]'s reason.
+  ?identity:identity ->
+  ?suite:string ->
+  ?refused:string ->
+  ?test_digests:(reaching_test * string) list ->
+  string ->
+  t ->
+  unit
+(** [save ?identity ?suite ?refused ?test_digests path t] writes [t] to [path]
+    in the format of a verdict file, with {!Instr.write_file}. Records are
+    ordered by {!Mutate.compare_id} and reaching tests are sorted, so equal
+    collections give equal files. [identity] is recorded after the magic line
+    when it is given, and then [suite] when it is given. A merged collection has
+    no single writer and is written without the two. The status line follows:
+    [tested], or [refused] and [refused]'s reason. The test digests (default
+    none) follow, sorted by test.
 
-    [load path] is then [Ok { verdicts = t; identity; suite; refused }] for
-    every [t] whose identifiers {!load} accepts, and [Error (Corrupt _)] for any
-    other (see {!add}). A collection built from the mutants of
-    {!Mutate.val-catalogue} round-trips, unless a source file was registered
-    under the name [""].
+    [load path] is then
+    [Ok { verdicts = t; identity; suite; refused; test_digests }], with
+    [test_digests] sorted, for every [t] whose identifiers and records {!load}
+    accepts, and [Error (Corrupt _)] for any other (see {!add}). A collection
+    built from the mutants of {!Mutate.val-catalogue} round-trips, unless a
+    source file was registered under the name [""].
 
     Raises [Invalid_argument] before anything is written if [identity.exe] is
-    empty or if [identity.digest] is not 32 lowercase hexadecimal digits, and
-    [Sys_error] if the file cannot be written. *)
+    empty, if [identity.digest] or a digest of [test_digests] is not 32
+    lowercase hexadecimal digits, or if two entries of [test_digests] name one
+    test, and [Sys_error] if the file cannot be written. *)

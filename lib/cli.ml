@@ -3,6 +3,13 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
+(* [dune subst], which [dune-release distrib] runs in the clone it archives,
+   replaces the watermark with the tag's version. A tree built unsubstituted,
+   such as a checkout, still holds it and has no release. *)
+let release =
+  let watermark = "%%VERSION%%" in
+  if String.starts_with ~prefix:"%" watermark then None else Some watermark
+
 (* Parsed flags *)
 
 (* Each flag sets the configuration's field directly, over the defaults, and
