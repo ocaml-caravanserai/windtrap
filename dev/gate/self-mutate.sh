@@ -78,7 +78,14 @@ echo "gate: $took min, $used_mb MB more memory, exit $code"
 echo "gate: ${line:-no merge line}"
 
 fail=0
-if [ $(( end - start )) -ge $(( minutes * 60 )) ]; then
+# timeout gives 124 when TERM stops the build, and 137 when it must kill
+# the build. A crash of the build can also give 137.
+over=0
+case $code in
+  124) over=1 ;;
+  137) [ $(( end - start )) -ge $(( minutes * 60 )) ] && over=1 ;;
+esac
+if [ "$over" -eq 1 ]; then
   echo "gate: the run took more than its bound of $minutes min" >&2
   fail=1
 fi

@@ -507,7 +507,8 @@ hand, and a pull request that changes the gate runs it. The script
 merge. It gives a failure in these conditions:
 
 - The run takes more than its bound of minutes. At the bound, the script
-  stops the build, and it kills the build 5 min later.
+  stops the build. If the build does not stop in 5 min, the script kills
+  it.
 - The used memory of the machine grows more than its bound of MB. The
   script reads the memory each 5 s, thus it can miss a short peak.
 - The merge gives no line, or a line with no count of mutants, for
