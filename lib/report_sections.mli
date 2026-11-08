@@ -467,6 +467,9 @@ type survivor = {
       (** The reaching tests of [mutant]. The list must not be empty, because a
           mutant that no test evaluated is never reached and is no survivor. It
           is never truncated. *)
+  reused : bool;
+      (** [true] when the verdict came from the verdict file of an earlier run
+          ([--incremental]). *)
 }
 (** The type for a survived mutant. *)
 
@@ -660,7 +663,8 @@ val survivor_block :
 (** [survivor_block ?runs ?early ~exe_width s] is the block of [s]. It holds, in
     this order:
     - the {!diagnostic} of the mutant, at the start of its line.
-    - the title. When [runs] (default [1]) is above [1], the title ends with the
+    - the title. When [s.reused] is [true], the title ends with [(reused)].
+      Else, when [runs] (default [1]) is above [1], the title ends with the
       number of runs in which the mutant survived, as in [(3 runs)].
     - the mutated source line, as an {!type-entry} holds a source line, when
       [source] is known and holds the line.
@@ -711,16 +715,23 @@ val mutation_closing : config:Run.config -> mutation -> section list
     - the outcome line, {!mutation_line} with no gate, always last. *)
 
 val mutation_report :
-  invocation:Run.invocation -> gates:gates -> mutation -> section list
-(** [mutation_report ~invocation ~gates m] is [m] as a report at rest. It holds
-    one {!survivor_block} per survivor, between an opening rule that carries
-    their number and a closing rule. The executables of all blocks form one
-    column, which is absent when no reaching test names an executable. The
+  ?lines:string list ->
+  invocation:Run.invocation ->
+  gates:gates ->
+  mutation ->
+  section list
+(** [mutation_report ?lines ~invocation ~gates m] is [m] as a report at rest. It
+    holds one {!survivor_block} per survivor, between an opening rule that
+    carries their number and a closing rule. The executables of all blocks form
+    one column, which is absent when no reaching test names an executable. The
     not-evaluated section, the unknown section, the not-mutation-tested section,
     which names each of [m.refused] with its count and reason, the unstable
     section, the never-reached section, the section of the mutants evaluated
     outside tests, the [reproduce:] command and the outcome line follow, as
     {!mutation_closing} builds them for a run that selects every test. The
     outcome line counts the suites of [m.refused] after the executables, and it
-    is {!mutation_line} under [gates]. A verdict file does not record
+    is {!mutation_line} under [gates]. [lines] (default none) tell how the
+    verdicts came, as the number of reused verdicts. They print in order,
+    directly above the [reproduce:] command, or above the outcome line when
+    there is no [reproduce:] command. A verdict file does not record
     [--mutate-workers], so no command here has it. *)

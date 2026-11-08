@@ -1991,6 +1991,7 @@ let survivor id line before after witnesses =
             exe = None;
           })
         witnesses;
+    reused = false;
   }
 
 let add_survivor =

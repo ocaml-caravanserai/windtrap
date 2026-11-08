@@ -547,6 +547,7 @@ let found_verdict renderer (config : Run.config) ~effort ?prefix ~locations
         {
           mutant = shown mutant;
           witnesses = List.map witness (first :: others);
+          reused = false;
         }
       in
       Report.mutation_survivor ~runs ~early renderer survivor;

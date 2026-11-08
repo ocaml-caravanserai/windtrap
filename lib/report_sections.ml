@@ -1552,7 +1552,7 @@ type mutant = {
   source : string option;
 }
 
-type survivor = { mutant : mutant; witnesses : witness list }
+type survivor = { mutant : mutant; witnesses : witness list; reused : bool }
 
 (* The compiler's spelling of a location, which editors and dune parse. *)
 let diagnostic (m : mutant) =
@@ -1645,7 +1645,10 @@ let survivor_block ?(runs = 1) ?(early = []) ~exe_width (s : survivor) =
          styled `Bold m.id;
          plain (strf "  %s \u{2192} %s" m.before m.after);
        ]
-      @ if runs > 1 then [ plain (strf "  (%d runs)" runs) ] else [])
+      @
+      if s.reused then [ plain "  (reused)" ]
+      else if runs > 1 then [ plain (strf "  (%d runs)" runs) ]
+      else [])
   in
   let source =
     match Option.map (fun s -> Array.of_list (Text.split_lines s)) m.source with
@@ -2071,7 +2074,7 @@ let mutation_closing ~(config : Run.config) (m : mutation) =
   | [] -> Line [] :: rest
   | _ :: _ -> Rule None :: Line [] :: rest
 
-let mutation_report ~invocation ~gates (m : mutation) =
+let mutation_report ?(lines = []) ~invocation ~gates (m : mutation) =
   let exes =
     List.concat_map
       (fun (s : survivor) ->
@@ -2100,5 +2103,6 @@ let mutation_report ~invocation ~gates (m : mutation) =
       unstable_section m.unstable;
       unreached_section m.unreached;
       outside_tests_section m.outside_tests;
-      outcome ~invocation ~tests:(`Filter None) ~gates m;
+      List.map (fun line -> Line [ plain line ]) lines
+      @ outcome ~invocation ~tests:(`Filter None) ~gates m;
     ]

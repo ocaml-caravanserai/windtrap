@@ -298,7 +298,11 @@ let merge ~crash_kills ~source files merged =
       in
       { Sections.test; loc = None; exe = Some exe }
     in
-    { mutant = mutant r; witnesses = List.map witness witnesses }
+    {
+      mutant = mutant r;
+      witnesses = List.map witness witnesses;
+      reused = r.reused;
+    }
   in
   (* The first executable, in the order of [files], that did not evaluate
      the mutant is the one its command runs. A merge is [Not_evaluated] only
