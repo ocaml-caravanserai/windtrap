@@ -8,3 +8,14 @@
  (name runaway_main)
  (modules runaway_main)
  (libraries windtrap mutate_loop_spinner))
+
+(library
+ (name mutate_loop_looper)
+ (modules looper)
+ (preprocess
+  (pps ppx_windtrap.mutate)))
+
+(executable
+ (name looper_main)
+ (modules looper_main)
+ (libraries windtrap mutate_loop_looper))

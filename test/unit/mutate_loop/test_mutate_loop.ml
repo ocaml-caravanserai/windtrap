@@ -23,12 +23,13 @@ let exe_dir = Filename.dirname Windtrap_runtime.Instr.executable
 let suite_exe = Filename.concat exe_dir "suite_main.exe"
 let plain_exe = Filename.concat exe_dir "plain_main.exe"
 let runaway_exe = Filename.concat exe_dir "runaway/runaway_main.exe"
+let looper_exe = Filename.concat exe_dir "runaway/looper_main.exe"
 let inline_exe = Filename.concat exe_dir "inline/runner_main.exe"
 let windtrap_exe = Filename.concat exe_dir "../../../bin/main.exe"
 
 (* Under --instrument-with the fixtures link an instrumented core, so every
    loop scenario passes this directory as its scope: the counts below are
-   those of subject.ml, spinner.ml and inline_armed.ml alone. *)
+   those of subject.ml, spinner.ml, looper.ml and inline_armed.ml alone. *)
 let scope = "test/unit/mutate_loop/"
 let mutate = "--mutate=" ^ scope
 let mutate_mirror = ("WINDTRAP_MUTATE", scope)
@@ -125,6 +126,7 @@ let verdicts_path ?(exe = suite_exe) () =
   let suite =
     if exe = plain_exe then "plain"
     else if exe = runaway_exe then "spin"
+    else if exe = looper_exe then "loop"
     else if exe = inline_exe then "inline_armed"
     else "calc"
   in
@@ -1215,6 +1217,18 @@ let runaway () =
     (Some [ "runaway/spinner.ml:15 killed" ]) (rows r);
   less float_exact ~than:1.0 elapsed
 
+(* A loop whose body [del] empties no longer ends, and the hit budget stops
+   it as it stops the spin of the recursion above. *)
+let runaway_loop () =
+  ignore (spawn ~exe:looper_exe []);
+  let began = Unix.gettimeofday () in
+  let r = spawn ~exe:looper_exe [ mutate ] in
+  let elapsed = Unix.gettimeofday () -. began in
+  equal string "exited 0" r.status;
+  equal text "" r.err;
+  equal (option (list string)) (Some [ "runaway/looper.ml:12 killed" ]) (rows r);
+  less float_exact ~than:1.0 elapsed
+
 (* [block]'s child blocks on a pipe read until its deadline, after starting
    a grandchild that ignores SIGTERM. *)
 type blocked = { run : ran; grandchildren : int list; elapsed : float }
@@ -1424,6 +1438,8 @@ let limits =
         [ (5, 0); (5, 1); (50, 0); (50, 1) ]
         budget;
       test "a mutant that never terminates is killed by its hit budget" runaway;
+      test "a loop body that del empties is killed by its hit budget"
+        runaway_loop;
       test "a mutant whose run hangs is unknown at its job's deadline"
         deadline_kill;
       test
@@ -4822,7 +4838,7 @@ let () =
   at_exit (fun () ->
       List.iter
         (fun exe -> remove (verdicts_path ~exe ()))
-        [ suite_exe; inline_exe; runaway_exe; plain_exe ])
+        [ suite_exe; inline_exe; runaway_exe; looper_exe; plain_exe ])
 
 let () =
   exit
