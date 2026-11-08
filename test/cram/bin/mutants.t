@@ -889,8 +889,9 @@ A repeated --crash-kills is the same as one:
   [1]
   $ diff once twice
 
-Under the option, no mutant of a refused suite counts as killed, and each
-gate fails. Its mutants stay unknown, whatever their reason:
+Under the option, the verdict of a refused suite never counts a mutant as
+killed, and each gate fails. A mutant that only it holds stays unknown,
+whatever its reason:
 
   $ plant "$scratch/crash-refused" && cd "$scratch/crash-refused"
   $ mkdata mutants _build/_mutants/a.mutants "$add=killed"

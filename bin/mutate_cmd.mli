@@ -68,13 +68,14 @@
     [Windtrap_runtime.Verdicts.Unknown] is unknown. The first file kept, in path
     order, whose writer tested its suite and holds it so names it, with the
     reason it records after its label and suite, and its launcher is that
-    file's. A mutant that only refused files hold as unknown is counted under
-    the first of them instead. Every refused file is named, in path order, by
-    its label and the suite that it records, with its reason and that count.
-    When the count is 0 and an earlier refused file counts a mutant that the
-    file holds as unknown, the row says [no other mutant unknown]. Any other
-    count of 0 says [0 mutants unknown]. The outcome line counts the refused
-    files as suites.
+    file's. Under [--crash-kills], a tested file whose reason counts as killed
+    comes before the other tested files. A mutant that only refused files hold
+    as unknown is counted under the first of them instead. Every refused file is
+    named, in path order, by its label and the suite that it records, with its
+    reason and that count. When the count is 0 and an earlier refused file
+    counts a mutant that the file holds as unknown, the row says
+    [no other mutant unknown]. Any other count of 0 says [0 mutants unknown].
+    The outcome line counts the refused files as suites.
 
     {b Killed elsewhere.} Before the merge, the command judges each
     [Windtrap_runtime.Verdicts.Killed_elsewhere] record of the executable [exe].
@@ -172,12 +173,12 @@
 
     [--crash-kills] counts an unknown mutant as killed when a file that tested
     its suite holds it with a deadline, a crash or a memory limit
-    ({!Windtrap.Private.Report_sections.val-counted_as_killed}). That file then
-    names it ({{!section-merge}the merge}), whatever the order of the files. The
-    score, the total, each gate and the outcome line then count it with the
-    killed mutants, and the unknown section marks it [(counted as killed)]. The
-    reach does not change. A flaky kill and each other reason stay unknown. A
-    repeated [--crash-kills] is the same as one.
+    ({!Windtrap.Private.Report_sections.val-counted_as_killed}). The first such
+    file names it ({{!section-merge}the merge}). The order of the files does not
+    change the count. The score, the total, each gate and the outcome line then
+    count it with the killed mutants, and the unknown section marks it
+    [(counted as killed)]. The reach does not change. A flaky kill and each
+    other reason stay unknown. A repeated [--crash-kills] is the same as one.
 
     [--min PCT], [--min-reach PCT], [--min-total PCT] and [--max-survivors N]
     are the gates. With a gate, the merge passes when

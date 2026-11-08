@@ -492,7 +492,7 @@ and the mutant is unknown. Raise the limit if the probe passes it.
 
 `--crash-kills` (`WINDTRAP_CRASH_KILLS=1`) counts an unknown mutant as
 killed when its run passed its deadline, crashed or passed its memory
-limit. It needs `--mutate`.
+limit. Give it with `--mutate`.
 
 A run and `windtrap mutants` list under `unstable` each mutant whose
 verdict changed since the last run of its suite, on the same source. A

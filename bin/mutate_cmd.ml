@@ -200,7 +200,7 @@ let verdict_in files =
   let by_id = List.map (fun f -> (f, verdicts_by_id f)) files in
   fun f id -> Ids.find_opt id (List.assq f by_id)
 
-(* No mutant of a refused suite counts as killed. *)
+(* The verdict of a refused suite never counts a mutant as killed. *)
 let counted_as_killed ~crash_kills f reason =
   Option.is_none f.refused && Sections.counted_as_killed ~crash_kills reason
 
