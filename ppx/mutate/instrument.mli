@@ -344,6 +344,11 @@
       thus fails to compile against the generated code.
     - [type 'a operands = 'a * 'a], only in a file that holds the guard of an
       ordering rewrite, which annotates its pair of operands with it.
+    - [type ints = int * int] and [type floats = float * float], each only in a
+      file that holds a guard that annotates its pair of operands with it. The
+      guard of [ari] does so where no [open], [let open], [M.( e )] or [include]
+      of another module is in scope. Thus a GADT [match] in an operand gets the
+      expected type that the application gives it.
     - [___windtrap_armed___], bound to
       [Windtrap_runtime.Mutate.register ~file ~sites]. The call is made once,
       when the module is initialized, within the preconditions of [register].

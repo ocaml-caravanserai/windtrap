@@ -79,7 +79,8 @@ let site = function
       | _ -> None)
   | _ -> None
 
-(* [helper] names the item a module carries only when the expansion uses it. *)
+(* [helper] names the items a module carries only when the expansion uses
+   them. *)
 let table ~title ~name ~file ~helper rows =
   let row i r = strf "  %d: %s" i r in
   let helper = match helper with None -> "" | Some h -> ", with " ^ h in
@@ -131,11 +132,19 @@ let mutation ~name = function
         dismissed : string option;
       }]
     :: rest -> (
-      let helper, rest =
-        match rest with
+      let rec helpers acc = function
         | [%stri type 'a operands = 'a * 'a] :: rest ->
-            (Some "type 'a operands", rest)
-        | rest -> (None, rest)
+            helpers ("type 'a operands" :: acc) rest
+        | [%stri type ints = int * int] :: rest ->
+            helpers ("type ints" :: acc) rest
+        | [%stri type floats = float * float] :: rest ->
+            helpers ("type floats" :: acc) rest
+        | rest -> (List.rev acc, rest)
+      in
+      let helper, rest =
+        match helpers [] rest with
+        | [], rest -> (None, rest)
+        | names, rest -> (Some (String.concat ", " names), rest)
       in
       match rest with
       | [

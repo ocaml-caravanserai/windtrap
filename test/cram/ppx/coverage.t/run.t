@@ -894,7 +894,7 @@ dune builds for a stanza naming both backends:
     33: 2424-2430
     34: 2418-2443
     35: 2408-2443
-  mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands:
+  mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands, type ints:
     0: 14:34-14:35 "int" "0" -> "1"
     1: 14:27-14:28 "int" "1" -> "0"
     2: 14:16-14:21 "le" "a < b" -> "a <= b"
@@ -935,7 +935,8 @@ dune builds for a stanza naming both backends:
       then 1
       else (___windtrap_visit___ 2; 0)
   let add a b =
-    let (__windtrap_mut_3_l, __windtrap_mut_3_r) = (a, b) in
+    let (__windtrap_mut_3_l, __windtrap_mut_3_r) =
+      ((a, b) : Windtrap_mut_________fixture_guards___ml.ints) in
     if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 3
     then __windtrap_mut_3_l - __windtrap_mut_3_r
     else (___windtrap_visit___ 4; __windtrap_mut_3_l + __windtrap_mut_3_r)

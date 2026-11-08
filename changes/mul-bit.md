@@ -11,3 +11,7 @@
   take the warning and alert attributes of their site. Before, a site
   such as `((match x with Some y -> y) + 1) [@ocaml.warning "-8"]`
   could fail to compile under fatal warnings.
+- The guards of `add`, `sub`, `fadd` and `fsub` give their operands the
+  type `int` or `float`, where no `open` or `include` of another module
+  is in scope. Before, a GADT `match` in an operand could fail to
+  compile under instrumentation.

@@ -594,9 +594,14 @@ let negation ~loc ~module_name ~index value =
    already needs one type for both operands, so the pin rejects nothing. A
    variable [: 'a] cannot say it: it is scoped to the whole toplevel phrase,
    so it would tie the phrase's sites together and keep a local
-   [let lt x y = x < y] from generalizing. [ari] does not pin, since an
-   [open]-provided [+] may take two types, and number types disambiguate
-   nothing.
+   [let lt x y = x < y] from generalizing.
+
+   An application of a Stdlib operator of [ari] also gives its operands their
+   expected type, which a GADT [match] or an existential in an operand needs.
+   [~pin] restores that by the annotation [ints] or [floats], with
+   [type ints = int * int] and [type floats = float * float]. Outside Stdlib
+   scope [ari] does not pin, since an [open]-provided [+] may take two
+   types.
 
    The operands move out of [e], so the [let] takes the warning and alert
    attributes of [e], which also cover the operands.
@@ -607,16 +612,27 @@ let negation ~loc ~module_name ~index value =
    polymorphic comparison even when nothing is armed. *)
 let scoping = [ "ocaml.warning"; "warning"; "ocaml.alert"; "alert" ]
 
+type pin = Operands | Ints | Floats
+
+(* The pin of a Stdlib operator of [ari], from the type of its operands. *)
+let numbers name = match name with "+." | "-." -> Floats | _ -> Ints
+
+let pin_type ~loc ~module_name pin =
+  let name, args =
+    match pin with
+    | Operands -> ("operands", [ ptyp_any ~loc ])
+    | Ints -> ("ints", [])
+    | Floats -> ("floats", [])
+  in
+  ptyp_constr ~loc { txt = Ldot (Lident module_name, name); loc } args
+
 let binary ~loc ~module_name ~index ~pin e app ~armed_arm left right =
   let l = binder index "l" and r = binder index "r" in
   let operands =
     let tuple = pexp_tuple ~loc [ left; right ] in
-    if not pin then tuple
-    else
-      pexp_constraint ~loc tuple
-        (ptyp_constr ~loc
-           { txt = Ldot (Lident module_name, "operands"); loc }
-           [ ptyp_any ~loc ])
+    match pin with
+    | None -> tuple
+    | Some pin -> pexp_constraint ~loc tuple (pin_type ~loc ~module_name pin)
   in
   let disarmed =
     {
@@ -763,7 +779,7 @@ class instrumenter ~keeps ~module_name =
        index. *)
     val seen = Hashtbl.create 64
     val mutable sites = [] (* newest first *)
-    val mutable pins = false (* a guard names [operands] *)
+    val mutable pins = [] (* the types that a guard names *)
     val mutable suppressed = false (* inside a [[@@@mutate off]] region *)
 
     (* The expression whose children are being rewritten, with its context,
@@ -790,6 +806,10 @@ class instrumenter ~keeps ~module_name =
     val mutable opens : opening list = []
     method sites = List.rev sites
     method pins = pins
+
+    method private pin p =
+      if not (List.mem p pins) then pins <- p :: pins;
+      Some p
 
     (* [within ~logging ~message f] is [f ()] with these two flags. *)
     method private within :
@@ -1031,6 +1051,7 @@ class instrumenter ~keeps ~module_name =
           | None -> value
           | Some index -> negation ~loc ~module_name ~index value)
       | Operator (app, guard) -> (
+          let stdlib = opens = [] in
           let context =
             match guard with
             | Branch -> Boolean
@@ -1052,9 +1073,8 @@ class instrumenter ~keeps ~module_name =
               match guard with
               | Negate -> negation ~loc ~module_name ~index rebuilt
               | Swap ->
-                  pins <- true;
-                  binary ~loc ~module_name ~index ~pin:true e app left right
-                    ~armed_arm:(fun l r ->
+                  binary ~loc ~module_name ~index ~pin:(self#pin Operands) e app
+                    left right ~armed_arm:(fun l r ->
                       let swapped =
                         pexp_apply ~loc app.operator
                           [ (Nolabel, r); (Nolabel, l) ]
@@ -1062,7 +1082,10 @@ class instrumenter ~keeps ~module_name =
                       [%expr Stdlib.not [%e swapped]])
               | Branch -> branch ~loc ~module_name ~index e app left right
               | Replace replacement ->
-                  binary ~loc ~module_name ~index ~pin:false e app left right
+                  let pin =
+                    if stdlib then self#pin (numbers app.name) else None
+                  in
+                  binary ~loc ~module_name ~index ~pin e app left right
                     ~armed_arm:(fun l r -> apply ~loc replacement [ l; r ])))
 
     (* [chain e] rewrites the head and the tail of [h :: t]. A tail that is
@@ -1351,8 +1374,8 @@ class instrumenter ~keeps ~module_name =
 
    [register] allocates the arrays of the file, so indices are file-local, and
    the stop comments hide the module from odoc. The module stands above the
-   user's code, so it names [int], [option] and [Some] unqualified, which a
-   guard cannot. *)
+   user's code, so it names [int], [float], [option] and [Some] unqualified,
+   which a guard cannot. *)
 let runtime_initialization ~file ~module_name ~sites ~pins =
   let loc = { (Location.in_file file) with loc_ghost = true } in
   (* The digest of the source file as the rewriter reads it, so that a
@@ -1394,7 +1417,15 @@ let runtime_initialization ~file ~module_name ~sites ~pins =
         dismissed : string option;
       }]
   in
-  let operands = [%stri type 'a operands = 'a * 'a] in
+  let pins =
+    List.filter_map
+      (fun (pin, item) -> if List.mem pin pins then Some item else None)
+      [
+        (Operands, [%stri type 'a operands = 'a * 'a]);
+        (Ints, [%stri type ints = int * int]);
+        (Floats, [%stri type floats = float * float]);
+      ]
+  in
   let armed =
     [%stri
       let ___windtrap_armed___ =
@@ -1402,9 +1433,7 @@ let runtime_initialization ~file ~module_name ~sites ~pins =
           ~digest:[%e digest]
           ~sites:[%e pexp_array ~loc (List.map site sites)]]
   in
-  let items =
-    if pins then [ site_type; operands; armed ] else [ site_type; armed ]
-  in
+  let items = (site_type :: pins) @ [ armed ] in
   let generated =
     pstr_module ~loc
       (module_binding ~loc
