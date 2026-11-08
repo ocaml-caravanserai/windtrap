@@ -293,10 +293,10 @@
 
 (** {1:sarif SARIF document}
 
-    [--sarif] makes standard output one SARIF 2.1.0 document, so the report is
-    not printed. It acts as [--json] does for the outcome line, the gates,
-    [--lines], [--diff] and the write. Each mutant that follows gives one
-    result, in the order of [Windtrap_runtime.Mutate.compare_id]:
+    [--sarif] makes standard output one SARIF 2.1.0 document, so the command
+    does not print the report. It acts as [--json] does for the outcome line,
+    the gates, [--lines], [--diff] and the write. Each mutant that follows gives
+    one result, in the order of [Windtrap_runtime.Mutate.compare_id]:
     - A survivor, at the level [warning], with the sentence of its reaching
       tests.
     - An unknown mutant, at the level [note], with the reason of the report. A
@@ -306,8 +306,8 @@
     A killed mutant, a mutant killed elsewhere, a mutant that no test reached
     and a mutant evaluated outside tests give no result. The mutants that only
     refused files hold give no result either. The driver gives
-    {!Windtrap.Private.version} when it is known. [bin/mutants_sarif.mli] gives
-    the fields of the document. *)
+    {!Windtrap.Private.version} when it is known.
+    {!Windtrap.Private.Report_sarif} gives the fields of the document. *)
 
 (** {1:running Running} *)
 

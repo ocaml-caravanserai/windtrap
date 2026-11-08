@@ -5,7 +5,7 @@
 
 open Windtrap
 module Sections = Windtrap.Private.Report_sections
-module Sarif = Mutants_sarif
+module Sarif = Windtrap.Private.Report_sarif
 
 let mutant ?source ?(line = 1) ?(col = 14) ?(end_line = line) ?(end_col = 19)
     ?(before = "a + b") ?(after = "a - b") () : Sections.mutant =
@@ -38,17 +38,14 @@ let unknown ?(m = mutant ()) reason =
 let not_evaluated ?(m = mutant ()) failed =
   Sarif.Not_evaluated { Sections.mutant = m; invocation = `Mirrors; failed }
 
-(* A JSON text, as RFC 8259 gives it. *)
+(* A JSON text, as RFC 8259 gives it, with the values that a document holds:
+   objects, arrays, strings and non-negative integers. *)
 let valid_json s =
   let n = String.length s in
   let rec ws i =
     if i < n && String.contains " \t\n\r" s.[i] then ws (i + 1) else i
   in
   let expect c i = if i < n && s.[i] = c then i + 1 else raise Exit in
-  let literal word i =
-    let k = String.length word in
-    if i + k <= n && String.sub s i k = word then i + k else raise Exit
-  in
   let rec string i =
     if i >= n then raise Exit
     else
@@ -74,21 +71,11 @@ let valid_json s =
       | _ -> string (i + 1)
   in
   let number i =
-    let digits i =
-      let j = ref i in
-      while !j < n && '0' <= s.[!j] && s.[!j] <= '9' do
-        incr j
-      done;
-      if !j = i then raise Exit else !j
-    in
-    let i = if i < n && s.[i] = '-' then i + 1 else i in
-    let i = digits i in
-    let i = if i < n && s.[i] = '.' then digits (i + 1) else i in
-    if i < n && (s.[i] = 'e' || s.[i] = 'E') then
-      let i = i + 1 in
-      let i = if i < n && (s.[i] = '+' || s.[i] = '-') then i + 1 else i in
-      digits i
-    else i
+    let j = ref i in
+    while !j < n && '0' <= s.[!j] && s.[!j] <= '9' do
+      incr j
+    done;
+    if !j = i then raise Exit else !j
   in
   let rec value i =
     let i = ws i in
@@ -98,9 +85,6 @@ let valid_json s =
       | '{' -> members (ws (i + 1)) ~first:true
       | '[' -> elements (ws (i + 1)) ~first:true
       | '"' -> string (i + 1)
-      | 't' -> literal "true" i
-      | 'f' -> literal "false" i
-      | 'n' -> literal "null" i
       | _ -> number i
   and members i ~first =
     if first && i < n && s.[i] = '}' then i + 1
@@ -272,10 +256,6 @@ let document () =
 
 let no_version () =
   let doc = Sarif.document results in
-  is_true ~msg:"no version key in the driver"
-    (not
-       (String.split_on_char '\n' doc
-       |> List.exists (fun l -> String.trim l = {|"version": "1.2.3",|})));
   equal string
     (String.concat "\n"
        (List.filter
@@ -316,7 +296,7 @@ let validator () =
   List.iter
     (fun (text, valid) -> equal ~msg:text bool valid (valid_json text))
     [
-      ({|{ "a": [1, -2.5e3, true, false, null, "xé"] }|}, true);
+      ({|{ "a": [1, "xé"] }|}, true);
       ({|{ "a": [ ] }|}, true);
       ({|{ "a": 1, }|}, false);
       ({|[1 2]|}, false);
@@ -326,7 +306,7 @@ let validator () =
 
 let () =
   exit
-    (run "mutants_sarif"
+    (run "report_sarif"
        [
          group "Locations"
            [

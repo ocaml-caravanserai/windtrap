@@ -7,6 +7,7 @@ module Instr = Windtrap_runtime.Instr
 module Mutate = Windtrap_runtime.Mutate
 module Verdicts = Windtrap_runtime.Verdicts
 module Sections = Windtrap.Private.Report_sections
+module Sarif = Windtrap.Private.Report_sarif
 module Os = Windtrap.Private.Os
 module Cli = Windtrap.Private.Cli
 module Pp = Windtrap.Private.Pp
@@ -794,34 +795,29 @@ let json ~crash_kills files merged (m : Sections.mutation) =
    mutant that a child did not evaluate give a result, in the order of
    [merged]. The mutants of a refused suite are not in [m]. *)
 let sarif merged (m : Sections.mutation) =
-  let add (mutant : Sections.mutant) verdict acc =
-    Ids.add mutant.id verdict acc
-  in
   let verdicts =
     List.fold_left
-      (fun acc (s : Sections.survivor) ->
-        add s.mutant (Mutants_sarif.Survived s) acc)
-      Ids.empty m.survivors
-  in
-  let verdicts =
-    List.fold_left
-      (fun acc (u : Sections.unknown) ->
-        if u.counted_as_killed then acc
-        else add u.mutant (Mutants_sarif.Unknown u) acc)
-      verdicts m.unknown
-  in
-  let verdicts =
-    List.fold_left
-      (fun acc (n : Sections.not_evaluated) ->
-        add n.mutant (Mutants_sarif.Not_evaluated n) acc)
-      verdicts m.not_evaluated
+      (fun acc (id, verdict) -> Ids.add id verdict acc)
+      Ids.empty
+      (List.map
+         (fun (s : Sections.survivor) -> (s.mutant.id, Sarif.Survived s))
+         m.survivors
+      @ List.filter_map
+          (fun (u : Sections.unknown) ->
+            if u.counted_as_killed then None
+            else Some (u.mutant.id, Sarif.Unknown u))
+          m.unknown
+      @ List.map
+          (fun (n : Sections.not_evaluated) ->
+            (n.mutant.id, Sarif.Not_evaluated n))
+          m.not_evaluated)
   in
   let result (r : Verdicts.record) =
     Option.map
-      (fun verdict -> { Mutants_sarif.rewrite = r.id.rewrite; verdict })
+      (fun verdict -> { Sarif.rewrite = r.id.rewrite; verdict })
       (Ids.find_opt (Mutate.id_to_string r.id) verdicts)
   in
-  Mutants_sarif.document ?version:Windtrap.Private.version
+  Sarif.document ?version:Windtrap.Private.version
     (List.filter_map result (Verdicts.records merged))
 
 (* Running *)

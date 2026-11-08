@@ -328,6 +328,7 @@ module Private = struct
   module Report = Report
   module Report_junit = Report_junit
   module Report_json = Report_json
+  module Report_sarif = Report_sarif
   module Report_sections = Report_sections
   module Run = Run
   module Seed = Seed

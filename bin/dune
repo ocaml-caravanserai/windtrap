@@ -1,17 +1,7 @@
-; The SARIF document is a library, so that the unit tests can link it.
-
-(library
- (name mutants_sarif)
- (modules mutants_sarif)
- (libraries windtrap)
- (instrumentation
-  (backend ppx_windtrap.coverage)))
-
 (executable
  (name main)
  (public_name windtrap)
  (package windtrap)
- (modules :standard \ mutants_sarif)
- (libraries windtrap windtrap_runtime mutants_sarif)
+ (libraries windtrap windtrap_runtime)
  (instrumentation
   (backend ppx_windtrap.coverage)))

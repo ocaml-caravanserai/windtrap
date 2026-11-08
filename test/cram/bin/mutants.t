@@ -1372,6 +1372,23 @@ Under a line scope, only the mutants on the lines give results:
           { "ruleId": "lt", "ruleIndex": 0, "level": "note",
             "message": { "text": "mutant unknown: x < y → x <= y; a.mutants: its run passed its deadline of 2.0s" },
 
+Under a diff, only the mutants on the changed lines give results:
+
+  $ printf -- '--- a/lib/calc.ml\n+++ b/lib/calc.ml\n@@ -2 +2 @@\n-let sub a b = b - a\n+let sub a b = a - b\n' > change.diff
+  $ sarif --diff change.diff | grep '"message"'
+            "message": { "text": "mutant survived: a - b → a + b; 2 tests ran this line and none failed" },
+
+A mutant killed elsewhere and a mutant evaluated outside tests give no
+result:
+
+  $ mkdir -p "$scratch/sarif-none/lib" && cd "$scratch/sarif-none"
+  $ cp "$scratch/sarif/lib/calc.ml" lib/
+  $ mkdata mutants _build/_mutants/a.mutants "$add=elsewhere:b" "$sub=outside_tests"
+  $ sarif | grep -c '"ruleId"'
+  0
+  [1]
+  $ cd "$scratch/sarif"
+
 --crash-kills counts the mutant past its deadline as killed, so it gives
 no result:
 

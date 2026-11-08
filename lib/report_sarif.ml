@@ -3,9 +3,7 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
-module Sections = Windtrap.Private.Report_sections
-module Json = Windtrap.Private.Json
-module Text = Windtrap.Private.Text
+module Sections = Report_sections
 
 let strf = Printf.sprintf
 
@@ -96,14 +94,7 @@ let document ?version results =
   let rules =
     List.sort_uniq String.compare (List.map (fun r -> r.rewrite) results)
   in
-  let index rewrite =
-    let rec find i = function
-      | r :: _ when r = rewrite -> i
-      | _ :: rest -> find (i + 1) rest
-      | [] -> assert false
-    in
-    find 0 rules
-  in
+  let index = List.mapi (fun i r -> (r, i)) rules in
   let rule id =
     strf
       "\n\
@@ -123,7 +114,9 @@ let document ?version results =
       \            { \"physicalLocation\": {\n\
       \                \"artifactLocation\": { \"uri\": %s },\n\
       \                \"region\": { %s } } } ] }"
-      (string r.rewrite) (index r.rewrite) (string level)
+      (string r.rewrite)
+      (List.assoc r.rewrite index)
+      (string level)
       (string (message r.verdict))
       (string (uri m.file))
       (String.concat ", "

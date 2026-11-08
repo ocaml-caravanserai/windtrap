@@ -295,6 +295,6 @@
  (libraries windtrap))
 
 (test
- (name test_mutants_sarif)
- (modules test_mutants_sarif)
- (libraries windtrap mutants_sarif))
+ (name test_report_sarif)
+ (modules test_report_sarif)
+ (libraries windtrap))

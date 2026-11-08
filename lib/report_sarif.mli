@@ -9,7 +9,7 @@
     give a result. The other functions are the parts of a result, for the tests.
 *)
 
-module Sections = Windtrap.Private.Report_sections
+module Sections = Report_sections
 
 (** {1:results Results} *)
 
