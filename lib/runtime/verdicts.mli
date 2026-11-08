@@ -22,21 +22,48 @@ type reaching_test = string list
     groups, the outermost first, and then its own, as [["arithmetic"; "adds"]].
 *)
 
+(** The type for the reasons of an {!Unknown} verdict. *)
+type unknown_reason =
+  | Deadline of { seconds : float }
+      (** The run passed its deadline of [seconds]. *)
+  | Crashed of { signal : int option; status : int option; how : string }
+      (** The worker of the run ended first: by a signal, with an exit status,
+          by an exit that code under test called, or before it served. [signal]
+          is the OCaml number of the signal that killed or stopped it, and
+          [status] is its exit status. The two are [None] when no status was
+          read. [how] is the phrase of the end, such as
+          ["was killed by SIGSEGV"]. *)
+  | Memory of { mb : int }  (** The run passed its memory limit of [mb] MB. *)
+  | Flaky_kill of { test : reaching_test; failure : string }
+      (** The check of a kill found that the killing test [test] also fails with
+          no mutant. [failure] is the phrase of the failure. *)
+  | Other of string
+      (** Each other reason, as the text says: a red dry run, a suite that is
+          not deterministic, a selection that narrows the suite, or a refused
+          suite. *)
+
+val reason_text : unknown_reason -> string
+(** [reason_text r] is the text of [r] that the reports print, such as
+    ["its run passed its deadline of 2.5s"]. *)
+
 (** The type for verdicts. A survivor always names a reaching test, because a
     mutant that no test reached is {!Outside_tests} or {!Unreached}. *)
 type verdict =
-  | Killed
+  | Killed of { by : reaching_test list }
       (** In the run that armed the mutant, a reaching test failed in or after
           the test that first evaluated the armed site. Or a fixture release
-          failed, and the run evaluated the site at any time. *)
+          failed, and the run evaluated the site at any time. [by] is the
+          killing tests, sorted and without duplicates: the first such failing
+          test of each run that killed the mutant. It is [[]] when a kill names
+          no test, as for a kill by a fixture release. *)
   | Killed_elsewhere of { exe : string }
       (** No run of this suite armed the mutant, because the verdict file of
           another suite gave it {!Killed}, with the source digest, the
           renderings and the extent of this run. [exe] is the identity on that
           file ({!Instr.type-identity}), and it is not [""]. Only a loop under
           [--skip-killed] gives it. *)
-  | Unknown of string
-      (** No verdict, and the string says why: the run that armed the mutant
+  | Unknown of unknown_reason
+      (** No verdict, and the reason tells why: the run that armed the mutant
           ended before its tests did, by a crash, an exit, its deadline or its
           memory limit, or the executable could not be mutation-tested, as when
           its dry run is red, its suite is not deterministic or its selection
@@ -65,6 +92,10 @@ val survived : reaching_test list -> verdict
 (** [survived ts] is the {!Survived} verdict whose reaching tests are [ts],
     sorted and without duplicates. Raises [Invalid_argument] if [ts] is empty.
 *)
+
+val killed : reaching_test list -> verdict
+(** [killed ts] is the {!Killed} verdict whose killing tests are [ts], sorted
+    and without duplicates. *)
 
 type outcome = [ `Killed | `Survived | `Not_evaluated ]
 (** The type for the outcomes: the verdicts that the tests of a suite give to a
@@ -116,18 +147,20 @@ val empty : t
 (** [empty] is the collection with no record. *)
 
 val add : t -> record -> t
-(** [add t r] is [t] with [r] recorded. A {!Survived} verdict is sorted on its
-    way in. When [t] already holds a record under [r.id], the smaller
-    [(before, after, end_line, end_col, source_digest)] in lexicographic order
-    is kept, and the two verdicts combine into the verdict of a mutant that one
-    executable saw one way and another the other way. It is {!Killed} if either
-    is. Otherwise it is {!Killed_elsewhere} if either is, with the smaller [exe]
-    in [String.compare] order when both are. Otherwise it is {!Unknown} if
-    either is, with the smaller reason in [String.compare] order when both are,
-    then {!Not_evaluated} if either is, then {!Survived} with the reaching tests
-    of both if either is, then {!Outside_tests} if either is, and {!Unreached}
-    if both are. The two previous outcomes combine in the same order, and a
-    missing one leaves the other unchanged.
+(** [add t r] is [t] with [r] recorded. A {!Survived} or {!Killed} verdict is
+    sorted on its way in. When [t] already holds a record under [r.id], the
+    smaller [(before, after, end_line, end_col, source_digest)] in lexicographic
+    order is kept, and the two verdicts combine into the verdict of a mutant
+    that one executable saw one way and another the other way. It is {!Killed}
+    if either is, with the killing tests of both. Otherwise it is
+    {!Killed_elsewhere} if either is, with the smaller [exe] in [String.compare]
+    order when both are. Otherwise it is {!Unknown} if either is, with the
+    reason whose {!reason_text} is smaller in [String.compare] order when both
+    are, and the smaller reason in [compare] order for two equal texts, then
+    {!Not_evaluated} if either is, then {!Survived} with the reaching tests of
+    both if either is, then {!Outside_tests} if either is, and {!Unreached} if
+    both are. The two previous outcomes combine in the same order, and a missing
+    one leaves the other unchanged.
 
     [add] checks nothing of [r.id], of the end, of [r.source_digest] or of the
     [exe] of a {!Killed_elsewhere}. It accepts an empty [file], a [line] below
@@ -160,7 +193,7 @@ val with_previous : prior:t -> t -> t
 
     Each suite of an executable has one verdict file, at {!output_file}.
 
-    The first line of a file is the magic line [windtrap-mutants-v13], which
+    The first line of a file is the magic line [windtrap-mutants-v14], which
     carries the version of the format. A file with another first line is
     refused, never converted, and nothing is promised from one version to the
     next. *)
@@ -214,8 +247,8 @@ val load : string -> (file, error) result
     or [Error (Corrupt _)] for data that is truncated or invalid:
     - a negative count, or a count larger than the input,
     - an empty file name, a line below [1] or a negative column,
-    - a rewrite outside {!Mutate.rewrites}, an unknown verdict, or a missing or
-      unknown previous outcome,
+    - a rewrite outside {!Mutate.rewrites}, an unknown verdict, an unknown or
+      invalid reason, or a missing or unknown previous outcome,
     - a source digest that is not empty and not 32 lowercase hexadecimal digits,
     - a survivor with no reaching test, an empty killing executable, or a second
       record for one identifier,

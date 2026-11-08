@@ -457,7 +457,11 @@ dune exec windtrap -- mutants
 
 `--min PCT` gates on the score instead, the percentage of killed
 mutants. Set PCT a little under the measured score, as for coverage
-`--min`. `--json` gives each verdict to other tools.
+`--min`. `--min-reach PCT` gates on the reach, the percentage of
+reached mutants. `--min-total PCT` gates on the total, the percentage
+of killed mutants among all mutants that count. `--max-survivors N`
+gates on the number of survivors. `--json` gives each verdict to other
+tools.
 
 `--skip-killed` (`WINDTRAP_SKIP_KILLED=1`) skips a mutant that another
 suite already killed. It reads only the verdict files on disk, so run

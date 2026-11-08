@@ -68,8 +68,8 @@
   Before, an `--arm` run in which only a forked process evaluated the
   site ended on `mutant not evaluated`. Under `-x`, an `--arm` run stops
   at the first failure that kills the mutant.
-- The outcome line of a mutation run and of `windtrap mutants` ends
-  with the mutation score, as `score 66.7% (6/9)`. The score is the
+- The outcome line of a mutation run and of `windtrap mutants` gives
+  the mutation score, as `score 66.7% (6/9)`. The score is the
   percentage of killed mutants among those killed, survived and not
   evaluated. An unknown mutant does not count
   (doc/manual/mutation.md#gating-on-the-score).
@@ -132,10 +132,11 @@
   the previous verdicts of these mutants go away. The next full run
   then lists no change of these mutants
   (doc/manual/mutation.md#unstable-verdicts).
-- (breaking) The verdict file format is `windtrap-mutants-v13`. Each
+- (breaking) The verdict file format is `windtrap-mutants-v14`. Each
   record keeps the digest of the source file of its mutant and the
   previous verdict of its mutant, and a skipped mutant is killed
-  elsewhere. A file of an earlier format is refused. Delete
+  elsewhere. A kill keeps its killing tests, and an unknown verdict
+  keeps the kind of its reason. A file of an earlier format is refused. Delete
   `_build/_mutants` and run the suites again.
 - `--mutate-workers` and its mirror `WINDTRAP_MUTATE_WORKERS` let a
   stateful test on several domains spawn its worker domains under

@@ -16,7 +16,7 @@
     holds. This interface states the {{!section-files}files} that are merged,
     what the {{!section-merge}merge} decides (the verdicts, the reaching tests,
     the order of the survivors and the launcher of the [reproduce:] command),
-    the {{!section-gate}gate}, and the {{!section-format}machine format}, whose
+    the {{!section-gate}gates}, and the {{!section-format}machine format}, whose
     keys and values are frozen. *)
 
 (** {1:files Files}
@@ -157,34 +157,43 @@
     - [`Exe] of the path of the executable, as one such word, when the identity
       is absolute. *)
 
-(** {1:gate The gate}
+(** {1:gate The gates}
 
     The score is {!Windtrap.Private.Report_sections.mutation_score} of the
     merge. It is the percentage of the killed mutants among those killed,
     survived and not evaluated, unrounded. An unknown mutant does not count. The
     score is [100.] when the merge has none of these mutants, and the outcome
-    line then says [no scored mutant]. [--min PCT] makes the merge pass when
-    {!Windtrap.Private.Report_sections.mutation_gate_met} is [true]: the score
-    is at least [PCT] and no file is refused. A survivor then does not fail the
-    merge. A refused file fails the merge with a gate or without one. The gate
-    runs after the report or the document is printed, and does not run when the
-    write fails. The outcome line of the report then gives the gate and its
-    result ({!Windtrap.Private.Report_sections.mutation_line}), and the score
-    with its two counts beside its rounding. *)
+    line then says [no scored mutant]. The reach
+    ({!Windtrap.Private.Report_sections.mutation_reach}) is the percentage of
+    the reached mutants among those reached, never reached and evaluated outside
+    tests. The total ({!Windtrap.Private.Report_sections.mutation_total}) is the
+    percentage of the killed mutants among those scored, never reached and
+    evaluated outside tests. Each is [100.] when its denominator is [0].
+
+    [--min PCT], [--min-reach PCT], [--min-total PCT] and [--max-survivors N]
+    are the gates. With a gate, the merge passes when
+    {!Windtrap.Private.Report_sections.mutation_gates_met} is [true]: each
+    measure is at least its minimum, at most [N] mutants survived, and no file
+    is refused. A survivor then does not fail the merge. A refused file fails
+    the merge with a gate or without one. The gates run after the report or the
+    document is printed, and do not run when the write fails. The outcome line
+    of the report then gives each gate and its result
+    ({!Windtrap.Private.Report_sections.mutation_line}), and each measure with
+    its two counts beside its rounding. *)
 
 (** {1:format Machine format}
 
     [--json] makes standard output the document, so the report is not printed.
-    The outcome line is not printed on standard output either. Under [--min],
+    The outcome line is not printed on standard output either. Under a gate,
     standard error gives its text behind [windtrap:], when the gate is met and
     when it is not. The keys and the values that follow are frozen. A later
     version can add a key, and that key does not change the meaning of the
     others. A change to the meaning of a key increments ["version"]. Under
     [--lines] or [--diff], the verdict counts, ["reached"], ["score"],
-    ["mutants"] and ["unstable"] hold only the mutants on the lines, as the
-    report does. But ["executables"] still lists every file that is kept, and
-    ["refused"] still counts every refused file, because each file stays in the
-    merge.
+    ["reach_percent"], ["total_percent"], ["mutants"] and ["unstable"] hold only
+    the mutants on the lines, as the report does. But ["executables"] still
+    lists every file that is kept, and ["refused"] still counts every refused
+    file, because each file stays in the merge.
 
     The document is one object with the keys ["version"], ["summary"],
     ["executables"], ["mutants"] and ["unstable"]. ["version"] is the number
@@ -200,6 +209,9 @@
     - ["score"] is the score of the {{!section-gate}gate}, with two decimals. It
       is [100.00] when no mutant is scored, as the ["percentage"] of
       [windtrap coverage --json] is with no point.
+    - ["reach_percent"] and ["total_percent"] are the reach and the total of the
+      {{!section-gate}gates}, with two decimals. Each is [100.00] when its
+      denominator is [0].
 
     ["executables"] is an array with one object for each file that is kept, in
     path order. Two files can have the same name, and the files of the suites of
@@ -228,15 +240,25 @@
       elsewhere ({{!section-merge}the merge}) is ["killed"].
     - ["tests"] is in the object of a survivor only. It is an array of the tests
       that reached the survivor.
-    - ["executable"] and ["reason"] are in the object of an unknown mutant only.
-      ["executable"] is the index in ["executables"] of the file that the report
-      names for the mutant ({{!section-merge}the merge}), and ["reason"] is the
-      reason that this file records.
+    - ["killed_by"] is in the object of a killed mutant only. It is an array of
+      the tests that killed the mutant: in each run that killed it, the first
+      counted test that failed in or after the test that first evaluated the
+      armed site. It is empty when no kill names a test, as for a kill by a
+      fixture release or a mutant killed elsewhere.
+    - ["executable"], ["reason"] and ["reason_kind"] are in the object of an
+      unknown mutant only. ["executable"] is the index in ["executables"] of the
+      file that the report names for the mutant ({{!section-merge}the merge}),
+      and ["reason"] is the reason that this file records. ["reason_kind"] is
+      the kind of this reason: ["deadline"] when the run passed its deadline,
+      ["crashed"] when its worker ended first, ["memory"] when it passed its
+      memory limit, ["flaky_kill"] when the killing test also fails with no
+      mutant, and ["other"] for each other reason.
 
-    ["tests"] has one object for each reaching test of the survivor in each file
-    in which it survived. The objects are sorted by file, and then by the names
-    of the test, one name after the other. There are no duplicates. This order
-    can be different from the order of the report. The object has these keys:
+    ["tests"] and ["killed_by"] have one object for each test of the mutant in
+    each file that records it. The objects are sorted by file, and then by the
+    names of the test, one name after the other. There are no duplicates. This
+    order can be different from the order of the report. The object has these
+    keys:
     - ["executable"] is the index of the file in ["executables"].
     - ["test"] is the path of the test as an array of names, the outermost group
       first.
@@ -260,11 +282,13 @@ val run : string list -> int
     calls [exit].
 
     The command line is [windtrap mutants [OPTIONS] [PATH...]]. [-h], [--help]
-    and [-help] print the help page on standard output. [--min PCT] and [--json]
-    are those of the {{!section-gate}gate} and the
+    and [-help] print the help page on standard output. [--min PCT],
+    [--min-reach PCT], [--min-total PCT] and [--max-survivors N] are those of
+    the {{!section-gate}gates}, and [--json] is that of the
     {{!section-format}machine format}. A [PCT] that is not a number from [0] to
-    [100] is a usage error. [--lines SPEC] and [--diff FILE] repeat and add up
-    into a {!Windtrap.Private.Lines.t}, read by
+    [100] is a usage error, and so is an [N] that is not a non-negative integer
+    of decimal digits. A repeated gate keeps its last value. [--lines SPEC] and
+    [--diff FILE] repeat and add up into a {!Windtrap.Private.Lines.t}, read by
     {!Windtrap.Private.Lines.of_spec} and {!Windtrap.Private.Lines.of_diff}.
     Each file's records off those lines are dropped before the
     {{!section-merge}merge}, so the report, the document and the exit code are

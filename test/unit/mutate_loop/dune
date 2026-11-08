@@ -21,7 +21,8 @@
 ; The mutation loop forks, and Windows has no fork: the loop refuses there.
 ; The scenarios share the verdict file of suite_main.exe, which each removes
 ; and reads back, so two at once read each other's: -j 1 outranks a
-; WINDTRAP_JOBS in the environment.
+; WINDTRAP_JOBS in the environment. Some scenarios read a verdict file with
+; bin/main.exe, which is windtrap.
 
 (test
  (package ppx_windtrap)
@@ -39,6 +40,7 @@
   inline/runner_main.exe
   inline/inline_armed.ml
   runaway/runaway_main.exe
+  ../../../bin/main.exe
   (glob_files ../../support/preload/*.so))
  (action
   (run %{test} -j 1)))

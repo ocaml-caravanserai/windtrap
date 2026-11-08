@@ -24,6 +24,7 @@ let suite_exe = Filename.concat exe_dir "suite_main.exe"
 let plain_exe = Filename.concat exe_dir "plain_main.exe"
 let runaway_exe = Filename.concat exe_dir "runaway/runaway_main.exe"
 let inline_exe = Filename.concat exe_dir "inline/runner_main.exe"
+let windtrap_exe = Filename.concat exe_dir "../../../bin/main.exe"
 
 (* Under --instrument-with the fixtures link an instrumented core, so every
    loop scenario passes this directory as its scope: the counts below are
@@ -86,9 +87,10 @@ let seconds_masked reason =
   | Some _ | None -> reason
 
 let verdict = function
-  | Verdicts.Killed -> "killed"
+  | Verdicts.Killed _ -> "killed"
   | Verdicts.Killed_elsewhere { exe } -> "killed elsewhere by " ^ exe
-  | Verdicts.Unknown reason -> "unknown: " ^ seconds_masked reason
+  | Verdicts.Unknown reason ->
+      "unknown: " ^ seconds_masked (Verdicts.reason_text reason)
   | Verdicts.Survived { first; others } ->
       "survived by "
       ^ String.concat ", "
@@ -133,11 +135,22 @@ type file = {
   suite : string option;
   refused : string option;
   rows : string list;
+  kills : string list; (* The killing tests of each kill. *)
   previous : string list; (* The previous outcome of each record. *)
   identity : (string * string) option; (* The writer's path and digest. *)
 }
 
 let identity (i : Verdicts.identity) = (i.exe, i.digest)
+
+let kill_row (r : Verdicts.record) =
+  match r.verdict with
+  | Verdicts.Killed { by } ->
+      Some
+        (strf "%s:%d killed by %s" (local r.id.file) r.id.line
+           (match by with
+           | [] -> "no test"
+           | by -> String.concat "; " (List.map (String.concat " \u{203a} ") by)))
+  | _ -> None
 
 let saved path =
   if not (Sys.file_exists path) then None
@@ -151,6 +164,7 @@ let saved path =
             suite;
             refused;
             rows = List.map row (Verdicts.records verdicts);
+            kills = List.filter_map kill_row (Verdicts.records verdicts);
             previous = List.map previous_row (Verdicts.records verdicts);
             identity = Option.map identity writer;
           }
@@ -162,6 +176,7 @@ let saved path =
             suite = None;
             refused = None;
             rows = [ reason ];
+            kills = [];
             previous = [];
             identity = None;
           }
@@ -175,6 +190,45 @@ type ran = {
 
 let rows r = Option.map (fun (f : file) -> f.rows) r.file
 let previous_rows r = Option.map (fun (f : file) -> f.previous) r.file
+let kills r = Option.map (fun (f : file) -> f.kills) r.file
+
+(* The ["reason_kind"] of each unknown mutant in the document of
+   [windtrap mutants --json] over the verdict file of [r]. *)
+let reason_kinds r =
+  let path = Filename.concat (temp_dir ()) "run.mutants" in
+  write path (Option.get r.file).raw;
+  let doc = (Child.run windtrap_exe [ "mutants"; "--json"; path ]).out in
+  let after ~sub s =
+    Option.map
+      (fun i ->
+        let k = i + String.length sub in
+        String.sub s k (String.length s - k))
+      (index_of ~sub s)
+  in
+  (* Each mutant of the document, up to the next one. *)
+  let rec mutants s =
+    match after ~sub:"{ \"id\": " s with
+    | None -> []
+    | Some rest -> (
+        match index_of ~sub:"{ \"id\": " rest with
+        | Some i -> String.sub rest 0 i :: mutants rest
+        | None -> [ rest ])
+  in
+  List.filter_map
+    (fun m ->
+      match
+        ( after ~sub:"\"file\": " m,
+          after ~sub:"\"line\": " m,
+          after ~sub:"\"reason_kind\": \"" m )
+      with
+      | Some file, Some line, Some kind ->
+          Some
+            (strf "%s:%d %s"
+               (local (Scanf.sscanf file " %S" Fun.id))
+               (Scanf.sscanf line "%d" Fun.id)
+               (String.sub kind 0 (String.index kind '"')))
+      | _ -> None)
+    (mutants doc)
 
 (* No test is ever reported slow, so the dry run's report is the same on
    any machine. *)
@@ -420,7 +474,7 @@ let green_rows =
 
 let green_outcome =
   "mutants: 1 survived of 2 reached by this suite, 1 killed, 2 never reached, \
-   score 50.0% (1/2)"
+   score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
 
 let narrowing =
   "its selection narrowed the suite, so it saved no verdict: run it whole"
@@ -533,7 +587,7 @@ let outside_tests () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 2 reached by this suite, 1 killed, 2 evaluated \
-     outside tests, score 50.0% (1/2)"
+     outside tests, score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -553,7 +607,7 @@ let tagged () =
   equal string "calc: 5 passed in <time>." (summary r.out);
   equal string
     "mutants: 1 survived of 2 reached by the 5 selected tests, 1 killed, 2 \
-     never reached, score 50.0% (1/2)"
+     never reached, score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
     (outcome r.out);
   equal (list string)
     [
@@ -642,7 +696,7 @@ let own_at_exit () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 3 reached by this suite, 2 killed, 1 never \
-     reached, score 66.7% (2/3)"
+     reached, score 66.7% (2/3), reach 75.0% (3/4), total 50.0% (2/4)"
     (outcome r.out);
   let pids = pids (read log) in
   equal int (List.length pids) (List.length (List.sort_uniq Int.compare pids));
@@ -675,7 +729,7 @@ let inline_loop () =
   contains ~sub:"inline_armed: 1 passed" r.out;
   equal string
     "mutants: 1 reached by this suite, 1 killed, 3 never reached, score 100.0% \
-     (1/1)"
+     (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
     (outcome r.out);
   equal (list string) [ "inline_armed.ml" ] left
 
@@ -686,7 +740,7 @@ let children =
           let b = Lazy.force baseline_loop in
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome b.ran.out);
           equal text "6" b.baseline);
       test
@@ -722,7 +776,7 @@ let crashed () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 3 reached by this suite, 1 killed, 1 unknown, 1 \
-     never reached, score 50.0% (1/2)"
+     never reached, score 50.0% (1/2), reach 75.0% (3/4), total 33.3% (1/3)"
     (outcome r.out);
   contains
     ~sub:
@@ -747,7 +801,7 @@ let cold_cache () =
   equal string "exited 0" r.status;
   equal string
     "mutants: 2 reached by this suite, 2 killed, 2 never reached, score 100.0% \
-     (2/2)"
+     (2/2), reach 50.0% (2/4), total 50.0% (2/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -772,7 +826,7 @@ let not_evaluated () =
   equal (list string) [] (survivors r.out);
   equal string
     "mutants: 2 reached by this suite, 1 killed, 1 not evaluated, 2 never \
-     reached, score 50.0% (1/2)"
+     reached, score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
     (outcome r.out);
   contains ~sub:(strf "arm: %s --arm %s\n" suite_exe (site 18)) r.out
 
@@ -781,7 +835,7 @@ let capped () =
   equal (list string) [ site 18; site 21 ] (survivors r.out);
   equal string
     "mutants: 2 survived of 3 reached by this suite, 1 killed, 1 never \
-     reached, score 33.3% (1/3)"
+     reached, score 33.3% (1/3), reach 75.0% (3/4), total 25.0% (1/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -846,7 +900,7 @@ let verdicts =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out));
       test "a mutant its child did not evaluate is no survivor" not_evaluated;
       test "the verdict file records it as not evaluated" (fun () ->
@@ -878,7 +932,8 @@ let verdicts =
           equal text "" r.err;
           equal text
             "calc: 6 passed in <time>.\n\
-             mutants: 4 reached by this suite, 4 killed, score 100.0% (4/4)\n"
+             mutants: 4 reached by this suite, 4 killed, score 100.0% (4/4), \
+             reach 100.0% (4/4), total 100.0% (4/4)\n"
             (masked r.out));
     ]
 
@@ -934,7 +989,7 @@ let unevaluated_failure () =
   equal text "" r.err;
   equal string
     "mutants: 1 reached by this suite, 1 not evaluated, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   contains
     ~sub:
@@ -957,7 +1012,7 @@ let before_evaluation =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 survived of 1 reached by this suite, 3 never reached, \
-             score 0.0% (0/1)"
+             score 0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
             (outcome r.out);
           equal
             (option (list string))
@@ -972,7 +1027,7 @@ let before_evaluation =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 reached by this suite, 1 not evaluated, 3 never \
-             reached, score 0.0% (0/1)"
+             reached, score 0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
             (outcome r.out);
           contains
             ~sub:
@@ -1006,7 +1061,7 @@ let before_evaluation =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out));
       test "an armed run counts an evaluation in a forked process" (fun () ->
           let r = spawn ~env:[ suite "forked" ] [ "--arm"; site 18 ] in
@@ -1099,7 +1154,7 @@ let no_xfail_witness () =
     (witnesses r.out);
   equal string
     "mutants: 2 survived of 2 reached by this suite, 2 never reached, score \
-     0.0% (0/2)"
+     0.0% (0/2), reach 50.0% (2/4), total 0.0% (0/4)"
     (outcome r.out)
 
 let known_armed line = spawn ~env:[ suite "known" ] [ "--arm"; site line ]
@@ -1138,10 +1193,10 @@ let budget (k, over) =
   equal string
     (if over = 0 then
        "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-        0.0% (0/1)"
+        0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
      else
        "mutants: 1 reached by this suite, 1 killed, 3 never reached, score \
-        100.0% (1/1)")
+        100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)")
     (outcome r.out)
 
 (* The runaway fixture's mutant spins; the hit budget stops it within
@@ -1182,7 +1237,9 @@ let deadline_kill () =
   let b = Lazy.force blocked in
   equal string "exited 0" b.run.status;
   equal text "" b.run.err;
-  equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+  equal string
+    "mutants: 1 reached by this suite, 1 unknown, 3 never reached, reach 25.0% \
+     (1/4), total 0.0% (0/3)"
     (outcome b.run.out);
   equal
     (option (list string))
@@ -1241,7 +1298,9 @@ let memory_limit () =
   let r = hog_run [ "--mutate-memory=64" ] in
   equal string "exited 0" r.status;
   equal text "" r.err;
-  equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+  equal string
+    "mutants: 1 reached by this suite, 1 unknown, 3 never reached, reach 25.0% \
+     (1/4), total 0.0% (0/3)"
     (outcome r.out);
   equal
     (option (list string))
@@ -1282,7 +1341,7 @@ let slow () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -1384,7 +1443,7 @@ let narrowed () =
   equal string "exited 0" (ended r.Child.status);
   equal string
     "mutants: 1 reached by the 3 selected tests, 1 killed, 3 never reached, \
-     score 100.0% (1/1)"
+     score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
     (outcome r.Child.out);
   equal (option string) None (reproduce r.Child.out);
   equal text not_saved r.Child.err;
@@ -1401,7 +1460,7 @@ let elsewhere =
     before = "a - b";
     after = "a + b";
     source_digest = None;
-    verdict = Verdicts.Killed;
+    verdict = Verdicts.killed [];
     previous = Some `Survived;
   }
 
@@ -1473,7 +1532,7 @@ let unwritable () =
   equal string "exited 0" r.status;
   equal string
     "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   starts_with ~prefix:"windtrap: could not write the verdict file: " r.err;
   equal int 1 (List.length (lines (String.trim r.err)))
@@ -1500,16 +1559,18 @@ let line_scope () =
   equal
     (list (pair string (option (list string))))
     [
-      ( "mutants: 1 survived of 1 reached by this suite, score 0.0% (0/1)",
+      ( "mutants: 1 survived of 1 reached by this suite, score 0.0% (0/1), \
+         reach 100.0% (1/1), total 0.0% (0/1)",
         Some
           [
             "subject.ml:18 survived by widen \u{203a} widen is nonzero, widen \
              \u{203a} widen is not 99";
           ] );
-      ( "mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1)",
+      ( "mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach \
+         100.0% (1/1), total 100.0% (1/1)",
         Some [ "subject.ml:15 killed" ] );
       ( "mutants: 1 survived of 2 reached by this suite, 1 killed, score 50.0% \
-         (1/2)",
+         (1/2), reach 100.0% (2/2), total 50.0% (1/2)",
         Some (List.filteri (fun i _ -> i < 2) green_rows) );
     ]
     [
@@ -1752,7 +1813,7 @@ let refusals =
           equal text "" r.err;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out));
       test
         "a process that spawned a domain before its run is tested, in workers \
@@ -1762,7 +1823,7 @@ let refusals =
           equal text "" r.err;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out);
           equal (option bool) (Some false)
             (Option.map (fun (f : file) -> Option.is_some f.refused) r.file));
@@ -1774,7 +1835,7 @@ let workers = "--mutate-workers"
 
 let one_killed =
   "mutants: 1 reached by this suite, 1 killed, 3 never reached, score 100.0% \
-   (1/1)"
+   (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
 
 let killed_by_stateful () =
   let r = spawn ~env:[ suite "stateful_domains" ] [ mutate ] in
@@ -1823,7 +1884,7 @@ let pool_alone () =
   equal (pair string text) ("exited 0", "") (r.status, r.err);
   equal ~msg:r.out string
     "mutants: 3 survived of 3 reached by this suite, 1 never reached, score \
-     0.0% (0/3)"
+     0.0% (0/3), reach 75.0% (3/4), total 0.0% (0/4)"
     (outcome r.out);
   equal (option string)
     (Some (strf "%s --arm %s --mutate-workers" suite_exe (site 15)))
@@ -1859,7 +1920,9 @@ let stateful_domains =
       test
         "without --mutate-workers, no test reaches a site that only a worker \
          of the pool evaluates" (fun () ->
-          equal string "mutants: 0 reached by this suite, 4 never reached"
+          equal string
+            "mutants: 0 reached by this suite, 4 never reached, reach 0.0% \
+             (0/4), total 0.0% (0/4)"
             (outcome (on_workers [ mutate ]).out));
       test "with --mutate-workers, the pool kills the mutant of such a site"
         (fun () ->
@@ -2208,7 +2271,7 @@ let held_order () =
     (witnesses r.out);
   equal string
     "mutants: 2 survived of 2 reached by this suite, 2 never reached, score \
-     0.0% (0/2)"
+     0.0% (0/2), reach 50.0% (2/4), total 0.0% (0/4)"
     (outcome r.out);
   equal (option string)
     (Some (strf "%s --arm %s" suite_exe (site 15)))
@@ -2342,7 +2405,7 @@ let interrupted_by ?planted signal =
 
 let interrupted_outcome =
   "mutants: 1 survived of 3 reached by this suite, 1 never reached, 2 not \
-   tested, score 0.0% (0/1)"
+   tested, score 0.0% (0/1), reach 75.0% (3/4), total 0.0% (0/2)"
 
 let stopped () =
   let r, grandchildren, left = interrupted_by Sys.sigint in
@@ -2385,7 +2448,9 @@ let probe_interrupted () =
   let r = finish run in
   equal string "killed by SIGINT" r.status;
   equal text "windtrap: interrupted during the determinism probe\n" r.err;
-  equal string "mutants: 1 reached by this suite, 3 never reached, 1 not tested"
+  equal string
+    "mutants: 1 reached by this suite, 3 never reached, 1 not tested, reach \
+     25.0% (1/4), total 0.0% (0/3)"
     (outcome r.out);
   equal (list string) [] (entries tmpdir)
 
@@ -2403,7 +2468,7 @@ let after_last_child () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -2603,19 +2668,19 @@ let skipped_rows exe =
 
 let skipped_outcome =
   "mutants: 1 survived of 2 reached by this suite, 2 never reached, 1 not \
-   tested, score 0.0% (0/1)"
+   tested, score 0.0% (0/1), reach 50.0% (2/4), total 0.0% (0/3)"
 
 let old_name = "windtrap-old.mutants"
 
 (* A verdict file of the format before. *)
 let plant_old p =
-  write (Filename.concat p.data old_name) "windtrap-mutants-v12\ntested\n0\n"
+  write (Filename.concat p.data old_name) "windtrap-mutants-v13\ntested\n0\n"
 
 let old_warning p =
   strf
     "windtrap: warning: --skip-killed ignores %s/%s: not a windtrap verdict \
-     file (expected header \"windtrap-mutants-v13\", found \
-     \"windtrap-mutants-v12\"); files written by other windtrap versions are \
+     file (expected header \"windtrap-mutants-v14\", found \
+     \"windtrap-mutants-v13\"); files written by other windtrap versions are \
      not readable - delete the stale verdict files, then re-run the mutation \
      tests\n"
     p.data old_name
@@ -2624,7 +2689,7 @@ let old_warning p =
    before lies beside its file. *)
 let killed_project () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   plant_old p;
   p
 
@@ -2659,13 +2724,13 @@ let mirror () =
 
 let survivor_killed_elsewhere () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (18, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (18, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (list string) [] (survivors r.out);
   equal (option string) None (reproduce r.out);
   equal string
     "mutants: 2 reached by this suite, 1 killed, 2 never reached, 1 not \
-     tested, score 100.0% (1/1)"
+     tested, score 100.0% (1/1), reach 50.0% (2/4), total 33.3% (1/3)"
     (outcome r.out);
   equal
     (option (list string))
@@ -2681,7 +2746,7 @@ let survivor_killed_elsewhere () =
 let not_a_kill =
   [
     ("killed elsewhere", Verdicts.Killed_elsewhere { exe = "default/third.exe" });
-    ("unknown", Verdicts.Unknown "its run was killed by SIGSEGV");
+    ("unknown", Verdicts.Unknown (Other "its run was killed by SIGSEGV"));
     ("a survivor", Verdicts.survived [ [ "calc"; "sub to zero" ] ]);
     ("not evaluated", Verdicts.Not_evaluated);
     ("outside tests", Verdicts.Outside_tests);
@@ -2705,7 +2770,7 @@ let other_digest (_, source_digest) =
   plant_other
     ~changed:(fun r -> { r with source_digest })
     p "windtrap-other.mutants"
-    [ (15, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (option (list string)) (Some green_rows) (rows r)
 
@@ -2721,7 +2786,7 @@ let other_mutants =
 
 let other_mutant (_, changed) =
   let p = skip_project () in
-  plant_other ~changed p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other ~changed p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (option (list string)) (Some green_rows) (rows r)
 
@@ -2746,7 +2811,7 @@ let recorded_digest () =
   is_true
     (Option.fold ~none:false ~some:Windtrap_runtime.Instr.is_digest compiled);
   equal (list (option string)) [ compiled ] (digests p);
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   equal
     (option (list string))
     (Some (skipped_rows "default/other.exe"))
@@ -2758,7 +2823,7 @@ let same_executable () =
   let p = skip_project () in
   plant_other ~exe:"default/suite_main.exe" ~suite:"another suite" p
     (Filename.basename (Verdicts.output_file ~exe:p.exe ~suite:"another suite"))
-    [ (15, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (pair string text) ("exited 0", "") (r.status, r.err);
   equal
@@ -2781,8 +2846,10 @@ let own_file () =
    fails a loop that keeps the first or the last killer. *)
 let smaller_executable first =
   let p = skip_project () in
-  let a = ("default/a.exe", [ (18, Verdicts.Killed) ])
-  and b = ("default/b.exe", [ (15, Verdicts.Killed); (18, Verdicts.Killed) ]) in
+  let a = ("default/a.exe", [ (18, Verdicts.killed []) ])
+  and b =
+    ("default/b.exe", [ (15, Verdicts.killed []); (18, Verdicts.killed []) ])
+  in
   List.iteri
     (fun i (exe, verdicts) ->
       plant_other ~exe p (strf "windtrap-%d.mutants" (i + 1)) verdicts)
@@ -2804,12 +2871,14 @@ let smaller_executable first =
        "killed elsewhere: 2 mutants, not tested, from the verdict files of \
         default/a.exe (1), default/b.exe (1)")
     (elsewhere_line r.out);
-  equal string "mutants: 2 reached by this suite, 2 never reached, 2 not tested"
+  equal string
+    "mutants: 2 reached by this suite, 2 never reached, 2 not tested, reach \
+     50.0% (2/4), total 0.0% (0/2)"
     (outcome r.out)
 
 let ignored_files () =
   let p = skip_project () in
-  let kill = [ (15, Verdicts.Killed) ] in
+  let kill = [ (15, Verdicts.killed []) ] in
   plant_other ~named:false p "windtrap-anon.mutants" kill;
   Sys.mkdir (Filename.concat p.data "windtrap-dir.mutants") 0o755;
   plant_other ~exe:"default/gone.exe" ~orphan:true p "windtrap-gone.mutants"
@@ -2861,11 +2930,11 @@ let scope_of_the_skip () =
     {
       elsewhere with
       Verdicts.source_digest = compiled_digest ();
-      verdict = Verdicts.Killed;
+      verdict = Verdicts.killed [];
     }
   in
   plant_other p "windtrap-other.mutants"
-    [ (15, Verdicts.Killed); (21, Verdicts.Killed) ]
+    [ (15, Verdicts.killed []); (21, Verdicts.killed []) ]
     ~records:[ outside ];
   let r = skip_run p [ skip_killed ] in
   equal
@@ -2880,13 +2949,15 @@ let scope_of_the_skip () =
 let line_scope_of_the_skip () =
   let p = skip_project () in
   plant_other p "windtrap-other.mutants"
-    [ (15, Verdicts.Killed); (18, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []); (18, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed; "--lines=" ^ scope ^ "subject.ml:15" ] in
   equal (pair string text) ("exited 0", "") (r.status, r.err);
   equal
     (option (list string))
     (Some [ "subject.ml:15 killed elsewhere by default/other.exe" ]) (rows r);
-  equal string "mutants: 1 reached by this suite, 1 not tested" (outcome r.out);
+  equal string
+    "mutants: 1 reached by this suite, 1 not tested, reach 100.0% (1/1)"
+    (outcome r.out);
   equal (option string)
     (Some (one_skip "default/other.exe"))
     (elsewhere_line r.out)
@@ -2894,7 +2965,7 @@ let line_scope_of_the_skip () =
 let jobs_of_the_skip () =
   let answer n =
     let p = skip_project () in
-    plant_other p "windtrap-other.mutants" [ (18, Verdicts.Killed) ];
+    plant_other p "windtrap-other.mutants" [ (18, Verdicts.killed []) ];
     let r = skip_run p [ skip_killed; "-j"; string_of_int n ] in
     (masked r.out, rows r)
   in
@@ -2902,20 +2973,21 @@ let jobs_of_the_skip () =
 
 let narrowed_skip () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   let r = skip_run p [ "-f"; "calc"; skip_killed ] in
   equal text not_saved r.err;
   equal (option string)
     (Some (one_skip "default/other.exe"))
     (elsewhere_line r.out);
   equal string
-    "mutants: 1 reached by the 3 selected tests, 3 never reached, 1 not tested"
+    "mutants: 1 reached by the 3 selected tests, 3 never reached, 1 not \
+     tested, reach 25.0% (1/4), total 0.0% (0/3)"
     (outcome r.out)
 
 (* [interrupted]'s child of [widen] hangs until the signal. *)
 let interrupted_skip () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   let pidfile = Filename.concat (temp_dir ()) "hanging" in
   remove (own p);
   let run =
@@ -2936,7 +3008,9 @@ let interrupted_skip () =
   equal (option string)
     (Some (one_skip "default/other.exe"))
     (elsewhere_line r.out);
-  equal string "mutants: 3 reached by this suite, 1 never reached, 3 not tested"
+  equal string
+    "mutants: 3 reached by this suite, 1 never reached, 3 not tested, reach \
+     75.0% (3/4), total 0.0% (0/1)"
     (outcome r.out);
   is_false (Sys.file_exists (own p));
   equal (list string) [ "gone" ] (List.map fate (pids (read pidfile)))
@@ -3068,7 +3142,7 @@ let survived_by test = Verdicts.survived [ [ "calc"; test ] ]
 
 (* [sub] survived and [widen] was killed in the file in between. *)
 let swapped r =
-  at_line 15 (survived_by "sub to zero") (at_line 18 Verdicts.Killed r)
+  at_line 15 (survived_by "sub to zero") (at_line 18 (Verdicts.killed []) r)
 
 (* The first run has no earlier file, so it lists nothing. The third run
    lists nothing again. *)
@@ -3169,7 +3243,7 @@ let same_outcome () =
    the one that the run compares with. *)
 let no_outcome_cases =
   let skip = Verdicts.Killed_elsewhere { exe = "default/test/other.exe" } in
-  let crashed = Verdicts.Unknown "its run was killed by SIGSEGV" in
+  let crashed = Verdicts.Unknown (Other "its run was killed by SIGSEGV") in
   [
     ( "an unknown verdict keeps the outcome before it",
       crashed,
@@ -3307,8 +3381,8 @@ let refused_between () =
    run replaces it. *)
 let unloadable_earlier =
   [
-    ("a file of the format before", "windtrap-mutants-v12\ntested\n0\n");
-    ("a corrupt file", "windtrap-mutants-v13\ntested\n1\njunk\n");
+    ("a file of the format before", "windtrap-mutants-v13\ntested\n0\n");
+    ("a corrupt file", "windtrap-mutants-v14\ntested\n1\njunk\n");
   ]
 
 let unloadable_earlier_file (_, text) =
@@ -3319,7 +3393,7 @@ let unloadable_earlier_file (_, text) =
   equal (option (list string)) None (unstable r.out);
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option (list string)) (Some none_rows) (previous_rows r);
-  starts_with ~prefix:"windtrap-mutants-v13\n" (read path)
+  starts_with ~prefix:"windtrap-mutants-v14\n" (read path)
 
 let narrowed_run () =
   let path = verdicts_path () in
@@ -3376,7 +3450,7 @@ let unwritable_with_prior () =
    with. *)
 let skipped_change () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   equal string "exited 0" (skip_run p []).status;
   rewrite ~path:(own p) (at_line 15 (survived_by "sub to zero"));
   let skipped = skip_run ~keep:true p [ skip_killed ] in
@@ -3462,21 +3536,23 @@ let intermittent ?(keep = false) ?(env = []) args =
 
 let survived_outcome =
   "mutants: 1 survived of 1 reached by this suite, 3 never reached, score 0.0% \
-   (0/1)"
+   (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
 
 let killed_outcome =
   "mutants: 1 reached by this suite, 1 killed, 3 never reached, score 100.0% \
-   (1/1)"
+   (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
 
 let not_evaluated_outcome =
   "mutants: 1 reached by this suite, 1 not evaluated, 3 never reached, score \
-   0.0% (0/1)"
+   0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
 
 let unknown_outcome =
-  "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+  "mutants: 1 reached by this suite, 1 unknown, 3 never reached, reach 25.0% \
+   (1/4), total 0.0% (0/3)"
 
 let not_tested_outcome =
-  "mutants: 1 reached by this suite, 3 never reached, 1 not tested"
+  "mutants: 1 reached by this suite, 3 never reached, 1 not tested, reach \
+   25.0% (1/4), total 0.0% (0/3)"
 
 (* The rows of [intermittent], with [verdict] on line 18. *)
 let intermittent_rows verdict =
@@ -3800,7 +3876,9 @@ let interrupted_before_a_retry () =
   equal string "killed by SIGINT" r.status;
   equal text (strf "windtrap: interrupted while testing %s\n" (site 18)) r.err;
   equal (list string) [] (survivors out);
-  equal string "mutants: 2 reached by this suite, 2 never reached, 2 not tested"
+  equal string
+    "mutants: 2 reached by this suite, 2 never reached, 2 not tested, reach \
+     50.0% (2/4), total 0.0% (0/2)"
     (outcome out);
   equal (option (list string)) None (rows r);
   equal (list string) [] (entries tmpdir)
@@ -3844,7 +3922,7 @@ let retries_in_order () =
   is_true (String.ends_with ~suffix:"  (2 runs)" (title_of 18 r.out));
   equal string
     "mutants: 2 survived of 2 reached by this suite, 2 never reached, score \
-     0.0% (0/2)"
+     0.0% (0/2), reach 50.0% (2/4), total 0.0% (0/4)"
     (outcome r.out)
 
 (* Under -j 4 and --mutate-workers, the job with a pool test runs alone in
@@ -3859,7 +3937,7 @@ let pool_alone_in_a_retry () =
   ended_well r;
   equal ~msg:r.out string
     "mutants: 3 survived of 3 reached by this suite, 1 never reached, score \
-     0.0% (0/3)"
+     0.0% (0/3), reach 75.0% (3/4), total 0.0% (0/4)"
     (outcome r.out);
   let pool, spans = notes path in
   is_true ~msg:"the pool test ran under its mutant" (pool <> []);
@@ -3970,7 +4048,11 @@ let clean_check () =
   ended_well k.r;
   equal string killed_outcome (outcome k.r.out);
   equal int 6 k.b_runs;
-  equal (option (list string)) (intermittent_rows "killed") (rows k.r)
+  equal (option (list string)) (intermittent_rows "killed") (rows k.r);
+  equal
+    (option (list string))
+    (Some [ strf "subject.ml:18 killed by %s" b ])
+    (kills k.r)
 
 let first_failing_run_stops () =
   let k = kill_run ~env:[ fail_at "3,4" ] [ retry_once ] in
@@ -4027,11 +4109,13 @@ let one_check_clean () =
   equal int 7 k.b_runs;
   equal string
     "mutants: 2 reached by this suite, 2 killed, 2 never reached, score 100.0% \
-     (2/2)"
+     (2/2), reach 50.0% (2/4), total 50.0% (2/4)"
     (outcome k.r.out);
   equal (option (list string)) (two_rows "killed") (rows k.r)
 
-let two_unknown = "mutants: 2 reached by this suite, 2 unknown, 2 never reached"
+let two_unknown =
+  "mutants: 2 reached by this suite, 2 unknown, 2 never reached, reach 50.0% \
+   (2/4), total 0.0% (0/2)"
 
 let one_check_flaky () =
   let k = kill_run ~env:[ kill_sub; fail_at "3,4,5" ] [ retry_once ] in
@@ -4189,7 +4273,8 @@ let interrupted_check () =
   equal string not_tested_outcome (outcome r.out)
 
 let two_not_tested =
-  "mutants: 2 reached by this suite, 2 never reached, 2 not tested"
+  "mutants: 2 reached by this suite, 2 never reached, 2 not tested, reach \
+   50.0% (2/4), total 0.0% (0/2)"
 
 (* The check of the two kills waits at the gate. The message names the
    first mutant that waits for it. *)
@@ -4515,7 +4600,7 @@ let memory_refused_probe () =
 let memory_all_skipped () =
   let p = skip_project () in
   plant_other ~exe:"default/b.exe" p "windtrap-1.mutants"
-    [ (15, Verdicts.Killed); (18, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []); (18, Verdicts.killed []) ];
   let r = skip_run ~env:[ (memory_var, "1") ] p [ skip_killed ] in
   equal (pair string text) ("exited 0", "") (r.status, without_memory r.err);
   equal (list string)
@@ -4616,6 +4701,86 @@ let memory_records =
         memory_unread memory_not_read;
     ]
 
+(* Killing tests and reasons *)
+
+(* The structured reason of each mutant that the run left unknown by a
+   crash. *)
+let crashes r =
+  let path = Filename.concat (temp_dir ()) "run.mutants" in
+  write path (Option.get r.file).raw;
+  match Verdicts.load path with
+  | Error e -> [ Format.asprintf "%a" Verdicts.pp_error e ]
+  | Ok f ->
+      List.filter_map
+        (fun (r : Verdicts.record) ->
+          match r.verdict with
+          | Verdicts.Unknown (Crashed { signal; status; how }) ->
+              let number = Option.fold ~none:"none" ~some:string_of_int in
+              Some
+                (strf "%s:%d signal %s, status %s: %s" (local r.id.file)
+                   r.id.line
+                   (Option.fold ~none:"none" ~some:signal_name signal)
+                   (number status) how)
+          | _ -> None)
+        (Verdicts.records f.verdicts)
+
+let crash_run name =
+  let r = spawn ~env:[ suite name ] [ mutate ] in
+  equal string "exited 0" r.status;
+  r
+
+let killing_tests =
+  group "Killing tests and reasons"
+    [
+      test "a kill records its killing test" (fun () ->
+          equal
+            (option (list string))
+            (Some
+               [ "subject.ml:15 killed by calc \u{203a} sub of two positives" ])
+            (kills (Lazy.force green)));
+      test "a kill by a fixture release records no test" (fun () ->
+          equal
+            (option (list string))
+            (Some [ "subject.ml:15 killed by no test" ])
+            (kills (Lazy.force release)));
+      test "a run past its deadline gives the reason kind deadline" (fun () ->
+          equal (list string)
+            [ "subject.ml:15 deadline" ]
+            (reason_kinds (Lazy.force blocked).run));
+      test "a worker killed by a signal gives the reason kind crashed"
+        (fun () ->
+          let r = crash_run "signal" in
+          equal (list string) [ "subject.ml:27 crashed" ] (reason_kinds r);
+          equal (list string)
+            [
+              "subject.ml:27 signal SIGKILL, status none: was killed by SIGKILL";
+            ]
+            (crashes r));
+      test
+        "an exit gives the reason kind crashed, with the status of the worker, \
+         which ends with code 0" (fun () ->
+          let r = crash_run "exits" in
+          equal (list string) [ "subject.ml:27 crashed" ] (reason_kinds r);
+          equal (list string)
+            [
+              "subject.ml:27 signal none, status 0: ended when code under test \
+               called exit";
+            ]
+            (crashes r));
+      test "an exit status gives the reason kind crashed" (fun () ->
+          let r = crash_run "crash" in
+          equal (list string) [ "subject.ml:27 crashed" ] (reason_kinds r);
+          equal (list string)
+            [ "subject.ml:27 signal none, status 3: exited with code 3" ]
+            (crashes r));
+      test "a run past its memory limit gives the reason kind memory" (fun () ->
+          let r = hog_run [ "--mutate-memory=64" ] in
+          equal (list string) [ "subject.ml:15 memory" ] (reason_kinds r));
+      test "a flaky kill gives the reason kind flaky_kill" (fun () ->
+          let k = kill_run ~env:[ fail_at "3,5" ] [ retry_once ] in
+          equal (list string) [ "subject.ml:18 flaky_kill" ] (reason_kinds k.r));
+    ]
+
 (* The fixtures' verdict files land in the real _build/_mutants, where
    [windtrap mutants] would merge them into the tree's answer, and no rule
    runs these executables but this suite. A forked child ends past
@@ -4653,4 +4818,5 @@ let () =
          signals;
          effects;
          memory_records;
+         killing_tests;
        ])
