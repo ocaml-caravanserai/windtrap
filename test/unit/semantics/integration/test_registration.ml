@@ -16,6 +16,7 @@ module Oracle = Windtrap_mutate_forced.Oracle
 module Forced = Windtrap_mutate_forced.Forced
 module No_guard = Windtrap_mutate_forced.No_guard
 module Arid = Windtrap_mutate_forced.Arid
+module Loose = Windtrap_mutate_loose.Loose
 module Disambiguate = Windtrap_mutate_disambiguate.Disambiguate
 module Expected_type = Windtrap_mutate_disambiguate.Expected_type
 
@@ -100,6 +101,15 @@ let originals =
     ("ari_add 5 3", "8", fun () -> Int.to_string (Oracle.ari_add 5 3));
     ("ari_sub 5 3", "2", fun () -> Int.to_string (Oracle.ari_sub 5 3));
     ("del_count", "1", fun () -> Int.to_string (Oracle.del_count ()));
+    ("del_then true", "7", fun () -> Int.to_string (Oracle.del_then true));
+    ("del_last true", "10", fun () -> Int.to_string (Oracle.del_last true));
+    ("del_while 3", "3", fun () -> Int.to_string (Oracle.del_while 3));
+    ("del_for 4", "10", fun () -> Int.to_string (Oracle.del_for 4));
+    ( "del_downto 3",
+      "1,2,3",
+      fun () -> String.concat "," (ints (Oracle.del_downto 3)) );
+    ("Loose.sum_for 4", "10", fun () -> Int.to_string (Loose.sum_for 4));
+    ("Loose.sum_while 4", "10", fun () -> Int.to_string (Loose.sum_while 4));
     ("int_up", "41", fun () -> Int.to_string (Oracle.int_up ()));
     ("int_down", "1", fun () -> Int64.to_string (Oracle.int_down ()));
     ( "bool_flip",
@@ -240,6 +250,31 @@ let armings =
     oracle "fsub" "a +. b" (fun () -> floats [ Oracle.ari_fadd 5. 3. ]) [ "2." ];
     oracle "fadd" "a -. b" (fun () -> floats [ Oracle.ari_fsub 5. 3. ]) [ "8." ];
     oracle "del" "incr dropped" (fun () -> ints [ Oracle.del_count () ]) [ "0" ];
+    oracle "del" "shown := 7" (fun () -> ints [ Oracle.del_then true ]) [ "0" ];
+    oracle "del" "steps := ((!steps) * 10)"
+      (fun () -> ints [ Oracle.del_last true ])
+      [ "1" ];
+    oracle "del" "incr seen" (fun () -> ints [ Oracle.del_while 3 ]) [ "0" ];
+    oracle "del" "total := ((!total) + i)"
+      (fun () -> ints [ Oracle.del_for 4 ])
+      [ "0" ];
+    oracle "del" "order := (i :: (!order))"
+      (fun () -> ints (Oracle.del_downto 3))
+      [];
+    {
+      file = "loose.ml";
+      rewrite = "del";
+      before = "add_to total i";
+      observe = (fun () -> ints [ Loose.sum_for 4 ]);
+      mutated = [ "0" ];
+    };
+    {
+      file = "loose.ml";
+      rewrite = "del";
+      before = "add_to total (!i)";
+      observe = (fun () -> ints [ Loose.sum_while 4 ]);
+      mutated = [ "0" ];
+    };
     oracle "int" "41" (fun () -> ints [ Oracle.int_up () ]) [ "42" ];
     oracle "int" "1L"
       (fun () -> [ Int64.to_string (Oracle.int_down ()) ])

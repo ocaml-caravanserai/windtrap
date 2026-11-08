@@ -49,6 +49,46 @@ let del_count () =
   incr dropped;
   !dropped
 
+(* [del] in a unit position: the then-branch of an [if] with no [else], a
+   loop body, and the last statement of a sequence there. *)
+let shown = ref 0
+
+let del_then taken =
+  shown := 0;
+  if taken then shown := 7;
+  !shown
+
+let steps = ref 0
+
+let del_last taken =
+  steps := 0;
+  if taken then (
+    incr steps;
+    steps := !steps * 10);
+  !steps
+
+let del_while n =
+  let left = ref n and seen = ref 0 in
+  while !left > 0 do
+    decr left;
+    incr seen
+  done;
+  !seen
+
+let del_for n =
+  let total = ref 0 in
+  for i = 1 to n do
+    total := !total + i
+  done;
+  !total
+
+let del_downto n =
+  let order = ref [] in
+  for i = n downto 1 do
+    order := i :: !order
+  done;
+  !order
+
 let int_up () = 41
 let int_down () = 1L
 let bool_flip () = Some true

@@ -261,6 +261,20 @@ let tail_mod_cons () =
     (Mutsem_baseline.Covsem_fixtures.tmc_map succ xs)
     (Mutsem_fixtures.Covsem_fixtures.tmc_map succ xs)
 
+let rec non_tail_down n =
+  if n > 0 then (
+    non_tail_down (n - 1);
+    ignore (Sys.opaque_identity n))
+
+(* The [del] guard of a then-branch with no [else] keeps its tail call: at
+   this depth a non-tail recursion overflows the bounded stack. *)
+let then_tail () =
+  let depth = 2_000_000 in
+  raises ~msg:"the stack is not bounded: the dune action sets l=1M"
+    Stack_overflow (fun () -> non_tail_down depth);
+  Mutsem_baseline.Mutsem_order.then_down depth;
+  Mutsem_fixtures.Mutsem_order.then_down depth
+
 let tail_calls =
   group "Tail calls"
     [
@@ -276,6 +290,8 @@ let tail_calls =
       test "a tail call of the twin leaves no frame" (fun () ->
           constant_depths (Mutsem_baseline.Mutsem_order.tail_depths ()));
       test "a tail_mod_cons map runs in constant stack" tail_mod_cons;
+      test "a tail call in a then-branch with no else runs in constant stack"
+        then_tail;
     ]
 
 (* Results *)
