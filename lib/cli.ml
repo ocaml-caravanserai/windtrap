@@ -23,6 +23,8 @@ type parsed = {
   given : string list;
   lines : Lines.t option;
   diff : string option;
+  rewrites : string list option;
+  skip_rewrites : string list option;
   skip_killed : bool;
   case : string option;
   list_only : bool;
@@ -36,6 +38,8 @@ let start () =
     given = [];
     lines = None;
     diff = None;
+    rewrites = None;
+    skip_rewrites = None;
     skip_killed = false;
     case = None;
     list_only = false;
@@ -155,6 +159,16 @@ let seed value =
   Result.map_error
     (fun _ -> "an s1: token with 16 lowercase hexadecimal digits")
     (Seed.of_string value)
+
+let rewrite_names value =
+  let rewrites = Windtrap_runtime.Mutate.rewrites in
+  match Os.split_comma value with
+  | names when names <> [] && List.for_all (fun n -> List.mem n rewrites) names
+    ->
+      Ok names
+  | _ ->
+      Error
+        ("a comma-separated list of the rewrites " ^ String.concat ", " rewrites)
 
 let replay_token value = Result.map (fun _ -> value) (Choice.of_token value)
 
@@ -303,9 +317,7 @@ let entries =
                     (fun c () ->
                       {
                         c with
-                        mutation =
-                          Run.Loop
-                            { prefixes; lines = None; skip_killed = false };
+                        mutation = Run.Loop { Run.every_mutant with prefixes };
                       })
                     p ()));
          })
@@ -321,6 +333,16 @@ let entries =
       ~mirror:(mirrored "WINDTRAP_DIFF")
       "Test only the mutants on the lines that FILE, the output of git diff \
        -U0, adds or changes (with --mutate).";
+    row "--rewrites"
+      (value "NAME,..." rewrite_names (fun p names ->
+           { p with rewrites = Some names }))
+      ~mirror:(mirrored "WINDTRAP_REWRITES")
+      "Test only the mutants of these rewrites (with --mutate).";
+    row "--skip-rewrites"
+      (value "NAME,..." rewrite_names (fun p names ->
+           { p with skip_rewrites = Some names }))
+      ~mirror:(mirrored "WINDTRAP_SKIP_REWRITES")
+      "Test the mutants of all rewrites but these (with --mutate).";
     row "--skip-killed"
       (Flag (fun p -> { p with skip_killed = true }))
       ~mirror:(mirrored "WINDTRAP_SKIP_KILLED")
@@ -576,12 +598,14 @@ let case_file ~cli ~(layered : parsed) =
    random root made a mutant that some cases kill flip from run to run. *)
 let mutation_seed = 0x6d7574616e747321L (* "mutants!" *)
 
-(* A line scope or a skip from the command line without [--mutate] would
-   scope nothing; one from a mirror reaches every stanza, and the stanzas that
-   do not mutate ignore it. *)
+(* A line scope, a rewrite filter or a skip from the command line without
+   [--mutate] would scope nothing; one from a mirror reaches every stanza, and
+   the stanzas that do not mutate ignore it. *)
 let line_scope ~cli ~layered =
   let given = Option.value layered.lines ~default:Lines.empty in
-  let scopes = [ "--lines"; "--diff"; "--skip-killed" ] in
+  let scopes =
+    [ "--lines"; "--diff"; "--rewrites"; "--skip-rewrites"; "--skip-killed" ]
+  in
   match List.find_opt (gave cli) scopes with
   | Some flag when not (gave layered "--mutate") ->
       Error (Requires (flag, "--mutate"))
@@ -601,6 +625,14 @@ let line_scope ~cli ~layered =
                      expected = "a readable file, the output of git diff -U0";
                    })))
 
+let rewrite_filter (layered : parsed) =
+  match (layered.rewrites, layered.skip_rewrites) with
+  | Some _, Some _ ->
+      Error (Incompatible_flags ("--rewrites", "--skip-rewrites"))
+  | Some names, None -> Ok (Run.Only_rewrites names)
+  | None, Some names -> Ok (Run.Skip_rewrites names)
+  | None, None -> Ok Run.Every_rewrite
+
 (* Every value arrived through its flag's parser, so nothing is range-checked
    here. [broadcast] keeps what the mirrors alone asked for: a mirror reaches
    every stanza of a project, and a stanza that cannot honour it is not in
@@ -608,6 +640,7 @@ let line_scope ~cli ~layered =
 let settings cli =
   let* layered = layer_entries entries cli in
   let* lines = line_scope ~cli ~layered in
+  let* rewrites = rewrite_filter layered in
   let mutates = gave layered "--mutate" || gave layered "--arm" in
   let* () =
     if gave cli "--mutate-workers" && not mutates then
@@ -653,7 +686,8 @@ let settings cli =
       mutation =
         (match c.mutation with
         | Run.Loop { prefixes; _ } ->
-            Run.Loop { prefixes; lines; skip_killed = layered.skip_killed }
+            Run.Loop
+              { prefixes; lines; rewrites; skip_killed = layered.skip_killed }
         | (Run.Armed _ | Run.No_mutation) as m -> m);
       mutate_workers = c.mutate_workers && mutates;
       mutate_retry = (if gave layered "--mutate" then c.mutate_retry else 0);

@@ -44,11 +44,12 @@ val execute_and_report :
     + It fixes the population, which is the catalogue of the executable
       ({!val:Windtrap_runtime.Mutate.catalogue}) narrowed to the scope, without
       the mutants that [[@mutate off]] dismisses. The scope ({!Run.scope}) is
-      the list of source-path prefixes that [--mutate] gave, and the lines of
-      [--lines] or [--diff]. A mutant is in scope when the list is empty, or
-      when one prefix is a prefix of its recorded file ([String.starts_with]),
-      and when it lies on those lines, if any. A mutant out of scope is neither
-      tested nor recorded.
+      the list of source-path prefixes that [--mutate] gave, the lines of
+      [--lines] or [--diff], and the rewrite filter of [--rewrites] or
+      [--skip-rewrites]. A mutant is in scope when the list is empty, or when
+      one prefix is a prefix of its recorded file ([String.starts_with]), when
+      it lies on those lines, if any, and when the filter keeps the rewrite of
+      its identifier. A mutant out of scope is neither tested nor recorded.
     + It runs the dry run, which is {!Report.run} with [Supervisor.execute] over
       [config] with [junit] cleared, its workers telling it which tests evaluate
       each mutant. Every other field is that of [config], [baseline] included,
@@ -308,8 +309,9 @@ val execute_and_report :
     - The dry run is refused at startup. {!Report.run} has said why.
     - No test ran in the dry run, or it is red.
     - The population is empty, unless the scope's lines name no line, or hold no
-      site of a file of the catalogue that they name. The loop then says so on
-      standard error and is [Ok] of its dry run, with no verdict file.
+      site that the rewrite filter keeps, of a file of the catalogue that they
+      name. The loop then says so on standard error and is [Ok] of its dry run,
+      with no verdict file.
     - The probe disagrees with the dry run, and the sentence names the tests
       that failed in it, or its worker ended early or passed its deadline or its
       memory limit. *)

@@ -63,6 +63,12 @@ type parsed = {
   diff : string option;
       (** [--diff FILE]: the path of a [git diff -U0] output, as typed. It is
           read by {!settings}. *)
+  rewrites : string list option;
+      (** [--rewrites NAME,…]: the names of the rewrites to test. Each is one of
+          [Windtrap_runtime.Mutate.rewrites], and the list is not empty. *)
+  skip_rewrites : string list option;
+      (** [--skip-rewrites NAME,…]: the names of the rewrites not to test, as
+          for [rewrites]. *)
   skip_killed : bool;  (** [--skip-killed]. *)
   case : string option;
       (** [--case PATH]: a path, read by {!settings}. It has no mirror. *)
@@ -99,12 +105,15 @@ type error =
           refused this way, with [expected = "no argument"]. *)
   | Incompatible_flags of string * string
       (** Both flags were given, and they contradict each other. The payload is
-          [("-u", "--corrected")] or [("--mutate", "--arm")], whatever spelling
-          or mirror carried them. *)
+          [("-u", "--corrected")], [("--mutate", "--arm")] or
+          [("--rewrites", "--skip-rewrites")], whatever spelling or mirror
+          carried them. *)
   | Requires of string * string
       (** The command line gave the first flag, which scopes the second, and no
           layer gave the second: [("--lines", "--mutate")],
-          [("--diff", "--mutate")] or [("--skip-killed", "--mutate")]. *)
+          [("--diff", "--mutate")], [("--rewrites", "--mutate")],
+          [("--skip-rewrites", "--mutate")] or [("--skip-killed", "--mutate")].
+      *)
   | Requires_any of string * string list
       (** The command line gave the flag, which acts only with one of the
           others, and no layer gave any of them:
@@ -159,12 +168,17 @@ val settings : parsed -> (Run.config, error) result
       {!Run.No_mutation}. The lines of the loop's scope are the union of [lines]
       and of what {!Lines.of_diff} reads in the file of [diff], whose relative
       path is made absolute as [-o]'s is. A file that cannot be read is
-      [Error (Invalid_value _)]. The [skip_killed] of the scope is [true] when a
-      layer gives [--skip-killed]. [lines], [diff] or [skip_killed] from the
+      [Error (Invalid_value _)]. The [rewrites] of the scope is
+      {!Run.Only_rewrites} of [rewrites], {!Run.Skip_rewrites} of
+      [skip_rewrites], or {!Run.Every_rewrite}. [rewrites] with [skip_rewrites]
+      is [Error (Incompatible_flags _)], whichever layer gave each. The
+      [skip_killed] of the scope is [true] when a layer gives [--skip-killed].
+      [lines], [diff], [rewrites], [skip_rewrites] or [skip_killed] from the
       command line without [mutate] is [Error (Requires _)]; from their mirrors
-      alone they are ignored. Both at once is [Error (Incompatible_flags _)],
-      whichever layer gave each, and it is checked after every mirror. A prefix
-      that spells a boolean cannot go through the variable.
+      alone they are ignored. [mutate] and [arm] at once is
+      [Error (Incompatible_flags _)], whichever layer gave each, and it is
+      checked after every mirror. A prefix that spells a boolean cannot go
+      through the variable.
     - [mutate_workers] is [true] when a layer gives [--mutate-workers] and a
       layer gives [--mutate] or [--arm]. [--mutate-workers] from the command
       line without them is [Error (Requires_any _)]. From its mirror alone it is
