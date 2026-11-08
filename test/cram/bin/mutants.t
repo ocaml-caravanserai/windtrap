@@ -1284,6 +1284,128 @@ document nor the exit code:
   [1]
   $ diff json shown
 
+The SARIF document
+
+--sarif writes the merge as one SARIF 2.1.0 document on standard output.
+A survivor is a warning, and an unknown mutant and a mutant that was not
+evaluated are notes. A killed mutant, a mutant that no test reached and
+the mutants of a refused suite give no result. The results keep the order
+of identifiers. A tree that dune subst did not substitute knows no
+version, but a release gives one in the driver, so the sessions drop that
+line. A column counts code points, so the two characters before the
+mutant of text.ml count one each. The column of and is after the end of
+its line, so its region gives only the lines:
+
+  $ plant "$scratch/sarif" && cd "$scratch/sarif"
+  $ printf 'let f x y = "\303\251\342\202\254" <> "" && x < y\n' > lib/text.ml
+  $ lt2='lib/text.ml:1:29:lt:x < y:x <= y'
+  $ or2='lib/util.ml:2:23:or:p || q:p && q'
+  $ mkdata mutants _build/_mutants/a.mutants "$add=survived:t/adds" \
+  >   "$sub=survived:t/subtracts;t/sub law" "$lt=killed" "$lt2=deadline:2" \
+  >   "$or=not_evaluated" "$or2=unreached" "$and=survived:t/ands"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=survived:u/adds" \
+  >   "$sub=unreached" "$lt=unreached" "$lt2=unreached" "$or=unreached" \
+  >   "$or2=unreached" "$and=unreached"
+  $ mkdata mutants _build/_mutants/c.mutants --refused "the suite is not deterministic" \
+  >   "$or2=unknown:it did not run"
+  $ sarif() {
+  >   run windtrap mutants --sarif "$@" > "$bin/shown"; code=$?
+  >   grep -v '^          "version": ' "$bin/shown"; return $code
+  > }
+  $ sarif
+  { "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+    "version": "2.1.0",
+    "runs": [
+      { "tool": {
+          "driver": {
+            "name": "windtrap",
+            "informationUri": "https://github.com/invariant-hq/windtrap",
+            "rules": [
+              { "id": "add",
+                "shortDescription": { "text": "mutant of the rewrite add" } },
+              { "id": "and",
+                "shortDescription": { "text": "mutant of the rewrite and" } },
+              { "id": "lt",
+                "shortDescription": { "text": "mutant of the rewrite lt" } },
+              { "id": "or",
+                "shortDescription": { "text": "mutant of the rewrite or" } },
+              { "id": "sub",
+                "shortDescription": { "text": "mutant of the rewrite sub" } } ] } },
+        "columnKind": "unicodeCodePoints",
+        "results": [
+          { "ruleId": "add", "ruleIndex": 0, "level": "warning",
+            "message": { "text": "mutant survived: a + b → a - b; 2 tests in 2 executables ran this line and none failed" },
+            "locations": [
+              { "physicalLocation": {
+                  "artifactLocation": { "uri": "lib/calc.ml" },
+                  "region": { "startLine": 1, "startColumn": 15, "endLine": 1, "endColumn": 20 } } } ] },
+          { "ruleId": "sub", "ruleIndex": 4, "level": "warning",
+            "message": { "text": "mutant survived: a - b → a + b; 2 tests ran this line and none failed" },
+            "locations": [
+              { "physicalLocation": {
+                  "artifactLocation": { "uri": "lib/calc.ml" },
+                  "region": { "startLine": 2, "startColumn": 15, "endLine": 2, "endColumn": 20 } } } ] },
+          { "ruleId": "lt", "ruleIndex": 2, "level": "note",
+            "message": { "text": "mutant unknown: x < y → x <= y; a.mutants: its run passed its deadline of 2.0s" },
+            "locations": [
+              { "physicalLocation": {
+                  "artifactLocation": { "uri": "lib/text.ml" },
+                  "region": { "startLine": 1, "startColumn": 27, "endLine": 1, "endColumn": 32 } } } ] },
+          { "ruleId": "or", "ruleIndex": 3, "level": "note",
+            "message": { "text": "mutant not evaluated: p || q → p && q" },
+            "locations": [
+              { "physicalLocation": {
+                  "artifactLocation": { "uri": "lib/util.ml" },
+                  "region": { "startLine": 1, "startColumn": 14, "endLine": 1, "endColumn": 20 } } } ] },
+          { "ruleId": "and", "ruleIndex": 1, "level": "warning",
+            "message": { "text": "mutant survived: p && q → p || q; 1 test ran this line and did not fail" },
+            "locations": [
+              { "physicalLocation": {
+                  "artifactLocation": { "uri": "lib/util.ml" },
+                  "region": { "startLine": 3, "endLine": 3 } } } ] } ] } ] }
+  [1]
+  $ cp "$bin/shown" sarif
+
+Under a line scope, only the mutants on the lines give results:
+
+  $ sarif --lines=lib/text.ml:1 | grep -A 1 '"ruleId"'
+          { "ruleId": "lt", "ruleIndex": 0, "level": "note",
+            "message": { "text": "mutant unknown: x < y → x <= y; a.mutants: its run passed its deadline of 2.0s" },
+
+--crash-kills counts the mutant past its deadline as killed, so it gives
+no result:
+
+  $ sarif --crash-kills | grep '"message"'
+            "message": { "text": "mutant survived: a + b → a - b; 2 tests in 2 executables ran this line and none failed" },
+            "message": { "text": "mutant survived: a - b → a + b; 2 tests ran this line and none failed" },
+            "message": { "text": "mutant not evaluated: p || q → p && q" },
+            "message": { "text": "mutant survived: p && q → p || q; 1 test ran this line and did not fail" },
+
+Under a gate the document is the same, the exit code is that of the gate,
+and the outcome line goes to standard error:
+
+  $ errs windtrap mutants --sarif --min 50
+  windtrap: mutants: 3 survived of 7 reached, 1 killed, 1 not evaluated, 2 unknown, 3 executables, 1 suite not mutation-tested, score 20.0% (1/5), minimum 50%: FAILED, reach 100.0% (7/7), total 20.0% (1/5)
+  [1]
+  $ diff sarif "$bin/out"
+
+A repeated --sarif is the same as one. --sarif with --json is a usage
+error, in either order:
+
+  $ run windtrap mutants --sarif --sarif > /dev/null
+  [1]
+  $ diff sarif "$bin/out"
+  $ run windtrap mutants --sarif --json
+  --- stderr
+  windtrap: options '--sarif' and '--json' cannot be combined
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  $ run windtrap mutants --json --sarif
+  --- stderr
+  windtrap: options '--json' and '--sarif' cannot be combined
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+
 Killed elsewhere
 
 A suite that ran with --skip-killed records a mutant that another suite

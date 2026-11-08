@@ -293,3 +293,8 @@
  (name test_choice)
  (modules test_choice)
  (libraries windtrap))
+
+(test
+ (name test_mutants_sarif)
+ (modules test_mutants_sarif)
+ (libraries windtrap mutants_sarif))
