@@ -3109,6 +3109,21 @@ let exact_kills () =
     (50. +. (50. *. low), 50. +. (50. *. high))
     (score_low, score_high)
 
+(* With no scored mutant, each judged mutant is killed or none is. *)
+let exact_bounds () =
+  let e =
+    require_some
+      (Sections.mutation_estimate
+         (sampled ~unreached:2 ~exact:50 ~killed:50 ~judged:2 ~sampled:0 ()))
+  in
+  equal
+    (pair
+       (option (float 1e-9))
+       (pair (pair (float 1e-9) (float 1e-9)) (pair (float 1e-9) (float 1e-9))))
+    (None, ((5000. /. 52., 100.), (5000. /. 54., 5200. /. 54.)))
+    (e.score, require_some e.bounds);
+  equal (pair (float 1e-9) (float 1e-9)) (5000. /. 52., 5000. /. 54.) e.lower
+
 let plan_gates min min_total = last_line (at_rest ?min ?min_total plan)
 
 let sample_rows =
@@ -3163,6 +3178,16 @@ let sample_rows =
        sampled, score 60.0% (5/25 and 50 killed elsewhere, 55.6% to 66.6%), \
        minimum 65% of the lower bound: FAILED, reach 100.0% (100/100), total \
        60.0% (55.6% to 66.6%)" );
+    ( "exact kills bound a sample of no scored mutant",
+      (fun () ->
+        last_line
+          (at_rest ~min:50. ~min_total:50.
+             (sampled ~exact:50 ~killed:50 ~judged:2 ~sampled:0 ()))),
+      "mutants: 52 reached by this suite, 50 killed, 2 not sampled, score: no \
+       scored mutant in the sample (50 killed elsewhere, at least 96.2%), \
+       minimum 50% of the lower bound: ok, reach 100.0% (52/52), total: no \
+       scored mutant in the sample (at least 96.2%), minimum 50% of the lower \
+       bound: ok" );
     ( "a mutant that --crash-kills counts is a kill of the sample",
       (fun () ->
         last_line
@@ -3488,6 +3513,7 @@ let mutation_group =
         wilson_holds_the_fraction;
       test "the bounds of a sample, of the score and of the total" sample_bounds;
       test "an exact kill joins the estimate as it is" exact_kills;
+      test "exact kills bound a sample of no scored mutant" exact_bounds;
       cases "the outcome line under a sample"
         ~id:(fun (name, _, _) -> name)
         sample_rows

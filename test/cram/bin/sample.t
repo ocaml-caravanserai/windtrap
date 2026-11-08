@@ -217,3 +217,17 @@ scored mutant, beside an interval of 0 to 100:
       "reach_percent": 100.00, "total_percent": null,
       "score_low": 0.00, "score_high": 100.00,
       "total_low": 0.00, "total_high": 100.00 },
+
+With exact kills, a sample of no scored mutant has a lower bound: each
+mutant that the hash judged can be a survivor:
+
+  $ specs() { for i in $(seq "$2" "$3"); do echo "lib/x.ml:$i:0:add:a+b:a-b=$1"; done; }
+  $ "$bin/mkdata.exe" mutants x.mutants --suite x --sample 50 42 \
+  >   $(specs elsewhere:default/gone.exe 1 50) $(specs not_sampled 51 52)
+  $ run windtrap mutants --min=50 x.mutants | grep '^mutants:'
+  mutants: 52 reached, 50 killed, 2 not sampled, 1 executable, score: no scored mutant in the sample (50 killed elsewhere, at least 96.2%), minimum 50% of the lower bound: ok, reach 100.0% (52/52)
+  $ run windtrap mutants --json x.mutants | grep -E '"(score|total_percent|score_low|total_low)"'
+      "unreached": 0, "refused": 0, "score": null,
+      "reach_percent": 100.00, "total_percent": null,
+      "score_low": 96.15, "score_high": 100.00,
+      "total_low": 96.15, "total_high": 100.00 },

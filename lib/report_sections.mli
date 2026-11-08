@@ -661,15 +661,20 @@ type estimate = {
       *)
   bounds : ((float * float) * (float * float)) option;
       (** Under a [Uniform] sample, the interval of the score and the interval
-          of the total, as percentages. Each is [(0., 100.)] when [n] is [0]. It
-          is [None] under a [Mixed] sample. *)
+          of the total, as percentages. When [n] is [0], each judged mutant can
+          be killed or not: the score is from [x / (x + judged)] to [100.], and
+          the total from [x / (x + judged + u)] to
+          [(x + judged) / (x + judged + u)]. It is [None] under a [Mixed]
+          sample. *)
   lower : float * float;
       (** What the gates [min] and [min_total] compare: the lower bounds of
           [bounds]. Under a [Mixed] sample, the bounds that are always true:
           each mutant out of a sample counts as survived, so the score is the
           killed mutants among the scored mutants and [not_sampled], and the
           total adds the mutants that no test reached and those evaluated
-          outside tests. The two are [0.] when [n] is [0]. *)
+          outside tests. When [n] is [0], under each sample, they are
+          [x / (x + judged)] and [x / (x + judged + u)], thus [0.] when [x] is
+          [0]. *)
 }
 (** The type for the estimates of a sample. *)
 
@@ -744,11 +749,15 @@ val mutation_line : gates:gates -> mutation -> span list
     estimate with its interval, as in [score 70.0% (70/100, 63.4% to 75.9%)] and
     [total 63.5% (57.5% to 68.8%)]. A [Mixed] sample gives the bound of [lower],
     as in [score 70.0% (70/100, at least 35.9%)] and
-    [total 63.5% (at least 32.6%)]. With no scored mutant, the score is
-    [no scored mutant], and the total is [total: no scored mutant] under its
-    gate and absent without it. A gate on the two names the bound, as in
+    [total 63.5% (at least 32.6%)]. A gate on the two names the bound, as in
     [minimum 65% of the lower bound: FAILED], and the bound decides the style
-    and the result. *)
+    and the result.
+
+    With no scored mutant, the score is [no scored mutant], and the total is
+    [total: no scored mutant] under its gate and absent without it. When [x] is
+    above [0], the two give [x] and the lower bound, as in
+    [score: no scored mutant in the sample (50 killed elsewhere, at least
+     96.2%)] and [total: no scored mutant in the sample (at least 96.2%)]. *)
 
 val reaching_sentence : witness list -> string option
 (** [reaching_sentence ws] is the sentence that counts the reaching tests [ws],

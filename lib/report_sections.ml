@@ -1775,6 +1775,12 @@ let mutation_estimate (m : mutation) =
       let uniform = match sample with Uniform _ -> true | Mixed _ -> false in
       let k = killed m - exact and n = scored m - exact in
       if n = 0 then
+        (* Each judged mutant is killed, or none is. *)
+        let x = float_of_int exact
+        and e = float_of_int judged
+        and u = float_of_int (unreached_count m) in
+        let low = 100. *. x /. (x +. e)
+        and total_low = 100. *. x /. (x +. e +. u) in
         Some
           {
             sampled_killed = k;
@@ -1782,8 +1788,12 @@ let mutation_estimate (m : mutation) =
             exact;
             score = None;
             total = None;
-            bounds = (if uniform then Some ((0., 100.), (0., 100.)) else None);
-            lower = (0., 0.);
+            bounds =
+              (if uniform then
+                 Some
+                   ((low, 100.), (total_low, 100. *. (x +. e) /. (x +. e +. u)))
+               else None);
+            lower = (low, total_low);
           }
       else
         let population =
@@ -1960,7 +1970,15 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
               | None ->
                   ( strf "score %.1f%% (%s, at least %.1f%%)" score counts low,
                     strf "total %.1f%% (at least %.1f%%)" total total_low ))
-          | None, _ | _, None -> ("no scored mutant", "total: no scored mutant")
+          | (None, _ | _, None) when e.exact = 0 ->
+              ("no scored mutant", "total: no scored mutant")
+          | None, _ | _, None ->
+              ( strf
+                  "score: no scored mutant in the sample (%d killed elsewhere, \
+                   at least %.1f%%)"
+                  e.exact low,
+                strf "total: no scored mutant in the sample (at least %.1f%%)"
+                  total_low )
         in
         ( estimate ~text:(fst texts) ~low ~min:g.min,
           if Option.is_none e.score && Option.is_none g.min_total then []
