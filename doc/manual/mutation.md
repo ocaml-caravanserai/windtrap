@@ -286,10 +286,11 @@ A mutant whose run ends before its tests do is unknown, and so is no
 survivor. The run ends early when the process crashes or exits, or
 passes its deadline (taken from the dry run) or its memory limit. The
 report lists it under `unknown` with the reason and an `arm:` command,
-which runs the suite with it armed and shows what happens. A mutant whose run does not evaluate
-its site, as when an earlier test that its run leaves out
-decided whether the site runs, is not evaluated and is no survivor
-either, listed under `not evaluated` with its `arm:` command.
+which runs the suite with it armed and shows what happens. A mutant
+whose run does not evaluate its site, as when an earlier test that its
+run leaves out decided whether the site runs, is not evaluated and is
+no survivor either, listed under `not evaluated` with its `arm:`
+command.
 
 A mutant can also make its run take memory with no limit, for example
 when it removes the step of a loop that builds a list. On Linux, the

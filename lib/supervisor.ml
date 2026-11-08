@@ -1343,17 +1343,19 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
      worker that finishes its job is not stopped: its deadline bounds it. *)
   let memory_step = 0.25 in
   let limit_kb = config.mutate_memory * 1024 in
+  let over_limit st =
+    st.memory_read <- Os.counter ();
+    match Os.memory_of_pid st.w.pid with
+    | Some m -> m.resident_kb > limit_kb
+    | None -> false
+  in
   let outgrown st =
     Os.count_s st.memory_read >= memory_step
     && (not (st.finishing && st.pending = []))
     && (match Unix.select [ st.w.reports ] [] [] 0. with
       | [], _, _ -> true
       | _ :: _, _, _ | (exception Unix.Unix_error _) -> false)
-    &&
-    (st.memory_read <- Os.counter ();
-     match Os.memory_of_pid st.w.pid with
-     | Some m -> m.resident_kb > limit_kb
-     | None -> false)
+    && over_limit st
   in
   let rec deliver () =
     if !delivered < n then
@@ -1412,7 +1414,7 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
                 (* A worker that reports at each turn gets its read too. *)
                 if List.memq st !running && outgrown st then
                   cut st (Outgrown config.mutate_memory)
-                else if (not reported) && ready = [] then
+                else if ready = [] then
                   match reap ~flags:[ Unix.WNOHANG ] st.w with
                   | Some _ -> dead st
                   | None -> ()
