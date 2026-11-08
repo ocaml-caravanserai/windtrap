@@ -5039,6 +5039,16 @@ let unlocated () =
   let r1 = rerun ~env [ mutate ] in
   equal string "exited 0" r1.status;
   equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 killed";
+         "subject.ml:18 survived by unlocated \u{203a} widen is nonzero";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r1);
+  equal
     (option (list (pair (list string) string)))
     (Some [])
     (Option.map (fun (f : file) -> f.digests) r1.file);
@@ -5079,14 +5089,18 @@ let other_settings () =
 
 let retry_once = "--mutate-retry=1"
 
+(* The records of the first run have no retry. Its memory records show the
+   check of the kill of line 15. *)
 let retries () =
   ignore (first_run ());
-  let r = second_run ~args:[ retry_once ] () in
-  as_green 0 r;
+  let checked =
+    rerun ~env:[ (memory_var, "1") ] [ mutate; incremental; retry_once ]
+  in
+  as_green 0 { checked with err = without_memory checked.err };
   equal
     (option (list string))
     (efforts_of ~rest:"retries 1 pass 1" "retries 1 pass 1" "retries 1 pass 2")
-    (efforts r);
+    (efforts checked);
   let r =
     after_rewrite ~args:[ retry_once ] (effort_at 18 ~retries:2 ~pass:3)
   in
@@ -5100,9 +5114,14 @@ let retries () =
     after_rewrite ~args:[ "--mutate-retry=2" ] (effort_at 15 ~retries:1 ~pass:1)
   in
   as_green 1 r;
-  equal (option (list string)) (marked "reused" "fresh") (marks r)
+  equal (option (list string)) (marked "reused" "fresh") (marks r);
+  is_true
+    (List.exists
+       (fun record -> String.equal record.point "check-1")
+       (records_of checked))
 
-(* A kill of a retry needs a run with as many retries. *)
+(* A kill of the k-th retry is reused only by a run with k retries or more.
+   Line 15 has a kill of the first retry. *)
 let kill_of_a_retry () =
   let r = after_rewrite (effort_at 15 ~retries:1 ~pass:2) in
   as_green 1 r;
@@ -5149,7 +5168,42 @@ let other_settings_at line =
   on_line line (fun r ->
       { r with effort = { r.effort with settings = String.make 32 '0' } })
 
+(* In [held], lines 15 and 18 survive, and the job of line 18 waits at the
+   gate. While it waits, the file of the last run gets a kill on line 15, so
+   the save gives the reused survivor of line 15 a previous kill. *)
+let previous_kill () =
+  let dir = temp_dir () in
+  let began = Filename.concat dir "began"
+  and gate = Filename.concat dir "gate" in
+  let env = [ suite "held" ] in
+  remove (verdicts_path ());
+  equal string "exited 0" (rerun ~env [ mutate ]).status;
+  rewrite (other_settings_at 18);
+  let run =
+    start
+      ~env:(env @ [ ("MUTATE_STARTED", began); ("MUTATE_GATE", gate) ])
+      [ mutate; incremental ]
+  in
+  await ~what:"the start of the job of line 18" run began;
+  rewrite (at_line 15 (Verdicts.killed []));
+  write gate "";
+  let r = finish run in
+  equal string "exited 0" r.status;
+  equal (option (list string)) (marked "reused" "fresh") (marks r);
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 killed";
+         "subject.ml:18 survived";
+         "subject.ml:21 none";
+         "subject.ml:27 none";
+       ])
+    (previous_rows r);
+  equal (option (list string)) None (unstable r.out)
+
 let not_unstable () =
+  previous_kill ();
   ignore (first_run ());
   rewrite (at_line 15 (Verdicts.survived [ positives; to_zero; negatives ]));
   let r = second_run () in
@@ -5303,7 +5357,11 @@ let probe_stopped () =
   let r = finish run in
   equal string "killed by SIGINT" r.status;
   equal (option string) (Some (reused_line 0)) (reused_of r.out);
-  equal text planted (read (verdicts_path ()))
+  equal text planted (read (verdicts_path ()));
+  let r = rerun ~env [ mutate; incremental ] in
+  equal string "exited 0" r.status;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  is_true (List.mem "subject.ml:15 reused" (Option.get (marks r)))
 
 let incremental_reuse =
   group "Incremental reuse"
@@ -5331,7 +5389,8 @@ let incremental_reuse =
         not_reusable not_reused;
       test "other settings or another seed stop the reuse" other_settings;
       test "the retries of the record must cover the retries of the run" retries;
-      test "a kill of a retry needs a run with as many retries" kill_of_a_retry;
+      test "a kill of the k-th retry needs a run with at least k retries"
+        kill_of_a_retry;
       test
         "runs with 0, 1, 1, 2 and 0 retries reuse 0, 0, 2, 1 and 2 verdicts, \
          and keep the effort of the run that tested"
@@ -5343,8 +5402,8 @@ let incremental_reuse =
          same survivor"
         reused_in_order;
       test
-        "a reused verdict is not unstable, and the next full run lists its \
-         change"
+        "a reused verdict is not unstable, also after another previous \
+         outcome, and the next full run lists its change"
         not_unstable;
       test
         "no file, a file of the format before, a corrupt, a refused file and a \
@@ -5354,7 +5413,10 @@ let incremental_reuse =
       test "the skip of --skip-killed comes before the reuse" skip_then_reuse;
       test "a narrowed run reuses and saves nothing" narrowed_reuse;
       test "-j 2 reuses the survivor" two_jobs;
-      test "a signal during the probe commits no reused verdict" probe_stopped;
+      test
+        "a signal during the probe commits no reused verdict, and the same run \
+         without the signal reuses the survivor"
+        probe_stopped;
     ]
 
 (* Evidence *)
