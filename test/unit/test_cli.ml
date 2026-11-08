@@ -86,6 +86,10 @@ let flags (p : Cli.parsed) =
         | Run.Loop { prefixes; _ } -> [ "mutate " ^ words prefixes ]
         | Run.Armed id -> [ "arm " ^ id ]
         | Run.No_mutation -> []);
+        (match p.rewrites with
+        | Run.Every_rewrite -> []
+        | Run.Only_rewrites names -> [ "rewrites " ^ words names ]
+        | Run.Skip_rewrites names -> [ "skip_rewrites " ^ words names ]);
         bool "skip_killed" p.skip_killed;
         bool "mutate_workers" c.mutate_workers;
         some "--mutate-retry" "mutate_retry" string_of_int c.mutate_retry;
@@ -108,11 +112,15 @@ let parsed args = parsed_argv (Array.of_list ("windtrap-test" :: args))
 
 let mutation_name = function
   | Run.No_mutation -> "none"
-  | Run.Loop { prefixes; lines; skip_killed } ->
-      strf "loop %s%s%s" (words prefixes)
+  | Run.Loop { prefixes; lines; rewrites; skip_killed } ->
+      strf "loop %s%s%s%s" (words prefixes)
         (Option.fold ~none:""
            ~some:(fun l -> " lines " ^ Lines.to_string l)
            lines)
+        (match rewrites with
+        | Run.Every_rewrite -> ""
+        | Run.Only_rewrites names -> " rewrites " ^ words names
+        | Run.Skip_rewrites names -> " skip_rewrites " ^ words names)
         (if skip_killed then " skip_killed" else "")
   | Run.Armed id -> "armed " ^ id
 
@@ -273,6 +281,9 @@ let mirrors =
           ("WINDTRAP_PROP_COUNT", "--prop-count", "1O0");
           ("WINDTRAP_JOBS", "--jobs", "0");
           ("WINDTRAP_COLOR", "--color", "sometimes");
+          ("WINDTRAP_REWRITES", "--rewrites", "nope");
+          ("WINDTRAP_REWRITES", "--rewrites", ",");
+          ("WINDTRAP_SKIP_REWRITES", "--skip-rewrites", "add,nope");
         ]
         refused_alike;
       mirror_rows "a mirror set to the empty string counts as unset"
@@ -437,6 +448,27 @@ let messages () =
     invalid value '0' for WINDTRAP_PROP_COUNT: expected a positive integer
     |}
 
+let rewrite_messages () =
+  let refused =
+    [
+      require_error (parse [ "--rewrites=dell" ]);
+      require_error (parse [ "--skip-rewrites=" ]);
+      require_error
+        (settings ~env:[ ("WINDTRAP_REWRITES", "add,x") ] (unflagged ()));
+      Cli.Incompatible_flags ("--rewrites", "--skip-rewrites");
+      Cli.Requires ("--rewrites", "--mutate");
+    ]
+  in
+  expect (String.concat "\n" (List.map Cli.error_message refused))
+  @@ __POS_OF__
+       {|
+    invalid value 'dell' for --rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+    invalid value '' for --skip-rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+    invalid value 'add,x' for WINDTRAP_REWRITES: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+    options '--rewrites' and '--skip-rewrites' cannot be combined
+    option '--rewrites' scopes '--mutate', which is not given
+    |}
+
 let suggestion flag =
   match
     String.split_on_char '\'' (Cli.error_message (Cli.Unknown_flag flag))
@@ -449,6 +481,10 @@ let errors =
     [
       test "error_message is one sentence that names the flag or the variable"
         messages;
+      test
+        "a refused rewrite name gives the names of Mutate.rewrites, in their \
+         order"
+        rewrite_messages;
       cases
         "an unknown long flag's message suggests the nearest long flag when \
          one is near"
@@ -598,6 +634,11 @@ let parsing =
           ([ "--crash-kills=1" ], {|invalid --crash-kills "1"|});
           ([ "--incremental" ], "incremental");
           ([ "--incremental=1" ], {|invalid --incremental "1"|});
+          ([ "--rewrites"; "del" ], "rewrites [del]");
+          ([ "--rewrites=del, int" ], "rewrites [del; int]");
+          ([ "--skip-rewrites"; "add,sub" ], "skip_rewrites [add; sub]");
+          ([ "--skip-rewrites=tail" ], "skip_rewrites [tail]");
+          ([ "--rewrites=int,del,int, del" ], "rewrites [int; del]");
           ([ "-h" ], "help");
           ([ "--help" ], "help");
           ([ "-V" ], "version");
@@ -620,6 +661,9 @@ let parsing =
             "filter [first; second], exclude [x; y]" );
           ( [ "--tag=a"; "--exclude-tag=b"; "--tag=c" ],
             "tags [a; c], exclude_tags [b]" );
+          ([ "--rewrites=del"; "--rewrites=int" ], "rewrites [int]");
+          ( [ "--skip-rewrites=add"; "--skip-rewrites"; "sub,not" ],
+            "skip_rewrites [sub; not]" );
         ];
       parse_rows
         "an argument of two bytes or more that starts with - is a flag, \
@@ -700,6 +744,12 @@ let parsing =
           ("--mutate-memory", "-5");
           ("--mutate-memory", "lots");
           ("--mutate-memory", "1048577");
+          ("--rewrites", "");
+          ("--rewrites", ",");
+          ("--rewrites", "dell");
+          ("--rewrites", "del,Del");
+          ("--skip-rewrites", "");
+          ("--skip-rewrites", "keep");
         ]
         refused_value;
       parse_rows "parse is the first error from the left"
@@ -946,6 +996,69 @@ let resolution =
           ( [ ("WINDTRAP_SKIP_KILLED", "1") ],
             [ "--arm"; "lib/a.ml:9:12:add" ],
             "mutation armed lib/a.ml:9:12:add" );
+        ];
+      resolve_rows
+        "--rewrites or its mirror filters the rewrites of the loop, and needs \
+         --mutate on the command line"
+        [
+          ( [],
+            [ "--mutate"; "--rewrites=del,int" ],
+            "mutation loop [] rewrites [del; int]" );
+          ( [ ("WINDTRAP_REWRITES", " sub ") ],
+            [ "--mutate=lib/"; "--lines=lib/a.ml:3" ],
+            "mutation loop [lib/] lines lib/a.ml:3 rewrites [sub]" );
+          ( [ ("WINDTRAP_REWRITES", "sub") ],
+            [ "--mutate"; "--rewrites=add" ],
+            "mutation loop [] rewrites [add]" );
+          ( [ ("WINDTRAP_MUTATE", "1") ],
+            [ "--rewrites=not" ],
+            "mutation loop [] rewrites [not], broadcast mutate" );
+          ([], [ "--rewrites=del" ], "--rewrites requires --mutate");
+          ( [],
+            [ "--arm"; "lib/a.ml:9:12:add"; "--rewrites=add" ],
+            "--rewrites requires --mutate" );
+          ([ ("WINDTRAP_REWRITES", "del") ], [], "defaults");
+          ( [ ("WINDTRAP_REWRITES", "del") ],
+            [ "--arm"; "lib/a.ml:9:12:add" ],
+            "mutation armed lib/a.ml:9:12:add" );
+          ( [ ("WINDTRAP_REWRITES", "dell") ],
+            [ "--mutate" ],
+            {|invalid WINDTRAP_REWRITES "dell"|} );
+        ];
+      resolve_rows
+        "--skip-rewrites or its mirror filters the rewrites of the loop, and \
+         needs --mutate on the command line"
+        [
+          ( [],
+            [ "--mutate"; "--skip-rewrites=del" ],
+            "mutation loop [] skip_rewrites [del]" );
+          ( [ ("WINDTRAP_SKIP_REWRITES", "add, sub") ],
+            [ "--mutate"; "--skip-killed" ],
+            "mutation loop [] skip_rewrites [add; sub] skip_killed" );
+          ( [ ("WINDTRAP_MUTATE", "1") ],
+            [ "--skip-rewrites=not" ],
+            "mutation loop [] skip_rewrites [not], broadcast mutate" );
+          ([], [ "--skip-rewrites=del" ], "--skip-rewrites requires --mutate");
+          ([ ("WINDTRAP_SKIP_REWRITES", "del") ], [], "defaults");
+          ( [ ("WINDTRAP_SKIP_REWRITES", "") ],
+            [ "--mutate" ],
+            "mutation loop []" );
+        ];
+      resolve_rows
+        "--rewrites with --skip-rewrites is refused, whichever layer gave each"
+        [
+          ( [],
+            [ "--mutate"; "--rewrites=del"; "--skip-rewrites=add" ],
+            "incompatible --rewrites --skip-rewrites" );
+          ( [ ("WINDTRAP_SKIP_REWRITES", "add") ],
+            [ "--mutate"; "--rewrites=del" ],
+            "incompatible --rewrites --skip-rewrites" );
+          ( [ ("WINDTRAP_REWRITES", "del"); ("WINDTRAP_SKIP_REWRITES", "add") ],
+            [ "--mutate" ],
+            "incompatible --rewrites --skip-rewrites" );
+          ( [],
+            [ "--rewrites=del"; "--skip-rewrites=add" ],
+            "--rewrites requires --mutate" );
         ];
       resolve_rows
         "--mutate-workers or its mirror sets mutate_workers under --mutate or \
