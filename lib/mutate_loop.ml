@@ -353,12 +353,11 @@ let killing_test ran =
 (* [Some by] when the mutant was killed, where [by] is its killing test, or
    [[]] for a kill by a fixture release. *)
 let killed_by (ran : Supervisor.ran) =
-  match caused ran with
+  match killing_test ran with
+  | Some test -> Some [ test ]
+  | None when Option.is_some (caused ran) && ran.release_failures <> [] ->
+      Some []
   | None -> None
-  | Some results ->
-      if ran.release_failures <> [] || List.exists kills results then
-        Some (Option.to_list (killing_test ran))
-      else None
 
 (* The runs of the check of a kill, at most. *)
 let check_runs = 3

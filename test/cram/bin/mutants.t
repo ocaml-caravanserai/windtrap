@@ -198,7 +198,7 @@ read as the others' survivors; the merge then exits 1:
   $ plant "$scratch/unknown" && cd "$scratch/unknown"
   $ mkdata mutants _build/_mutants/a.mutants "$add=killed" "$sub=survived:cli/runs" \
   >   "$lt=survived:cli/compares"
-  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=unknown:its run was killed by SIGSEGV"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=crashed:was killed by SIGSEGV"
   $ run windtrap mutants
   ───────────────────── survivors (1) ──────────────────────
   File "lib/calc.ml", line 3, characters 14-19:
@@ -220,7 +220,7 @@ read as the others' survivors; the merge then exits 1:
   mutants: 1 survived of 3 reached, 1 killed, 1 unknown, 2 executables, score 50.0% (1/2)
   [1]
   $ mkdata mutants _build/_mutants/a.mutants "$add=killed" "$sub=survived:cli/runs"
-  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=unknown:its run was killed by SIGSEGV"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=crashed:was killed by SIGSEGV"
   $ run windtrap mutants
   ────────────────────── unknown (1) ───────────────────────
   File "lib/calc.ml", line 2, characters 14-19:
@@ -486,7 +486,7 @@ suite:
   $ mkdir -p _build/default/test && echo 'three suites' > _build/default/test/t.exe
   $ mkdata mutants _build/_mutants/adds.mutants --exe _build/default/test/t.exe --suite adds \
   >   "$add=killed" "$sub=survived:sub/reaches" "$or=survived:a/same" \
-  >   "$and=unknown:its run was killed by SIGSEGV"
+  >   "$and=crashed:was killed by SIGSEGV"
   $ mkdata mutants _build/_mutants/subs.mutants --exe _build/default/test/t.exe --suite subs \
   >   "$add=survived:add/reaches" "$sub=killed" "$or=survived:a/same;a/other"
   $ mkdata mutants _build/_mutants/lts.mutants --exe _build/default/test/t.exe --suite lts \
@@ -881,9 +881,9 @@ every test, have their verdicts and no tests:
         "verdict": "outside_tests" } ],
     "unstable": [ ] }
 
-An unknown mutant has the reason, its kind and the index of the file that the report
-names. Each executable has its suite and the reason why its suite was
-refused, or null:
+An unknown mutant has the reason, its kind and the index of the file
+that the report names. Each executable has its suite and the reason
+why its suite was refused, or null:
 
   $ cd "$scratch/suites"
   $ run windtrap mutants --json
@@ -928,7 +928,7 @@ refused, or null:
         "end_line": 3, "end_col": 28,
         "before": "p && q", "after": "p || q",
         "verdict": "unknown", "executable": 0,
-        "reason": "its run was killed by SIGSEGV", "reason_kind": "other" } ],
+        "reason": "its run was killed by SIGSEGV", "reason_kind": "crashed" } ],
     "unstable": [ ] }
   [1]
 

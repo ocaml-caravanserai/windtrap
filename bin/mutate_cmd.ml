@@ -686,31 +686,23 @@ let json files merged (m : Sections.mutation) =
     strf "\n        { \"executable\": %d, \"test\": [%s] }" i
       (String.concat ", " (List.map string path))
   in
+  (* The tests of [id] in each file of [per_file], as the array [key]. *)
+  let tests key per_file id =
+    let tests =
+      List.concat_map
+        (fun (i, of_file) ->
+          match Ids.find_opt id of_file with
+          | Some tests -> List.map (fun test -> (i, test)) tests
+          | None -> [])
+        per_file
+    in
+    strf ",\n      \"%s\": [%s ]" key (String.concat "," (List.map test tests))
+  in
   let details (r : Verdicts.record) =
     let id = Mutate.id_to_string r.id in
     match r.verdict with
-    | Survived _ ->
-        let tests =
-          List.concat_map
-            (fun (i, survived) ->
-              match Ids.find_opt id survived with
-              | Some tests -> List.map (fun test -> (i, test)) tests
-              | None -> [])
-            survivals
-        in
-        strf ",\n      \"tests\": [%s ]"
-          (String.concat "," (List.map test tests))
-    | Killed _ | Killed_elsewhere _ ->
-        let tests =
-          List.concat_map
-            (fun (i, killed) ->
-              match Ids.find_opt id killed with
-              | Some tests -> List.map (fun test -> (i, test)) tests
-              | None -> [])
-            kills
-        in
-        strf ",\n      \"killed_by\": [%s ]"
-          (String.concat "," (List.map test tests))
+    | Survived _ -> tests "tests" survivals id
+    | Killed _ | Killed_elsewhere _ -> tests "killed_by" kills id
     | Unknown _ ->
         let f, reason = unknown_in files ~verdict_in id in
         strf ", \"executable\": %d,\n      \"reason\": %s, \"reason_kind\": %s"

@@ -14,10 +14,10 @@
    mkdata mutants OUT [--exe EXE] [--suite NAME] [--refused REASON]
        FILE:LINE:COL:REWRITE:BEFORE:AFTER=VERDICT...
      VERDICT is killed, killed:TESTS, elsewhere:EXE, not_evaluated,
-     outside_tests, unreached, unknown:REASON or survived:TESTS, where EXE is
-     the identity of the killing executable and TESTS are ';'-separated paths
-     of '/'-separated names. A plain kill names no test, and REASON is a
-     reason of the kind other.
+     outside_tests, unreached, unknown:REASON, crashed:HOW or survived:TESTS,
+     where EXE is the identity of the killing executable and TESTS are
+     ';'-separated paths of '/'-separated names. A plain kill names no test.
+     REASON is a reason of the kind other, and HOW the phrase of a crash.
      VERDICT@PREVIOUS gives the record the previous outcome PREVIOUS:
      killed, survived or not_evaluated. --suite records the suite. No record
      has a source digest.
@@ -78,6 +78,9 @@ let verdict = function
   | "unreached" -> Verdicts.Unreached
   | v when String.starts_with ~prefix:"unknown:" v ->
       Verdicts.Unknown (Other (String.sub v 8 (String.length v - 8)))
+  | v when String.starts_with ~prefix:"crashed:" v ->
+      let how = String.sub v 8 (String.length v - 8) in
+      Verdicts.Unknown (Crashed { signal = None; status = None; how })
   | v -> (
       match String.split_on_char ':' v with
       | [ "survived"; tests ] -> Verdicts.survived (tests_of tests)

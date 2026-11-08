@@ -4026,7 +4026,11 @@ let clean_check () =
   ended_well k.r;
   equal string killed_outcome (outcome k.r.out);
   equal int 6 k.b_runs;
-  equal (option (list string)) (intermittent_rows "killed") (rows k.r)
+  equal (option (list string)) (intermittent_rows "killed") (rows k.r);
+  equal
+    (option (list string))
+    (Some [ strf "subject.ml:18 killed by %s" b ])
+    (kills k.r)
 
 let first_failing_run_stops () =
   let k = kill_run ~env:[ fail_at "3,4" ] [ retry_once ] in
