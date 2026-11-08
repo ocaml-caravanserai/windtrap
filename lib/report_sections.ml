@@ -1812,14 +1812,13 @@ let mutation_lower m =
   | None, (Some (Uniform _ | Mixed _) | None), _ ->
       (mutation_score m, mutation_total m)
 
-let sample_line (m : mutation) =
-  match m.sample with
-  | Some (Uniform { percent; seed; _ }) ->
+let sample_line = function
+  | Uniform { percent; seed; _ } ->
       Some
         (strf "sample: %s%% of the reached mutants, seed %s"
            (Pp.to_string Pp.decimal percent)
            (Seed.to_string seed))
-  | Some (Mixed _) | None -> None
+  | Mixed _ -> None
 
 type gates = {
   min : float option;

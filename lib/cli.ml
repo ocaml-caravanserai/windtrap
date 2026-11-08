@@ -25,6 +25,7 @@ type parsed = {
   diff : string option;
   rewrites : Run.rewrite_filter;
   skip_killed : bool;
+  sample : float option;
   case : string option;
   list_only : bool;
   help : bool;
@@ -39,6 +40,7 @@ let start () =
     diff = None;
     rewrites = Run.Every_rewrite;
     skip_killed = false;
+    sample = None;
     case = None;
     list_only = false;
     help = false;
@@ -168,6 +170,13 @@ let rewrite_names value =
   | _ ->
       Error
         ("a comma-separated list of the rewrites " ^ String.concat ", " rewrites)
+
+(* A sample of 100% is no sample. *)
+let sample_percent value =
+  match float_of_string_opt value with
+  | Some p when Float.is_finite p && p > 0. && p <= 100. ->
+      Ok (if p >= 100. then None else Some p)
+  | Some _ | None -> Error "a percentage above 0 and at most 100"
 
 let replay_token value = Result.map (fun _ -> value) (Choice.of_token value)
 
@@ -347,6 +356,11 @@ let entries =
       ~mirror:(mirrored "WINDTRAP_SKIP_KILLED")
       "Skip the mutants that the verdict file of another suite killed (with \
        --mutate).";
+    row "--sample"
+      (value "PCT" sample_percent (fun p sample -> { p with sample }))
+      ~mirror:(mirrored "WINDTRAP_SAMPLE")
+      "Test only a fixed part of PCT percent of the reached mutants, and give \
+       the score and the total as estimates with an interval (with --mutate).";
     row "--incremental"
       (switch (fun c -> { c with incremental = true }))
       ~mirror:(mirrored "WINDTRAP_INCREMENTAL")
@@ -597,14 +611,22 @@ let case_file ~cli ~(layered : parsed) =
    random root made a mutant that some cases kill flip from run to run. *)
 let mutation_seed = 0x6d7574616e747321L (* "mutants!" *)
 
-(* A line scope, a rewrite filter or a skip from the command line without
-   [--mutate] would scope nothing; one from a mirror reaches every stanza, and
-   the stanzas that do not mutate ignore it. A value that its parser refuses,
-   and the two filters together, stay errors in each stanza. *)
+(* A line scope, a rewrite filter, a skip or a sample from the command line
+   without [--mutate] would scope nothing; one from a mirror reaches every
+   stanza, and the stanzas that do not mutate ignore it. A value that its
+   parser refuses, and the two filters together, stay errors in each
+   stanza. *)
 let line_scope ~cli ~layered =
   let given = Option.value layered.lines ~default:Lines.empty in
   let scopes =
-    [ "--lines"; "--diff"; "--rewrites"; "--skip-rewrites"; "--skip-killed" ]
+    [
+      "--lines";
+      "--diff";
+      "--rewrites";
+      "--skip-rewrites";
+      "--skip-killed";
+      "--sample";
+    ]
   in
   match List.find_opt (gave cli) scopes with
   | Some flag when not (gave layered "--mutate") ->
@@ -672,19 +694,27 @@ let settings cli =
   let* case_file = case_file ~cli ~layered in
   let c = layered.config in
   let path long = absolute_path ~cli long in
+  let seed =
+    match c.mutation with
+    | (Run.Loop _ | Run.Armed _) when not (gave layered "--seed") ->
+        mutation_seed
+    | Run.Loop _ | Run.Armed _ | Run.No_mutation -> c.seed
+  in
   Ok
     {
       c with
-      seed =
-        (match c.mutation with
-        | (Run.Loop _ | Run.Armed _) when not (gave layered "--seed") ->
-            mutation_seed
-        | Run.Loop _ | Run.Armed _ | Run.No_mutation -> c.seed);
+      seed;
       mutation =
         (match c.mutation with
         | Run.Loop { prefixes; _ } ->
             Run.Loop
-              { prefixes; lines; rewrites; skip_killed = layered.skip_killed }
+              {
+                prefixes;
+                lines;
+                rewrites;
+                skip_killed = layered.skip_killed;
+                sample = Option.map (fun p -> (p, seed)) layered.sample;
+              }
         | (Run.Armed _ | Run.No_mutation) as m -> m);
       mutate_workers = c.mutate_workers && mutates;
       mutate_retry = (if gave layered "--mutate" then c.mutate_retry else 0);

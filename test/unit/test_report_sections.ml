@@ -3153,7 +3153,9 @@ let sample_lines () =
       None;
       None;
     ]
-    (List.map Sections.sample_line
+    (List.map
+       (fun (m : Sections.mutation) ->
+         Option.bind m.sample Sections.sample_line)
        [
          sampled ~killed:1 ~judged:2 ~sampled:1 ();
          sampled ~percent:12.5 ~killed:0 ~judged:0 ~sampled:0 ();

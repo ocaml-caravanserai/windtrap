@@ -101,6 +101,10 @@ OPTIONS:
       Skip the mutants that the verdict file of another suite killed (with
       --mutate).
 
+  --sample=PCT (env WINDTRAP_SAMPLE)
+      Test only a fixed part of PCT percent of the reached mutants, and give the
+      score and the total as estimates with an interval (with --mutate).
+
   --incremental (env WINDTRAP_INCREMENTAL)
       Reuse the verdicts of the last run of this suite for the mutants whose
       source and tests did not change (with --mutate).

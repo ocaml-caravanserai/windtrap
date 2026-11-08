@@ -668,11 +668,11 @@ val mutation_lower : mutation -> float * float
     [0.] when there is no scored mutant. In each other case it is
     [(mutation_score m, mutation_total m)]. *)
 
-val sample_line : mutation -> string option
-(** [sample_line m] is the line of a [Uniform] sample, as in
+val sample_line : sample -> string option
+(** [sample_line s] is the line of a [Uniform] sample, as in
     [sample: 50% of the reached mutants, seed s1:000000000000002a], with the
     percent by {!Pp.decimal} and the seed by {!Seed.to_string}. It is [None] for
-    a [Mixed] sample and for no sample. *)
+    a [Mixed] sample. *)
 
 type gates = {
   min : float option;

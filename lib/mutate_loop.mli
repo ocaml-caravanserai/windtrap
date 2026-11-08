@@ -62,10 +62,13 @@ val execute_and_report :
     + Under the [skip_killed] of the scope, it reads the other verdict files and
       skips each reached mutant that one of them killed ({b Killed elsewhere}
       below). A skipped mutant gets no job.
+    + Under the [sample] of the scope, it keeps only the reached mutants that
+      the skip leaves and that the sample holds ({b Sampling} below). A mutant
+      out of the sample gets no job.
     + Under [config.incremental], it reads the verdict file of the last run of
-      the suite and reuses the verdict of each reached mutant that the skip
-      leaves, when the evidence did not change ({b Incremental reuse} below). A
-      reused mutant gets no job.
+      the suite and reuses the verdict of each reached mutant that the skip and
+      the sample leave, when the evidence did not change ({b Incremental reuse}
+      below). A reused mutant gets no job.
     + It runs the jobs ([Supervisor.fresh]), each in a worker of its own, which
       ran no test before it: the determinism probe, which is the tests that the
       dry run executed, unarmed, and then one job per reached mutant that it
@@ -181,6 +184,18 @@ val execute_and_report :
     after the dry run. The time that it takes to read them does not count in the
     deadline of a job.
 
+    {b Sampling.} Under the [sample] [Some (percent, seed)] of {!Run.scope}
+    ([--sample]), a reached mutant that the skip leaves is in the sample when
+    {!Windtrap_runtime.Verdicts.in_sample} holds for [percent], [seed] and its
+    identifier. The other such mutants get a
+    {!Windtrap_runtime.Verdicts.Not_sampled} record, and the report counts them
+    as not sampled ({!Report_sections.type-sample}). Its sample is [Uniform],
+    with the mutants that the skip leaves as [judged]. Above the outcome line
+    and its [reproduce:] line, after the line of the reused verdicts, one line
+    gives the percent and the seed ({!Report_sections.sample_line}). The verdict
+    file records the sample. A mutant out of the sample is never reused, and the
+    job of a mutant in the sample is the job of a run with no sample.
+
     {b Incremental reuse.} Under [config.incremental] ([--incremental]), after
     the dry run, the loop loads {!Windtrap_runtime.Verdicts.output_file} of its
     executable and suite, which any build can have written. It does not use a
@@ -254,7 +269,8 @@ val execute_and_report :
     {b The verdict file.} The file holds one record per reached mutant, one
     [Outside_tests] record per mutant of the population evaluated outside tests,
     and one [Unreached] record per unreached one. A skipped mutant has a
-    [Killed_elsewhere] record. Each record has the source digest of its mutant
+    [Killed_elsewhere] record, and a mutant out of the sample a [Not_sampled]
+    record. Each record has the source digest of its mutant
     ({!Windtrap_runtime.Verdicts.record_of_mutant}), the effort of the run that
     gave its verdict and a mark. A reused record keeps the effort of the run
     that tested the mutant. A kill that names a test has the digest of the tests
@@ -264,9 +280,11 @@ val execute_and_report :
     the suite, by {!Windtrap_runtime.Verdicts.save}, which records the suite.
     Under a scope, the records of the files outside it stay when the file there
     was written by this build ({!Windtrap_runtime.Verdicts.writer_identity}) for
-    the same suite and the suite was tested, and are dropped otherwise. A file
-    that cannot be written ([Sys_error]) is one sentence on standard error above
-    the outcome line.
+    the same suite with the same sample, or with no sample in the two runs, and
+    the suite was tested. They are dropped otherwise. The sample does not narrow
+    the scope, so a sampled run writes [Not_sampled] over the records of the
+    last run for the mutants out of its sample. A file that cannot be written
+    ([Sys_error]) is one sentence on standard error above the outcome line.
 
     Only a loop that ran whole, over the whole suite, writes its verdicts. A run
     whose selection narrows the suite says so on standard error above the
