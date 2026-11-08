@@ -462,11 +462,18 @@ let lost_families () =
   equal (list string) [ "ge"; "int" ]
     (List.map rewrite (mutants_of "own_constructors.ml"))
 
+(* The test calls [pick], so that the module is linked. *)
+let aliased () =
+  let rewrite (m : Mutate.mutant) = m.id.rewrite in
+  equal int 1 (Windtrap_mutate_forced.Aliased.pick 1 2 1 0);
+  equal (list string) [ "le" ] (List.map rewrite (mutants_of "aliased.ml"))
+
 let lost =
   group "Lost families"
     [
       test "a file that declares Some and (::) has no none and no tail mutant"
         lost_families;
+      test "an alias pattern of an operator loses its family" aliased;
     ]
 
 let () =

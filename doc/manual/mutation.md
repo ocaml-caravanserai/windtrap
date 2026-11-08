@@ -1352,7 +1352,8 @@ mutant, and neither does an `assert`. In a chain of one operator, as
 (`let%test`, `let%expect_test` and `module%test` with its helpers)
 carry no mutant, and the rest of their file is mutated. A file that
 rebinds an operator loses the rewrites of its family: the four
-arithmetic operators, the six comparisons or the two connectives. A file
+arithmetic operators, the six comparisons or the two connectives. A
+binding is a name or an alias pattern, as `(_ as ( + ))`. A file
 that declares a constructor `Some`, `None` or `::` loses `none` and
 `tail`.
 

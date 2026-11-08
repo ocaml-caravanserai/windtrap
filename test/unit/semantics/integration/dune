@@ -1,6 +1,7 @@
 (library
  (name windtrap_mutate_forced)
  (modules
+  aliased
   arid
   attributes
   forced

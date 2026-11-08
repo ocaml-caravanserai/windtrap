@@ -140,7 +140,7 @@ let kept_families structure =
       method! pattern p lost =
         let lost =
           match p.ppat_desc with
-          | Ppat_var { txt; _ } -> lose txt lost
+          | Ppat_var { txt; _ } | Ppat_alias (_, { txt; _ }) -> lose txt lost
           | Ppat_unpack { txt; _ } -> lose_module txt lost
           | _ -> lost
         in

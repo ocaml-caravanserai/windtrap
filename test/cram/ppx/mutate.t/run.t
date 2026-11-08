@@ -1953,6 +1953,21 @@ and keeps its reason:
       then 1
       else 0
 
+  $ mut --impl ./fixture_lost_alias.ml | ../elide.exe
+  mutation sites of "./fixture_lost_alias.ml" in Windtrap_mut_________fixture_lost_alias___ml, with type 'a operands:
+    0: 7:22-7:27 "le" "a < b" -> "a <= b"
+  let times ((_ as ( * )) : float -> float -> float) a b = a * b
+  let plus ((_ as (+)) : float -> float -> float) a b = a + b
+  let pick a b x y =
+    if
+      let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
+        ((a, b) : _ Windtrap_mut_________fixture_lost_alias___ml.operands) in
+      (if Windtrap_mut_________fixture_lost_alias___ml.___windtrap_armed___ 0
+       then Stdlib.not (__windtrap_mut_0_r < __windtrap_mut_0_l)
+       else __windtrap_mut_0_l < __windtrap_mut_0_r)
+    then x
+    else y
+
   $ mut --impl ./fixture_lost_cmp.ml | ../elide.exe
   mutation sites of "./fixture_lost_cmp.ml" in Windtrap_mut_________fixture_lost_cmp___ml:
     0: 8:32-8:33 "int" "0" -> "1"
