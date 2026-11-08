@@ -84,9 +84,9 @@
 ; nodune.t reads OCAMLPATH as POSIX spells it and runs the mutation loop.
 ; Under --instrument-with, dune 3.23.1 and 3.24 close (package windtrap)
 ; over ppx_windtrap, whose runtime depends on windtrap, and report a
-; dependency cycle. A dune built from main does not. Each instrumented run
-; of doc/dev/testing.md sets SKIP_PACKAGE_SESSIONS for that reason, and
-; every session that depends on a package is left out under it.
+; dependency cycle. The instrumented runs of @self-cover, @self-mutate and
+; the release set SKIP_PACKAGE_SESSIONS for that reason, and it skips
+; every session that depends on a package.
 
 (cram
  (applies_to nodune)

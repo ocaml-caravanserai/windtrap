@@ -313,10 +313,8 @@ scratch library's row alone, never the total. Its dump lands under the
 scratch directory's `_windtrap`, never under `_build/_coverage`, so it
 never enters the number. Dune 3.23.1 and 3.24 report a
 `(package windtrap)` dependency as a cycle under either backend.
-`SKIP_PACKAGE_SESSIONS=true` leaves out the sessions that have one,
-`nodune.t` and `cram/ppx/expect_typing.t`, so the two commands and the
-coverage job set it. A dune built from main runs them under every
-configuration.
+`SKIP_PACKAGE_SESSIONS=true` skips the sessions that have one,
+`nodune.t` and `cram/ppx/expect_typing.t`.
 
 `--min 84` is a ratchet: the measured number (86.2% on 2026-08-19, 93.0%
 on 2026-09-16) less a few points of headroom. Raise it when the margin is comfortable;
