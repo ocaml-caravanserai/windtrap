@@ -877,15 +877,16 @@ The score, the total and each gate then count these mutants with the
 killed mutants. The reach does not change, because it counts a killed
 and an unknown mutant the same. The killed term of the outcome line
 gives their number. The unknown section keeps each mutant and marks it
-`(counted as killed)`:
+`(counted as killed)`. In this example, the project has two more
+mutants: one passed its deadline, and one crashed:
 
 ```
 $ dune exec windtrap -- mutants --crash-kills | tail -n 1
 mutants: 3 survived of 11 reached, 8 killed (2 by --crash-kills), 1 never reached, 1 executable, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
 ```
 
-A suite that was not mutation-tested counts in no measure under the
-option either, and each gate fails. The option does not change the
+Under the option, no mutant of a suite that was not mutation-tested
+counts as killed, and each gate fails. The option does not change the
 verdict files. A suite run takes `--crash-kills` with `--mutate`, and
 its mirror is `WINDTRAP_CRASH_KILLS=1`. The option changes the outcome
 line and the unknown section of the run. The flag without `--mutate` is
@@ -904,8 +905,8 @@ also empty for a mutant killed elsewhere. An unknown mutant has its
 reason, and the kind of the reason in `reason_kind`: `deadline`,
 `crashed`, `memory`, `flaky_kill` or `other`. Its `counted_as_killed`
 is `true` when `--crash-kills` counts it as killed, and `false` if not.
-Under the option, the `killed` and `unknown` counts of `summary` count
-such a mutant as killed. Its `verdict` stays `unknown`. A test names its
+Under the option, `killed` in `summary` counts such a mutant, and
+`unknown` does not count it. Its `verdict` stays `unknown`. A test names its
 verdict file by its index in `executables`, because two files can have
 the same name. Under `--lines` or `--diff`, the verdict counts, the three
 measures and `mutants` hold only the mutants on the lines. But

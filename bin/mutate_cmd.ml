@@ -200,27 +200,37 @@ let verdict_in files =
   let by_id = List.map (fun f -> (f, verdicts_by_id f)) files in
   fun f id -> Ids.find_opt id (List.assq f by_id)
 
-(* A refused suite counts in no measure, so none of its mutants counts as
-   killed. *)
+(* No mutant of a refused suite counts as killed. *)
 let counted_as_killed ~crash_kills f reason =
   Option.is_none f.refused && Sections.counted_as_killed ~crash_kills reason
 
 (* A merge is [Unknown] only when a file is. The first file that tested its
-   suite and holds the mutant as unknown names it, with its reason. A mutant
-   that only refused files hold is named by the first of them. *)
-let unknown_in files ~verdict_in id =
+   suite and holds the mutant as unknown names it, with its reason. Under
+   [--crash-kills], a file whose reason counts as killed comes first, so the
+   order of [files] does not decide the count. A mutant that only refused
+   files hold is named by the first of them. *)
+let unknown_in ~crash_kills files ~verdict_in id =
   let reason f =
     match verdict_in f id with
     | Some (Verdicts.Unknown reason) -> Some (f, reason)
     | _ -> None
   in
   let tested = List.filter (fun f -> Option.is_none f.refused) files in
-  match List.find_map reason tested with
+  let counted f =
+    match reason f with
+    | Some (_, r) as named when Sections.counted_as_killed ~crash_kills r ->
+        named
+    | _ -> None
+  in
+  match List.find_map counted tested with
   | Some named -> named
   | None -> (
-      match List.find_map reason files with
+      match List.find_map reason tested with
       | Some named -> named
-      | None -> assert false)
+      | None -> (
+          match List.find_map reason files with
+          | Some named -> named
+          | None -> assert false))
 
 let merged files =
   List.fold_left
@@ -305,7 +315,7 @@ let merge ~crash_kills ~source files merged =
   (* A mutant that only refused files hold counts under the first of them. *)
   let unknown (r : Verdicts.record) =
     let id = Mutate.id_to_string r.id in
-    match unknown_in files ~verdict_in id with
+    match unknown_in ~crash_kills files ~verdict_in id with
     | f, reason when Option.is_none f.refused ->
         Either.Left
           {
@@ -710,7 +720,7 @@ let json ~crash_kills files merged (m : Sections.mutation) =
     | Survived _ -> tests "tests" survivals id
     | Killed _ | Killed_elsewhere _ -> tests "killed_by" kills id
     | Unknown _ ->
-        let f, reason = unknown_in files ~verdict_in id in
+        let f, reason = unknown_in ~crash_kills files ~verdict_in id in
         strf
           ", \"executable\": %d,\n\
           \      \"reason\": %s, \"reason_kind\": %s,\n\
@@ -742,12 +752,7 @@ let json ~crash_kills files merged (m : Sections.mutation) =
          (fun (r : Verdicts.record) -> verdict_name r.verdict = verdict)
          records)
   in
-  let crash_killed =
-    List.length
-      (List.filter
-         (fun (u : Sections.unknown) -> u.counted_as_killed)
-         m.unknown)
-  in
+  let crash_killed = Sections.crash_killed m in
   let killed = count "killed" + crash_killed and survived = count "survived" in
   let not_evaluated = count "not_evaluated" in
   let unknown = count "unknown" - crash_killed in

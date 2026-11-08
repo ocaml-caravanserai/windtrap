@@ -585,6 +585,10 @@ type mutation = {
     the killed mutants, and not with the unknown mutants. The reached count does
     not change. *)
 
+val crash_killed : mutation -> int
+(** [crash_killed m] is the number of unknown mutants of [m] that count as
+    killed. *)
+
 val mutation_score : mutation -> float
 (** [mutation_score m] is the percentage of killed mutants among the scored
     mutants of [m], unrounded. The scored mutants are those killed, those that

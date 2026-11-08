@@ -889,8 +889,8 @@ A repeated --crash-kills is the same as one:
   [1]
   $ diff once twice
 
-A refused suite counts in no measure under the option, and it fails each
-gate. Its mutants stay unknown, whatever their reason:
+Under the option, no mutant of a refused suite counts as killed, and each
+gate fails. Its mutants stay unknown, whatever their reason:
 
   $ plant "$scratch/crash-refused" && cd "$scratch/crash-refused"
   $ mkdata mutants _build/_mutants/a.mutants "$add=killed"
@@ -901,6 +901,31 @@ gate. Its mutants stay unknown, whatever their reason:
   > done
   [1] mutants: 2 reached, 1 killed, 1 unknown, 2 executables, 1 suite not mutation-tested, score 100.0% (1/1), minimum 50%: FAILED, reach 100.0% (2/2), total 100.0% (1/1)
   [1] mutants: 2 reached, 1 killed, 1 unknown, 2 executables, 1 suite not mutation-tested, score 100.0% (1/1), minimum 50%: FAILED, reach 100.0% (2/2), total 100.0% (1/1)
+
+  $ run windtrap mutants --json --crash-kills | grep -E '"(killed|unknown)"|counted_as_killed'
+    "summary": { "reached": 2, "killed": 1, "survived": 0,
+      "not_evaluated": 0, "unknown": 1, "outside_tests": 0,
+        "verdict": "killed",
+        "verdict": "unknown", "executable": 1,
+        "counted_as_killed": false } ],
+
+When two tested suites hold a mutant as unknown, a deadline, a crash or a
+memory limit in one of them counts it as killed. The order of the files
+does not change the count, and the survivor gate does not change:
+
+  $ for order in 'flaky:t/x deadline:1.5' 'deadline:1.5 flaky:t/x'; do
+  >   set -- $order
+  >   plant "$scratch/crash-order" && cd "$scratch/crash-order"
+  >   mkdata mutants _build/_mutants/a.mutants "$add=$1" "$sub=survived:t/y"
+  >   mkdata mutants _build/_mutants/b.mutants "$add=$2" "$sub=survived:t/y"
+  >   run windtrap mutants --crash-kills --min 50 --max-survivors 0 > gated
+  >   echo "[$?] $(tail -n 1 gated)"
+  >   grep -c '(counted as killed)' gated
+  > done
+  [1] mutants: 1 survived of 2 reached, 1 killed (1 by --crash-kills), 2 executables, score 50.0% (1/2), minimum 50%: ok, reach 100.0% (2/2), total 50.0% (1/2), maximum 0 survivors: FAILED
+  1
+  [1] mutants: 1 survived of 2 reached, 1 killed (1 by --crash-kills), 2 executables, score 50.0% (1/2), minimum 50%: ok, reach 100.0% (2/2), total 50.0% (1/2), maximum 0 survivors: FAILED
+  1
 
 In the document, each unknown mutant has counted_as_killed, and the
 summary counts the mutants of the option as killed:
