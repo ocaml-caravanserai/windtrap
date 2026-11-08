@@ -278,18 +278,20 @@ dismisses stays out of the run. `windtrap mutants` does not take the
 two flags.
 
 An unknown name or an empty list is a usage error. The message gives
-the names of the rewrites. A repeated name counts one time. The two
-flags together are a usage error, from the command line or from a
-mirror. If a flag occurs two times, the last value applies. If neither
+the names of the rewrites. A repeated name counts one time.
+
+The two flags together are a usage error, from the command line or
+from a mirror. If a flag occurs two times, the last value applies. If neither
 the command line nor a mirror gives `--mutate`, a flag on the command
 line is a usage error. A mirror alone has no effect on a suite that
 does not mutate. But an invalid value, or the two mirrors together, is
 a usage error on each suite.
 
 A filter that keeps no site of the scope is not an error. The scope is
-the prefixes of `--mutate` and the lines of `--lines` or `--diff`. The
-run tells it on standard error, runs the suite without mutation, exits
-as the suite does and saves no verdict file. Under `--lines` or
+the prefixes of `--mutate` and the lines of `--lines` or `--diff`. When
+the suite passes, the run gives a message on standard error, runs the
+suite without mutation, exits 0 and saves no verdict file. A red suite
+is refused, as always. Under `--lines` or
 `--diff`, lines with no site of the selected rewrites follow the same
 rule, as lines with no site do. A scope that has no site before the
 filter is refused, as with no filter.
@@ -376,7 +378,10 @@ it, and no mutant's run does. A line that only such tests run is never
 reached, and an `--arm` run of its mutant ends on `mutant not reached`.
 
 The mutation run exits 0 whatever it finds. It exits 1, with a sentence
-on standard error, when a pass fails or no mutant is left to test.
+on standard error, when a pass fails or no mutant is left to test. A
+rewrite filter (`--rewrites` or `--skip-rewrites`) that keeps no site of
+a scope that has sites is no such failure (see
+[Testing the mutants of some rewrites](#testing-the-mutants-of-some-rewrites)).
 
 ## Running a survivor again
 
