@@ -132,11 +132,14 @@
   the previous verdicts of these mutants go away. The next full run
   then lists no change of these mutants
   (doc/manual/mutation.md#unstable-verdicts).
-- (breaking) The verdict file format is `windtrap-mutants-v14`. Each
+- (breaking) The verdict file format is `windtrap-mutants-v15`. Each
   record keeps the digest of the source file of its mutant and the
   previous verdict of its mutant, and a skipped mutant is killed
   elsewhere. A kill keeps its killing tests, and an unknown verdict
-  keeps the kind of its reason. A file of an earlier format is refused. Delete
+  keeps the kind of its reason. Each record also keeps the
+  `--mutate-retry` count and a digest of the settings of the run that
+  gave its verdict, and a mark when a later run used it again, and a
+  file keeps the digest of the source file of each test. A file of an earlier format is refused. Delete
   `_build/_mutants` and run the suites again.
 - `--mutate-workers` and its mirror `WINDTRAP_MUTATE_WORKERS` let a
   stateful test on several domains spawn its worker domains under

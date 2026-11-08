@@ -435,6 +435,10 @@ OPTIONS:
       Skip the mutants that the verdict file of another suite killed (with
       --mutate).
 
+  --incremental (env WINDTRAP_INCREMENTAL)
+      Reuse the verdicts of the last run of this suite for the mutants whose
+      source and tests did not change (with --mutate).
+
   --mutate-retry=N (env WINDTRAP_MUTATE_RETRY)
       Run the job of a survivor up to N more times, each in a fresh worker. If N
       is above 0, also check each kill with no mutant (with --mutate, default
