@@ -570,10 +570,15 @@ let negation ~loc ~module_name ~index value =
    [open]-provided [+] may take two types, and number types disambiguate
    nothing.
 
+   The operands move out of [e], so the [let] takes the warning and alert
+   attributes of [e], which also cover the operands.
+
    An applied [(fun l r -> ...) left right] would keep its call and its
    closure in bytecode under [-g]. Binding the operator, as in [let op = if
    armed then ( <= ) else ( < )], names a second operator, and reaches the
    polymorphic comparison even when nothing is armed. *)
+let scoping = [ "ocaml.warning"; "warning"; "ocaml.alert"; "alert" ]
+
 let binary ~loc ~module_name ~index ~pin e app ~armed_arm left right =
   let l = binder index "l" and r = binder index "r" in
   let operands =
@@ -593,11 +598,16 @@ let binary ~loc ~module_name ~index ~pin e app ~armed_arm left right =
       pexp_attributes = e.pexp_attributes;
     }
   in
-  [%expr
-    let [%p pvar ~loc l], [%p pvar ~loc r] = [%e operands] in
-    if [%e armed ~loc ~module_name index] then
-      [%e armed_arm (evar ~loc l) (evar ~loc r)]
-    else [%e disarmed]]
+  {
+    ([%expr
+       let [%p pvar ~loc l], [%p pvar ~loc r] = [%e operands] in
+       if [%e armed ~loc ~module_name index] then
+         [%e armed_arm (evar ~loc l) (evar ~loc r)]
+       else [%e disarmed]])
+    with
+    pexp_attributes =
+      List.filter (fun a -> List.mem a.attr_name.txt scoping) e.pexp_attributes;
+  }
 
 (* [con] branches once on the armed flag, which keeps the short circuit, the
    tail position of [b] and one copy of each operand:

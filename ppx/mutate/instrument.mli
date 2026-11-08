@@ -351,7 +351,9 @@
 
     Every generated node has a ghost location, with two exceptions. The disarmed
     arm of an ordering or [ari] guard is the original application rebuilt over
-    the binders, and keeps its location and its attributes. The disarmed arm of
+    the binders, and keeps its location and its attributes. The whole guard also
+    takes the [ocaml.warning], [warning], [ocaml.alert] and [alert] attributes
+    of the site, because its operands are outside the arm. The disarmed arm of
     the [del] guard of a statement or a loop body is [e; ()], whose [()] has a
     location of zero width at the end of [e]. On a loop body, the arm [e; ()]
     has the location of [e]. The copy [t'] in the guard of [tail] is generated
