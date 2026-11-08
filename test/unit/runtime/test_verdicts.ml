@@ -576,7 +576,8 @@ let changed (_, previous, verdict, expected) =
        (fun (was, is) -> outcome_row was ^ ", " ^ outcome_row is)
        (Verdicts.changed r))
 
-(* No run tested a reused verdict, so it is no change. *)
+(* A reused verdict is no change, because this run did not test the
+   mutant. *)
 let changed_reused () =
   List.iter
     (fun (previous, verdict) ->

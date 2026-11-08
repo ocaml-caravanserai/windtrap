@@ -131,10 +131,11 @@
     highest rank that it merges is reused ([Windtrap_runtime.Verdicts.merge]): a
     run under [--incremental] took the verdict from its last run. The block of a
     reused survivor has [(reused)] after its title. When the merge has reused
-    records, after [--lines] or [--diff] and after the skips are judged, one
-    line above the [reproduce:] line, or above the outcome line, gives their
-    number, as in [reused: 2 verdicts from earlier runs]. A merge with none has
-    no line.
+    records, one line gives their number, as in
+    [reused: 2 verdicts from earlier runs]. The count comes after [--lines] or
+    [--diff] and after the merge judges the skips. The line is above the
+    [reproduce:] line, or above the outcome line. A merge with no reused record
+    has no line.
 
     {b Reaching tests.} The reaching tests of a survivor are the union of those
     of every file in which the mutant survived. Each is paired with the label of

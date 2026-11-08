@@ -188,8 +188,8 @@ val record_of_mutant :
 val changed : record -> (outcome * outcome) option
 (** [changed r] is [Some (was, is)] when [r.previous] is [Some was],
     {!val-outcome} of [r.verdict] is [Some is], [was] is not [is], and [r] is
-    not reused. It is [None] if not. A reused verdict is no change, because no
-    run tested the mutant. *)
+    not reused. It is [None] if not. A reused verdict is no change, because this
+    run did not test the mutant. *)
 
 type t
 (** The type for verdict collections: finite maps from {!Mutate.type-id} to
@@ -236,7 +236,7 @@ val merge : t -> t -> t
     verdict it is combined with unchanged, so merging any number of files in any
     order gives one answer. The previous outcome, the effort and the prefix of a
     merged record tell nothing of one suite. A merged record is reused only when
-    no fresh record of the same rank is present. *)
+    each merged record of the highest rank is reused. *)
 
 val with_previous : prior:t -> t -> t
 (** [with_previous ~prior t] is [t] in which each record [r] gets its previous

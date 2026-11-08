@@ -137,10 +137,12 @@
   previous verdict of its mutant, and a skipped mutant is killed
   elsewhere. A kill keeps its killing tests, and an unknown verdict
   keeps the kind of its reason. Each record also keeps the
-  `--mutate-retry` count and a digest of the settings of the run that
-  gave its verdict, and a mark when a later run used it again, and a
-  file keeps the digest of the source file of each test. A file of an earlier format is refused. Delete
-  `_build/_mutants` and run the suites again.
+  `--mutate-retry` count, the pass and a digest of the settings of the
+  run that gave its verdict. A record also keeps a mark when a later run
+  used it again. A kill keeps a digest of the tests of its job up to the
+  killing test. A file keeps a digest of each test: of its source file,
+  its limit and its retries. A file of an earlier format is refused.
+  Delete `_build/_mutants` and run the suites again.
 - `--mutate-workers` and its mirror `WINDTRAP_MUTATE_WORKERS` let a
   stateful test on several domains spawn its worker domains under
   `--mutate` and `--arm`, as without mutation testing. Thus a test can

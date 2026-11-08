@@ -428,9 +428,9 @@ a lossy `%g` spelling is asked for at the call site.
   Thus an effort of the file would claim the effort of this run for
   these records. The file keeps the digest of each test of the suite,
   and a kill keeps the digest of the tests of its job up to the killing
-  test. A test before the killing test can leave the state that the kill
-  needs, and no record names that test, so `--incremental` compares
-  the whole prefix of the job.
+  test. A test before the killing test can leave a state that is
+  necessary for the kill. No record names that test, so `--incremental`
+  compares the whole prefix of the job.
 
 **The runtime (`Windtrap_runtime.Mutate`, `.Coverage`).**
 

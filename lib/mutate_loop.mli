@@ -188,19 +188,19 @@ val execute_and_report :
     verdict of that file when {!Windtrap_runtime.Verdicts.reuse} accepts it:
     - The file is not refused, and it has a record of the mutant with the source
       digest, not [None], the renderings and the extent of this run.
-    - The record is a kill that names a test, each killing test reaches the
-      mutant in this dry run, and the tests of the job up to the last killing
-      test are those of the kill, in the order of the job of this run. Or the
-      record is a survivor, and the same tests reach the mutant, as a set.
+    - The record is a kill that names a test, and the killing test reaches the
+      mutant in this dry run. The tests of the job of this run, up to the
+      killing test, are those of the kill, in the same order. Or the record is a
+      survivor, and the same set of tests reaches the mutant.
     - Each of these tests has the same digest in the file and in this run. The
       digest of a test is the MD5 of the digest of its source file
       ({!test_digest}), of its declared limit and of its declared retries. A
       test with no location, or whose file the loop cannot read, has no digest.
     - The effort of the record covers the effort of this run
       ({!Windtrap_runtime.Verdicts.effort_covers}): the same {!settings}, and
-      enough retries. Under [config.mutate_retry] above [0], a kill needs a run
-      that had retries too, and a kill from a retry needs at least as many
-      retries.
+      enough retries. Under [config.mutate_retry] above [0], a kill is reused
+      only from a run that had retries too. A kill from the [k]-th retry is
+      reused only when [config.mutate_retry] is [k] or more.
 
     A reused mutant gets no job, no retry and no check. Once the probe agrees,
     the loop commits each reused verdict in the pass where its job would give

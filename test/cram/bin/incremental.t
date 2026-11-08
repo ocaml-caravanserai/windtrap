@@ -6,7 +6,7 @@ mutant and lets two survive.
 The executable runs from a scratch build directory, where it writes its
 verdict file. Its source and the source of its tests are planted where they
 were recorded, because the run reads the file of each test. --mutate scopes
-the loop to calc.ml's mutants, since under --instrument-with the executable
+the loop to calc.ml's mutants, because under --instrument-with the executable
 also links an instrumented core.
 
   $ bin=$PWD

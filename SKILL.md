@@ -474,7 +474,7 @@ Thus run them one after the other (`dune runtest -j 1`).
 
 `--incremental` (`WINDTRAP_INCREMENTAL=1`) uses the verdicts of the last
 run of the suite again for the mutants whose source and tests did not
-change, and the report gives `reused: N verdicts from the last run`. It
+change. The report then gives `reused: N verdicts from the last run`. It
 does not examine helper modules or data files, so do a full run each
 night.
 
