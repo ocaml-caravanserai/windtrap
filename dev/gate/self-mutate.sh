@@ -61,7 +61,7 @@ sampler=$!
 
 start=$(date +%s)
 {
-  timeout "$(( minutes * 60 ))s" "$@" 2>&1
+  timeout -k 5m "$(( minutes * 60 ))s" "$@" 2>&1
   echo $? > "$dir/code"
 } | tee "$dir/log"
 end=$(date +%s)
@@ -73,7 +73,7 @@ used_mb=$(( $(cat "$dir/peak") / 1024 ))
 took=$(( (end - start + 59) / 60 ))
 esc=$(printf '\033')
 line=$(sed "s/$esc\[[0-9;]*m//g" "$dir/log" \
-  | grep '^mutants: .* executables' | tail -n 1)
+  | grep '^mutants: .* executable' | tail -n 1)
 echo "gate: $took min, $used_mb MB more memory, exit $code"
 echo "gate: ${line:-no merge line}"
 
@@ -86,21 +86,19 @@ if [ "$used_mb" -gt "$memory_mb" ]; then
   echo "gate: the memory grew more than its bound of $memory_mb MB" >&2
   fail=1
 fi
-if [ -z "$line" ]; then
-  echo "gate: the merge gave no line." >&2
-  exit 1
-fi
 count='s/^mutants: \([0-9]* survived of \)\{0,1\}\([0-9]*\) reached,.*/\2/p'
 reached=$(echo "$line" | sed -n "$count")
 never=$(echo "$line" | sed -n 's/.*[^0-9]\([0-9]*\) never reached.*/\1/p')
+outside=$(echo "$line" \
+  | sed -n 's/.*[^0-9]\([0-9]*\) evaluated outside tests.*/\1/p')
 if [ -z "$reached" ]; then
-  echo "gate: the merge line gives no count of mutants." >&2
+  echo "gate: the merge gave no count of mutants" >&2
   exit 1
 fi
-total=$(( reached + ${never:-0} ))
+total=$(( reached + ${never:-0} + ${outside:-0} ))
 echo "gate: $total mutants"
 if [ "$total" -gt "$mutants" ]; then
-  echo "gate: $total mutants is more than the $mutants of the bounds." \
+  echo "gate: $total mutants is more than the bound of $mutants." \
     "Measure the bounds again." >&2
   fail=1
 fi

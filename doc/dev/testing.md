@@ -512,7 +512,8 @@ merge. It gives a failure in these conditions:
 - The merge gives no line, or a line with no count of mutants, for
   example because the build stopped.
 - The tree has more mutants than the bounds, for example after a new
-  operator.
+  operator. The count adds the mutants that the tests reached, that
+  they did not reach, and that ran outside the tests.
 
 The bounds are in `dev/gate/bounds`. The exit code of the build is not
 a condition, because `windtrap mutants` exits 1 when a mutant survives.
