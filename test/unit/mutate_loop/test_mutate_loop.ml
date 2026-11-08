@@ -1252,6 +1252,35 @@ let deadline_kill () =
        ])
     (rows b.run)
 
+(* Under --crash-kills, the report counts the mutant as killed, and its
+   verdict stays unknown. *)
+let deadline_crash_kill () =
+  let pidfile = Filename.concat (temp_dir ()) "grandchild" in
+  remove (verdicts_path ());
+  let r =
+    finish_within ~what:"the blocked child's deadline"
+      (start
+         ~env:[ suite "block"; ("MUTATE_GRANDCHILD_PIDFILE", pidfile) ]
+         [ mutate; "--crash-kills" ])
+  in
+  equal string "exited 0" r.status;
+  equal text "" r.err;
+  equal string
+    "mutants: 1 reached by this suite, 1 killed (1 by --crash-kills), 3 never \
+     reached, score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
+    (outcome r.out);
+  contains ~sub:"(counted as killed)" r.out;
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 unknown: its run passed its deadline of <time>";
+         "subject.ml:18 unreached";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r)
+
 let need_proc () =
   if not (Sys.file_exists "/proc/self/status") then
     skip ~reason:"the limit reads /proc/<pid>/status" ()
@@ -1397,6 +1426,10 @@ let limits =
       test "a mutant that never terminates is killed by its hit budget" runaway;
       test "a mutant whose run hangs is unknown at its job's deadline"
         deadline_kill;
+      test
+        "under --crash-kills, the report counts a mutant past its deadline as \
+         killed"
+        deadline_crash_kill;
       test "a mutant whose worker passes its memory limit is unknown"
         memory_limit;
       test "under the default memory limit, the deadline ends a run of 96 MB"

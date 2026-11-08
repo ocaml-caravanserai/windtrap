@@ -460,8 +460,9 @@ mutants. Set PCT a little under the measured score, as for coverage
 `--min`. `--min-reach PCT` gates on the reach, the percentage of
 reached mutants. `--min-total PCT` gates on the total, the percentage
 of killed mutants among all mutants that count. `--max-survivors N`
-gates on the number of survivors. `--json` gives each verdict to other
-tools.
+gates on the number of survivors. `--crash-kills` counts a mutant whose
+run passed its deadline, crashed or passed its memory limit as killed,
+as PIT does. `--json` gives each verdict to other tools.
 
 `--skip-killed` (`WINDTRAP_SKIP_KILLED=1`) skips a mutant that another
 suite already killed. It reads only the verdict files on disk, so run
@@ -488,6 +489,10 @@ reason, and a kill in a retry then leaves the survivor.
 memory limit of each worker of a mutant, on Linux. A mutant can make
 its test take memory with no limit. The loop then kills its worker,
 and the mutant is unknown. Raise the limit if the probe passes it.
+
+`--crash-kills` (`WINDTRAP_CRASH_KILLS=1`) counts an unknown mutant as
+killed when its run passed its deadline, crashed or passed its memory
+limit. Give it with `--mutate`.
 
 A run and `windtrap mutants` list under `unstable` each mutant whose
 verdict changed since the last run of its suite, on the same source. A

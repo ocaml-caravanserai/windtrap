@@ -90,6 +90,7 @@ let flags (p : Cli.parsed) =
         bool "mutate_workers" c.mutate_workers;
         some "--mutate-retry" "mutate_retry" string_of_int c.mutate_retry;
         some "--mutate-memory" "mutate_memory" string_of_int c.mutate_memory;
+        bool "crash_kills" c.crash_kills;
         bool "help" p.help;
         bool "version" p.version;
       ]
@@ -161,6 +162,7 @@ let changes (c : Run.config) =
         field "mutate_workers" bool (fun c -> c.Run.mutate_workers);
         field "mutate_retry" string_of_int (fun c -> c.Run.mutate_retry);
         field "mutate_memory" string_of_int (fun c -> c.Run.mutate_memory);
+        field "crash_kills" bool (fun c -> c.Run.crash_kills);
         field "github" bool (fun c -> c.Run.github);
         field "invocation" invocation_name (fun c -> c.Run.invocation);
         field "broadcast selection" bool (fun c ->
@@ -316,6 +318,9 @@ let mirrors =
           ( "WINDTRAP_MUTATE_WORKERS",
             "maybe",
             {|invalid WINDTRAP_MUTATE_WORKERS "maybe"|} );
+          ( "WINDTRAP_CRASH_KILLS",
+            "maybe",
+            {|invalid WINDTRAP_CRASH_KILLS "maybe"|} );
         ];
       test "a boolean mirror refuses another word in Os.bool_expected's words"
         boolean_wording;
@@ -584,6 +589,8 @@ let parsing =
           ([ "--mutate-memory"; "64" ], "mutate_memory 64");
           ([ "--mutate-memory=4096" ], "mutate_memory 4096");
           ([ "--mutate-memory=1048576" ], "mutate_memory 1048576");
+          ([ "--crash-kills" ], "crash_kills");
+          ([ "--crash-kills=1" ], {|invalid --crash-kills "1"|});
           ([ "-h" ], "help");
           ([ "--help" ], "help");
           ([ "-V" ], "version");
@@ -997,6 +1004,29 @@ let resolution =
           ( [ ("WINDTRAP_MUTATE_MEMORY", "0") ],
             [ "--mutate=lib/" ],
             {|invalid WINDTRAP_MUTATE_MEMORY "0"|} );
+        ];
+      resolve_rows
+        "--crash-kills or its mirror sets crash_kills under --mutate, and on \
+         the command line it needs --mutate"
+        [
+          ([], [ "--mutate"; "--crash-kills" ], "mutation loop [], crash_kills");
+          ( [ ("WINDTRAP_CRASH_KILLS", "1") ],
+            [ "--mutate" ],
+            "mutation loop [], crash_kills" );
+          ( [ ("WINDTRAP_CRASH_KILLS", "0") ],
+            [ "--mutate=lib/" ],
+            "mutation loop [lib/]" );
+          ( [ ("WINDTRAP_MUTATE", "1") ],
+            [ "--crash-kills" ],
+            "mutation loop [], crash_kills, broadcast mutate" );
+          ([], [ "--crash-kills" ], "--crash-kills requires --mutate");
+          ( [],
+            [ "--arm"; "lib/a.ml:9:12:add"; "--crash-kills" ],
+            "--crash-kills requires --mutate" );
+          ([ ("WINDTRAP_CRASH_KILLS", "1") ], [], "defaults");
+          ( [ ("WINDTRAP_CRASH_KILLS", "1") ],
+            [ "--arm"; "lib/a.ml:9:12:add" ],
+            "mutation armed lib/a.ml:9:12:add" );
         ];
       resolve_rows "--mutate with --arm is refused, whichever layer gave each"
         [

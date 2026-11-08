@@ -139,7 +139,7 @@
 (test
  (name test_report_sections)
  (modules test_report_sections)
- (libraries windtrap render_fixtures gallery)
+ (libraries windtrap windtrap.runtime render_fixtures gallery)
  (deps
   (glob_files expected/test_report_sections/*.expected))
  (action

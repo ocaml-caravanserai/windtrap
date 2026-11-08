@@ -103,7 +103,10 @@ val execute_and_report :
     failure that the mutant did not cause. For this rule, an evaluation in a
     process that a test forks counts ([Supervisor.arm]). The dry run does not
     see such an evaluation. A job whose worker cannot map the byte that shows it
-    counts each failure, as when it could not tell.
+    counts each failure, as when it could not tell. Under [config.crash_kills],
+    the report counts an unknown mutant of a deadline, a crash or a memory limit
+    as killed ({!Report_sections.val-counted_as_killed}). Its verdict stays
+    unknown.
 
     {b Retries.} Each pass after the first runs again the jobs of the mutants
     that survived the pass before it, with the same cases, deadline and budget,

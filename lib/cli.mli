@@ -177,6 +177,9 @@ val settings : parsed -> (Run.config, error) result
       [--mutate], and the default otherwise. [--mutate-memory] from the command
       line without [--mutate] is [Error (Requires_any _)]. From its mirror alone
       it is ignored.
+    - [crash_kills] is [true] when a layer gives [--crash-kills] and a layer
+      gives [--mutate]. [--crash-kills] from the command line without [--mutate]
+      is [Error (Requires_any _)]. From its mirror alone it is ignored.
     - A relative path of [--junit], [--json] or [-o] is made absolute, against
       the working directory when the command line gives it and against
       {!Os.project_root} when its mirror does. It is kept as given when that

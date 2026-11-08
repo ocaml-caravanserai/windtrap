@@ -54,6 +54,7 @@ type config = {
   mutate_workers : bool;
   mutate_retry : int;
   mutate_memory : int;
+  crash_kills : bool;
   github : bool;
   invocation : invocation;
   broadcast : broadcast;
@@ -90,6 +91,7 @@ let default_config () =
     mutate_workers = false;
     mutate_retry = 0;
     mutate_memory = 1024;
+    crash_kills = false;
     github = false;
     invocation = `Mirrors;
     broadcast = not_broadcast;

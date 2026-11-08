@@ -68,13 +68,14 @@
     [Windtrap_runtime.Verdicts.Unknown] is unknown. The first file kept, in path
     order, whose writer tested its suite and holds it so names it, with the
     reason it records after its label and suite, and its launcher is that
-    file's. A mutant that only refused files hold as unknown is counted under
-    the first of them instead. Every refused file is named, in path order, by
-    its label and the suite that it records, with its reason and that count.
-    When the count is 0 and an earlier refused file counts a mutant that the
-    file holds as unknown, the row says [no other mutant unknown]. Any other
-    count of 0 says [0 mutants unknown]. The outcome line counts the refused
-    files as suites.
+    file's. Under [--crash-kills], a tested file whose reason counts as killed
+    comes before the other tested files. A mutant that only refused files hold
+    as unknown is counted under the first of them instead. Every refused file is
+    named, in path order, by its label and the suite that it records, with its
+    reason and that count. When the count is 0 and an earlier refused file
+    counts a mutant that the file holds as unknown, the row says
+    [no other mutant unknown]. Any other count of 0 says [0 mutants unknown].
+    The outcome line counts the refused files as suites.
 
     {b Killed elsewhere.} Before the merge, the command judges each
     [Windtrap_runtime.Verdicts.Killed_elsewhere] record of the executable [exe].
@@ -170,6 +171,16 @@
     percentage of the killed mutants among those scored, never reached and
     evaluated outside tests. Each is [100.] when its denominator is [0].
 
+    [--crash-kills] counts an unknown mutant as killed when a file whose writer
+    tested its suite holds it with a deadline, a crash or a memory limit
+    ({!Windtrap.Private.Report_sections.val-counted_as_killed}). The first such
+    file names it ({{!section-merge}the merge}). The order of the files does not
+    change the count. The score, the total, each gate and the outcome line then
+    count it with the killed mutants, and the unknown section marks it
+    [(counted as killed)]. The reach does not change. A mutant with a flaky kill
+    or with another reason stays unknown. A repeated [--crash-kills] is the same
+    as one.
+
     [--min PCT], [--min-reach PCT], [--min-total PCT] and [--max-survivors N]
     are the gates. With a gate, the merge passes when
     {!Windtrap.Private.Report_sections.mutation_gates_met} is [true]: each
@@ -204,7 +215,9 @@
       ["unknown"].
     - ["killed"], ["survived"], ["not_evaluated"], ["unknown"],
       ["outside_tests"] and ["unreached"] are each the count of the merged
-      mutants that have that verdict.
+      mutants that have that verdict. Under [--crash-kills], ["killed"] also
+      counts the unknown mutants counted as killed, and ["unknown"] does not
+      count them.
     - ["refused"] is the count of the refused files.
     - ["score"] is the score of the {{!section-gate}gate}, with two decimals. It
       is [100.00] when no mutant is scored, as the ["percentage"] of
@@ -253,6 +266,10 @@
       ["crashed"] when its worker ended first, ["memory"] when it passed its
       memory limit, ["flaky_kill"] when the killing test also fails with no
       mutant, and ["other"] for each other reason.
+    - ["counted_as_killed"] is in the object of an unknown mutant only. It is
+      [true] when the counts and the measures count the mutant as killed
+      ({{!section-gate}the gates}), and [false] otherwise. The ["verdict"] of
+      the mutant stays ["unknown"].
 
     ["tests"] and ["killed_by"] have one object for each test of the mutant in
     each file that records it. The objects are sorted by file, and then by the
