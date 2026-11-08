@@ -196,8 +196,8 @@
     A statement in the arguments of a logging function, of [failwith] or of
     [invalid_arg] keeps its mutants, with the sites inside it. A statement acts
     on the state of the program. Here a statement is [e1] in [e1; e2], or the
-    expression of [let () = e in]. Outside such a statement, a then-branch with
-    no [else] and a loop body have no [del] site, and the rules of the message
+    expression of [let () = e in]. Outside a statement, a then-branch with no
+    [else] and a loop body have no [del] site, and the rules of the message
     apply to them. A logging call that is a statement keeps its own [del]
     mutant. These two rules do not see other effects, for example of a function
     that the message calls.

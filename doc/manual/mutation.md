@@ -1150,11 +1150,11 @@ keeps its mutants, and that of `Logs.err ~src (fun m -> ...)` does not.
 In these arguments, a statement is `e1` in `e1; e2` or the `e` of
 `let () = e in`. It keeps its mutants and the sites in it, because it
 acts on the state of the program. Outside such a statement, a
-then-branch with no `else` and a loop body give no `del` site, and the
-rule of the message applies to their sites. In `a + b + 0` the
-outermost `+` has no mutant, so `a + b` carries the mutant of the chain.
-A `[@mutate off]` on such a site records it as dismissed, as on any
-other site.
+then-branch with no `else` and a loop body give no `del` site. The rule
+of the message applies to their sites. In `a + b + 0` the outermost `+`
+has no mutant, so `a + b` carries the mutant of the chain. A
+`[@mutate off]` on such a site records it as dismissed, as on any other
+site.
 
 A comparison outside a condition, as in `let ok = a < b`, carries no
 mutant, and neither does an `assert`. In a chain of one operator, as
