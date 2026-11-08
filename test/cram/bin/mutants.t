@@ -725,7 +725,8 @@ executable by its index in "executables":
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
@@ -738,7 +739,8 @@ executable by its index in "executables":
         "file": "lib/calc.ml", "line": 3, "col": 14, "rewrite": "lt",
         "end_line": 3, "end_col": 19,
         "before": "a < b", "after": "a <= b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/util.ml:1:13:or",
         "file": "lib/util.ml", "line": 1, "col": 13, "rewrite": "or",
         "end_line": 1, "end_col": 19,
@@ -815,6 +817,39 @@ report compares the names that it prints, so its order can be different:
         s.mutants  a › b
         s.mutants  z › b
 
+A killed mutant has the tests that killed it in each executable, by the
+index of the executable and then by test, in "killed_by". A kill that
+names no test, as a kill by a fixture release, adds none:
+
+  $ plant "$scratch/json-kills" && cd "$scratch/json-kills"
+  $ mkdata mutants _build/_mutants/a.mutants "$add=killed:z/b;a/b" "$sub=killed"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=killed:c/d" "$sub=killed"
+  $ run windtrap mutants --json
+  { "version": 1,
+    "summary": { "reached": 2, "killed": 2, "survived": 0,
+      "not_evaluated": 0, "unknown": 0, "outside_tests": 0,
+      "unreached": 0, "refused": 0, "score": 100.00 },
+    "executables": [
+      { "name": "a.mutants", "path": null, "suite": null, "refused": null },
+      { "name": "b.mutants", "path": null, "suite": null, "refused": null } ],
+    "mutants": [
+      { "id": "lib/calc.ml:1:14:add",
+        "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
+        "end_line": 1, "end_col": 19,
+        "before": "a + b", "after": "a - b",
+        "verdict": "killed",
+        "killed_by": [
+          { "executable": 0, "test": ["a", "b"] },
+          { "executable": 0, "test": ["z", "b"] },
+          { "executable": 1, "test": ["c", "d"] } ] },
+      { "id": "lib/calc.ml:2:14:sub",
+        "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
+        "end_line": 2, "end_col": 19,
+        "before": "a - b", "after": "a + b",
+        "verdict": "killed",
+        "killed_by": [ ] } ],
+    "unstable": [ ] }
+
 A mutant that a child did not evaluate, and a mutant that ran outside
 every test, have their verdicts and no tests:
 
@@ -832,7 +867,8 @@ every test, have their verdicts and no tests:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
@@ -845,7 +881,7 @@ every test, have their verdicts and no tests:
         "verdict": "outside_tests" } ],
     "unstable": [ ] }
 
-An unknown mutant has the reason and the index of the file that the report
+An unknown mutant has the reason, its kind and the index of the file that the report
 names. Each executable has its suite and the reason why its suite was
 refused, or null:
 
@@ -864,18 +900,20 @@ refused, or null:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
         "before": "a - b", "after": "a + b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:3:14:lt",
         "file": "lib/calc.ml", "line": 3, "col": 14, "rewrite": "lt",
         "end_line": 3, "end_col": 19,
         "before": "a < b", "after": "a <= b",
         "verdict": "unknown", "executable": 1,
-        "reason": "the suite is not deterministic" },
+        "reason": "the suite is not deterministic", "reason_kind": "other" },
       { "id": "lib/util.ml:1:13:or",
         "file": "lib/util.ml", "line": 1, "col": 13, "rewrite": "or",
         "end_line": 1, "end_col": 19,
@@ -890,7 +928,7 @@ refused, or null:
         "end_line": 3, "end_col": 28,
         "before": "p && q", "after": "p || q",
         "verdict": "unknown", "executable": 0,
-        "reason": "its run was killed by SIGSEGV" } ],
+        "reason": "its run was killed by SIGSEGV", "reason_kind": "other" } ],
     "unstable": [ ] }
   [1]
 
@@ -913,7 +951,8 @@ merge:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" } ],
+        "verdict": "killed",
+        "killed_by": [ ] } ],
     "unstable": [ ] }
   [1]
 
@@ -1018,7 +1057,8 @@ The document counts the mutant as killed, and the note is the same:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
