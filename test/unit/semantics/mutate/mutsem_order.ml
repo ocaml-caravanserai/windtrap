@@ -232,6 +232,43 @@ let ret_some a = match Some (note "e" a) with Some v -> v | None -> "none"
 let ret_cons a b = String.concat "," (note "h" a :: note "t" [ b ])
 let ret_list a b = String.concat "," [ note "h" a; note "t" b ]
 
+(* {1 [del] in a unit position}
+
+   [del] also drops the then-branch of an [if] with no [else], a loop body,
+   and the last statement of a sequence there. Disarmed, each of them runs
+   as often as before: once per iteration in a loop. *)
+
+let del_then flag =
+  if flag then note "then" ();
+  "done"
+
+let del_then_seq flag =
+  if flag then (
+    note "a" ();
+    note "b" ());
+  "done"
+
+let del_while limit =
+  let i = ref 0 in
+  while !i < limit do
+    note "w" ();
+    incr i
+  done;
+  string_of_int !i
+
+let del_for n =
+  for i = 1 to n do
+    note (string_of_int i) ()
+  done;
+  "done"
+
+let del_downto n =
+  for i = n downto 1 do
+    note "d" ();
+    note (string_of_int i) ()
+  done;
+  "done"
+
 (* {1 Laziness}
 
    [lazy_thunk]'s body carries two [ari] sites, so it is not a trivial
@@ -345,6 +382,10 @@ let rec and_match_arm n =
    with an instrumented [ari] expression as its argument. *)
 let rec countdown n = if n = 0 then mark_depth () else countdown (n - 1)
 
+(* The then-branch of an [if] with no [else], whose [del] guard is
+   [if armed then () else e]. *)
+let rec then_down n = if n > 0 then then_down (n - 1)
+
 (* Mutual tail recursion, same shapes. *)
 let rec ping n = if n = 0 then mark_depth () else pong (n - 1)
 and pong n = if n = 0 then mark_depth () else ping (n - 1)
@@ -454,4 +495,10 @@ let witnesses : (string * (unit -> string)) list =
     ("none on Some", fun () -> show (ret_some "a"));
     ("tail on ::", fun () -> show (ret_cons "a" "b"));
     ("tail on a list literal", fun () -> show (ret_list "a" "b"));
+    ("del in a then-branch", fun () -> show (del_then true));
+    ("del in a then-branch not taken", fun () -> show (del_then false));
+    ("del in a then-branch sequence", fun () -> show (del_then_seq true));
+    ("del in a while body", fun () -> show (del_while 3));
+    ("del in a for body", fun () -> show (del_for 3));
+    ("del in a downto body", fun () -> show (del_downto 3));
   ]

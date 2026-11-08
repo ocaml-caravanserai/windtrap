@@ -238,7 +238,7 @@ type guard =
   | Literal of expression (* [int] and [bool], by this constant *)
   | Nothing (* [none] on [Some e] *)
   | Tail of expression (* [tail] on [h :: t], with [t] *)
-  | Delete (* [del], whose guard [descend] builds *)
+  | Delete (* [del], whose guard [dropped] builds *)
 
 and operator_guard =
   | Negate (* [cmp] on an equality *)
@@ -683,6 +683,27 @@ let is_opaque e =
   | Pexp_lazy body -> is_trivial_syntactic_value body
   | _ -> false
 
+(* A [()] of a [del] guard. In a file that declares its own [()], the
+   type-checker disambiguates it, and warnings 41 and 42 report that. *)
+let unit ~loc = [%expr () [@ocaml.warning "-41-42"]]
+
+(* How [del] drops a statement [e]. [In_tail] is [if armed then () else e],
+   which keeps [e] in the tail position of an [if] with no [else], so a tail
+   call in [e] stays a tail call. [As_statement] is
+   [(if armed then () else (e; ()) : Stdlib.Unit.t)], where [e; ()] types [e]
+   as the statement that it was: a loop body can have a type other than
+   [unit]. The constraint names [Stdlib.Unit.t] because a file can declare
+   its own [()]. [In_body] is the guard of [As_statement] on a whole loop
+   body.
+
+   The coverage rewriter marks only the disarmed arm. The [()] of [e; ()]
+   takes the location of the end of [e], where the coverage rewriter keys
+   the out-edge of [e]. In [In_body], [e; ()] takes the location of [e],
+   where the coverage rewriter marks the entry of the body. In
+   [As_statement], [e; ()] stays ghost: an entry there would have the key
+   of the entry of a block that starts with [e]. *)
+type drop = In_tail | In_body | As_statement
+
 type site = {
   line : int;
   col : int;
@@ -928,7 +949,7 @@ class instrumenter ~keeps ~module_name =
     method private guard ~chain e mutant index =
       let loc = { e.pexp_loc with loc_ghost = true } in
       match mutant.guard with
-      | Delete -> e (* [descend] guards a statement *)
+      | Delete -> e (* [dropped] guards a statement *)
       | Literal replacement -> (
           match index with
           | None -> e
@@ -1008,6 +1029,73 @@ class instrumenter ~keeps ~module_name =
           { e with pexp_desc = Pexp_construct (constructor, Some pair) }
       | _ -> self#descend e
 
+    (* [dropped drop e] rewrites the statement [e] and guards it with [del]
+       in the form [drop]. [()], an opaque expression, a release and code
+       that runs when the module is initialized carry no [del]. *)
+    method private dropped drop e =
+      let deletable =
+        (not at_load)
+        && (not (is_opaque e))
+        && (not (is_release e))
+        &&
+        match e.pexp_desc with
+        | Pexp_construct ({ txt = Lident "()"; _ }, None) -> false
+        | _ -> true
+      in
+      let off = off_reason e.pexp_attributes in
+      let index, rewritten =
+        self#statement (fun () ->
+            let index =
+              if not deletable then None
+              else
+                let mutant =
+                  { guard = Delete; rewrite = "del"; after = "()" }
+                in
+                match self#site e mutant ~dismissed:off with
+                | Some _ when Option.is_some off -> None
+                | index -> index
+            in
+            (index, self#expression e))
+      in
+      match index with
+      | None -> rewritten
+      | Some index -> (
+          let loc = { e.pexp_loc with loc_ghost = true } in
+          let armed = armed ~loc ~module_name index in
+          let skip = unit ~loc in
+          match drop with
+          | In_tail -> [%expr if [%e armed] then [%e skip] else [%e rewritten]]
+          | In_body | As_statement ->
+              let stop = e.pexp_loc.loc_end in
+              let after = unit ~loc:{ e.pexp_loc with loc_start = stop } in
+              let arm = if drop = In_body then e.pexp_loc else loc in
+              let disarmed = pexp_sequence ~loc:arm rewritten after in
+              [%expr
+                (if [%e armed] then [%e skip] else [%e disarmed]
+                  : Stdlib.Unit.t)])
+
+    (* [unit_position drop e] rewrites [e], a then-branch with no [else], a
+       loop body or the last statement of a sequence there, as a statement. A
+       sequence there carries no [del] of its own: each of its statements
+       carries one, and its last statement is in the position of [e]. In a
+       loop body, the last statement takes [As_statement], because it is not
+       the whole body. Inside a log message or a failure message, these
+       positions carry no [del], and the rules of the message reach into
+       them. *)
+    method private unit_position drop e =
+      match e.pexp_desc with
+      | Pexp_sequence _ when Option.is_some (off_reason e.pexp_attributes) -> e
+      | Pexp_sequence (first, rest) ->
+          let first = self#dropped As_statement first in
+          let rest =
+            self#unit_position
+              (if drop = In_tail then In_tail else As_statement)
+              rest
+          in
+          { e with pexp_desc = Pexp_sequence (first, rest) }
+      | _ when logging || message -> self#expression e
+      | _ -> self#dropped drop e
+
     (* [descend e] rewrites the children of [e], each in the context that [e]
        gives it. A connective that carries no mutant still has boolean
        operands. *)
@@ -1022,55 +1110,29 @@ class instrumenter ~keeps ~module_name =
             pexp_desc =
               Pexp_ifthenelse
                 ( self#mutate ~branches Condition condition,
-                  self#expression then_,
+                  (match else_ with
+                  | None -> self#unit_position In_tail then_
+                  | Some _ -> self#expression then_),
                   Option.map self#expression else_ );
           }
       | Pexp_while (condition, body) ->
           {
             e with
             pexp_desc =
-              Pexp_while (self#mutate Condition condition, self#expression body);
+              Pexp_while
+                ( self#mutate Condition condition,
+                  self#unit_position In_body body );
           }
-      | Pexp_sequence (first, rest) -> (
-          (* [del] drops a statement: [(if armed then () else (e1; ())); e2],
-             where [e1; ()] types [e1] as the statement it was. *)
-          let deletable =
-            (not at_load)
-            && (not (is_opaque first))
-            && (not (is_release first))
-            &&
-            match first.pexp_desc with
-            | Pexp_construct ({ txt = Lident "()"; _ }, None) -> false
-            | _ -> true
-          in
-          let off = off_reason first.pexp_attributes in
-          let index, first' =
-            self#statement (fun () ->
-                let index =
-                  if not deletable then None
-                  else
-                    let mutant =
-                      { guard = Delete; rewrite = "del"; after = "()" }
-                    in
-                    match self#site first mutant ~dismissed:off with
-                    | Some _ when Option.is_some off -> None
-                    | index -> index
-                in
-                (index, self#expression first))
-          in
-          let rest' = self#expression rest in
-          match index with
-          | None -> { e with pexp_desc = Pexp_sequence (first', rest') }
-          | Some index ->
-              let loc = { first.pexp_loc with loc_ghost = true } in
-              let dropped =
-                [%expr
-                  if [%e armed ~loc ~module_name index] then ()
-                  else (
-                    [%e first'];
-                    ())]
-              in
-              { e with pexp_desc = Pexp_sequence (dropped, rest') })
+      | Pexp_for (index, start, stop, direction, body) ->
+          let index = self#pattern index in
+          let start = self#expression start in
+          let stop = self#expression stop in
+          let body = self#unit_position In_body body in
+          { e with pexp_desc = Pexp_for (index, start, stop, direction, body) }
+      | Pexp_sequence (first, rest) ->
+          let first = self#dropped As_statement first in
+          let rest = self#expression rest in
+          { e with pexp_desc = Pexp_sequence (first, rest) }
       | Pexp_apply (operator, [ (Nolabel, left); (Nolabel, right) ])
         when is_connective ~keeps e ->
           {

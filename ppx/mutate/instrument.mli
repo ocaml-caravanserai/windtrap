@@ -79,10 +79,12 @@
       short-circuit evaluation. The deprecated [&] and [or] are not sites.
     - [ari] swaps [+] and [-] under the names [sub] and [add], and [+.] and [-.]
       under [fsub] and [fadd].
-    - [del] drops a statement: [e1] in [e1; e2] does not run, under the name
-      [del]. The guard is [(if armed then () else (e1; ())); e2], which types
-      [e1] as the statement that it was. [()] and an [assert] are no statement
-      it drops, and neither is the value [e2] of a sequence.
+    - [del] drops a statement, under the name [del]: the statement does not run.
+      A statement is [e1] in [e1; e2]. A statement is also the branch [e] of
+      [if c then e] with no [else], and the body of a [while] or a [for]. In
+      such a branch or body, the last statement of a sequence is a statement
+      too. [del] drops no [()], no [assert] and no opaque [lazy], and no value
+      [e2] of a sequence outside these positions.
     - [int] nudges an integer literal by one in the type that its suffix gives,
       under the name [int]: [1] becomes [0], and any other [n] becomes [n + 1].
       A literal whose nudge leaves its type, as [max_int], and a literal with a
@@ -94,6 +96,18 @@
       [[a; b]] is one site, at its bracket, and becomes [[b]]. In a chain of
       [(::)], as [a :: b :: t], the outermost [(::)] alone is a site, and
       becomes [b :: t]. A qualified constructor, as [Option.Some], is no site.
+
+    The guard of [del] in [e1; e2] is
+    [(if armed then () else (e1; ()) : Stdlib.Unit.t); e2], which types [e1] as
+    the statement that it was. A loop body takes the same form, because without
+    [-strict-sequence] its type can be other than [unit]. The guard of a branch
+    is [if c then (if armed then () else e)], which keeps [e] in tail position.
+    The constraint selects the predefined [()] in a file that declares its own,
+    and each [()] of the guard disables warnings 41 and 42.
+
+    The last statement of a sequence in a branch or a loop body takes the guard
+    of its position. A branch or a loop body that is a sequence has no [del] of
+    its own, because the [del] of each of its statements covers it.
 
     The guard of [int] and of [bool] is [if armed then n' else n], an [if] whose
     two arms are constants. The guard of [none] is
@@ -177,11 +191,14 @@
     [Printf.ksprintf f] and [Format.kasprintf f] applied to a format. [f @@ x]
     and [x |> f] match only when [f] is a name. Thus the message of
     [Logs.err ~src @@ fun m -> ...] keeps its mutants, and that of
-    [Logs.err ~src (fun m -> ...)] does not. A statement in the arguments of a
-    logging function, of [failwith] or of [invalid_arg] keeps its mutants, with
-    the sites inside it. A statement acts on the state of the program. A
-    statement is the left operand of a sequence or the expression of
-    [let () = e in]. A logging call that is a statement keeps its own [del]
+    [Logs.err ~src (fun m -> ...)] does not.
+
+    A statement in the arguments of a logging function, of [failwith] or of
+    [invalid_arg] keeps its mutants, with the sites inside it. A statement acts
+    on the state of the program. Here a statement is [e1] in [e1; e2], or the
+    expression of [let () = e in]. Outside a statement, a then-branch with no
+    [else] and a loop body have no [del] site, and the rules of the message
+    apply to them. A logging call that is a statement keeps its own [del]
     mutant. These two rules do not see other effects, for example of a function
     that the message calls.
 
@@ -294,8 +311,8 @@
     are local to the file. That order is the traversal's and not the source's. A
     site comes before the sites inside its operands, and the operands of a
     mutated operator come left to right. The else branch of an [if] comes before
-    its then branch, and both before its condition, and the body of a [while]
-    comes before its condition.
+    its then branch, and both before its condition. The body of a [while] comes
+    before its condition, and the bounds of a [for] come before its body.
 
     The [before] and [after] texts of a site are printed from the parsetree and
     never cut out of the source. The attributes of the site are left out, and
@@ -331,17 +348,37 @@
       when the module is initialized, within the preconditions of [register].
       [file] is the input name and [sites] is the table in index order.
 
-    Every generated node has a ghost location, with one exception. The disarmed
+    Every generated node has a ghost location, with two exceptions. The disarmed
     arm of an ordering or [ari] guard is the original application rebuilt over
-    the binders, and keeps its location and its attributes. The copy [t'] in the
-    guard of [tail] is generated code too, and each of its locations is ghost,
-    so that no two nodes share a location.
+    the binders, and keeps its location and its attributes. The disarmed arm of
+    the [del] guard of a statement or a loop body is [e; ()], whose [()] has a
+    location of zero width at the end of [e]. On a loop body, the arm [e; ()]
+    has the location of [e]. The copy [t'] in the guard of [tail] is generated
+    code too, and each of its locations is ghost, so that no two nodes share a
+    location.
 
     In the driver that dune builds for a stanza naming both backends this
     rewriter runs first, so its sites are those stated here and the coverage
-    rewriter receives its guards. When the coverage rewriter ran on the file
-    first, which is the order of a driver that links this library before
-    [ppx_windtrap.coverage], the file holds its visits:
+    rewriter receives its guards. The coverage rewriter marks the disarmed arm
+    of a guard. It takes the key of the entry of a loop body and of the out-edge
+    of a statement from the locations of the [del] guard. The points of the file
+    are not those of the coverage rewriter alone. For example, an application
+    that is a [neg] site has no out-edge, and the disarmed arm of an [int] guard
+    has a point. The [del] guard gives these known differences:
+    - In [if c then (a; b)], the guard of [b] is an [if] with an [else], and its
+      disarmed arm [b] has one more point.
+    - After a statement [if c then x] that has a [del] site, the rest of the
+      sequence has no point. A point of zero width at the [()] of the guard
+      counts the same evaluations.
+    - A loop body that ends with [if c then x] has one more point, of zero
+      width, at the [()] of its guard.
+    - A loop body that is an application [f x] with a callee of one byte has two
+      points. The coverage rewriter alone gives its entry and its out-edge one
+      point.
+
+    When the coverage rewriter ran on the file first, which is the order of a
+    driver that links this library before [ppx_windtrap.coverage], the file
+    holds its visits:
     - [a || b] reaches this rewriter as the [if] of that rewriter. It carries no
       [con] mutant, and an operand that became a condition is mutated as one.
     - the [before] and [after] texts of a site hold the visits inside it, as
