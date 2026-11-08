@@ -198,7 +198,7 @@ read as the others' survivors; the merge then exits 1:
   $ plant "$scratch/unknown" && cd "$scratch/unknown"
   $ mkdata mutants _build/_mutants/a.mutants "$add=killed" "$sub=survived:cli/runs" \
   >   "$lt=survived:cli/compares"
-  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=unknown:its run was killed by SIGSEGV"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=crashed:was killed by SIGSEGV"
   $ run windtrap mutants
   ───────────────────── survivors (1) ──────────────────────
   File "lib/calc.ml", line 3, characters 14-19:
@@ -220,7 +220,7 @@ read as the others' survivors; the merge then exits 1:
   mutants: 1 survived of 3 reached, 1 killed, 1 unknown, 2 executables, score 50.0% (1/2)
   [1]
   $ mkdata mutants _build/_mutants/a.mutants "$add=killed" "$sub=survived:cli/runs"
-  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=unknown:its run was killed by SIGSEGV"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=killed" "$sub=crashed:was killed by SIGSEGV"
   $ run windtrap mutants
   ────────────────────── unknown (1) ───────────────────────
   File "lib/calc.ml", line 2, characters 14-19:
@@ -486,7 +486,7 @@ suite:
   $ mkdir -p _build/default/test && echo 'three suites' > _build/default/test/t.exe
   $ mkdata mutants _build/_mutants/adds.mutants --exe _build/default/test/t.exe --suite adds \
   >   "$add=killed" "$sub=survived:sub/reaches" "$or=survived:a/same" \
-  >   "$and=unknown:its run was killed by SIGSEGV"
+  >   "$and=crashed:was killed by SIGSEGV"
   $ mkdata mutants _build/_mutants/subs.mutants --exe _build/default/test/t.exe --suite subs \
   >   "$add=survived:add/reaches" "$sub=killed" "$or=survived:a/same;a/other"
   $ mkdata mutants _build/_mutants/lts.mutants --exe _build/default/test/t.exe --suite lts \
@@ -725,7 +725,8 @@ executable by its index in "executables":
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
@@ -738,7 +739,8 @@ executable by its index in "executables":
         "file": "lib/calc.ml", "line": 3, "col": 14, "rewrite": "lt",
         "end_line": 3, "end_col": 19,
         "before": "a < b", "after": "a <= b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/util.ml:1:13:or",
         "file": "lib/util.ml", "line": 1, "col": 13, "rewrite": "or",
         "end_line": 1, "end_col": 19,
@@ -815,6 +817,39 @@ report compares the names that it prints, so its order can be different:
         s.mutants  a › b
         s.mutants  z › b
 
+A killed mutant has the tests that killed it in each executable, by the
+index of the executable and then by test, in "killed_by". A kill that
+names no test, as a kill by a fixture release, adds none:
+
+  $ plant "$scratch/json-kills" && cd "$scratch/json-kills"
+  $ mkdata mutants _build/_mutants/a.mutants "$add=killed:z/b;a/b" "$sub=killed"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=killed:c/d" "$sub=killed"
+  $ run windtrap mutants --json
+  { "version": 1,
+    "summary": { "reached": 2, "killed": 2, "survived": 0,
+      "not_evaluated": 0, "unknown": 0, "outside_tests": 0,
+      "unreached": 0, "refused": 0, "score": 100.00 },
+    "executables": [
+      { "name": "a.mutants", "path": null, "suite": null, "refused": null },
+      { "name": "b.mutants", "path": null, "suite": null, "refused": null } ],
+    "mutants": [
+      { "id": "lib/calc.ml:1:14:add",
+        "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
+        "end_line": 1, "end_col": 19,
+        "before": "a + b", "after": "a - b",
+        "verdict": "killed",
+        "killed_by": [
+          { "executable": 0, "test": ["a", "b"] },
+          { "executable": 0, "test": ["z", "b"] },
+          { "executable": 1, "test": ["c", "d"] } ] },
+      { "id": "lib/calc.ml:2:14:sub",
+        "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
+        "end_line": 2, "end_col": 19,
+        "before": "a - b", "after": "a + b",
+        "verdict": "killed",
+        "killed_by": [ ] } ],
+    "unstable": [ ] }
+
 A mutant that a child did not evaluate, and a mutant that ran outside
 every test, have their verdicts and no tests:
 
@@ -832,7 +867,8 @@ every test, have their verdicts and no tests:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
@@ -845,9 +881,9 @@ every test, have their verdicts and no tests:
         "verdict": "outside_tests" } ],
     "unstable": [ ] }
 
-An unknown mutant has the reason and the index of the file that the report
-names. Each executable has its suite and the reason why its suite was
-refused, or null:
+An unknown mutant has the reason, its kind and the index of the file
+that the report names. Each executable has its suite and the reason
+why its suite was refused, or null:
 
   $ cd "$scratch/suites"
   $ run windtrap mutants --json
@@ -864,18 +900,20 @@ refused, or null:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
         "before": "a - b", "after": "a + b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:3:14:lt",
         "file": "lib/calc.ml", "line": 3, "col": 14, "rewrite": "lt",
         "end_line": 3, "end_col": 19,
         "before": "a < b", "after": "a <= b",
         "verdict": "unknown", "executable": 1,
-        "reason": "the suite is not deterministic" },
+        "reason": "the suite is not deterministic", "reason_kind": "other" },
       { "id": "lib/util.ml:1:13:or",
         "file": "lib/util.ml", "line": 1, "col": 13, "rewrite": "or",
         "end_line": 1, "end_col": 19,
@@ -890,7 +928,7 @@ refused, or null:
         "end_line": 3, "end_col": 28,
         "before": "p && q", "after": "p || q",
         "verdict": "unknown", "executable": 0,
-        "reason": "its run was killed by SIGSEGV" } ],
+        "reason": "its run was killed by SIGSEGV", "reason_kind": "crashed" } ],
     "unstable": [ ] }
   [1]
 
@@ -913,7 +951,8 @@ merge:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" } ],
+        "verdict": "killed",
+        "killed_by": [ ] } ],
     "unstable": [ ] }
   [1]
 
@@ -1018,7 +1057,8 @@ The document counts the mutant as killed, and the note is the same:
         "file": "lib/calc.ml", "line": 1, "col": 14, "rewrite": "add",
         "end_line": 1, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [ ] },
       { "id": "lib/calc.ml:2:14:sub",
         "file": "lib/calc.ml", "line": 2, "col": 14, "rewrite": "sub",
         "end_line": 2, "end_col": 19,
@@ -1408,13 +1448,13 @@ is to delete it, which a coverage dump in the directory shares:
   $ printf 'windtrap-mutants-v0\n1\nsome older payload\n' > _build/_mutants/old.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v13", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v14", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
   $ rm _build/_mutants/old.mutants
   $ printf 'windtrap-coverage-v3\n0\n' > _build/_mutants/cov.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v13", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v14", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
 
 A PATH that cannot be used fails the command, and the files named beside

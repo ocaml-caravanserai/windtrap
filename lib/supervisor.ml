@@ -1168,7 +1168,11 @@ type job = {
   alone : bool;
 }
 
-type ended = Ran | Lost of string | Expired | Outgrown of int
+type ended =
+  | Ran
+  | Lost of { signal : int option; status : int option; how : string }
+  | Expired
+  | Outgrown of int
 
 type ran = {
   results : Run.result list;
@@ -1271,7 +1275,8 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
   (* A worker that ended after its Finish ran the job; one that retired
      mid-job hands the rest to a fresh fork; any other end loses the job. *)
   let closed st =
-    let status = Option.value (reap st.w) ~default:(Unix.WEXITED 255) in
+    let read = reap st.w in
+    let status = Option.value read ~default:(Unix.WEXITED 255) in
     match status with
     | Unix.WEXITED 0 when st.finishing && st.pending = [] -> settle st Ran
     | Unix.WEXITED 0 when st.finishing ->
@@ -1284,12 +1289,19 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
         let start =
           if st.w.serving then None else Option.map read_start st.w.start_log
         in
-        settle st
-          (Lost
-             (match start with
-             | _ when st.w.exited -> "ended when code under test called exit"
-             | Some text -> before_tests status text
-             | None -> ended status))
+        let signal, code =
+          match read with
+          | Some (Unix.WEXITED n) -> (None, Some n)
+          | Some (Unix.WSIGNALED s | Unix.WSTOPPED s) -> (Some s, None)
+          | None -> (None, None)
+        in
+        let how =
+          match start with
+          | _ when st.w.exited -> "ended when code under test called exit"
+          | Some text -> before_tests status text
+          | None -> ended status
+        in
+        settle st (Lost { signal; status = code; how })
   in
   (* The module initialization of a worker that replaces a retired one is no
      part of the job's tests, as in [supervise]. Each start leaves out at most

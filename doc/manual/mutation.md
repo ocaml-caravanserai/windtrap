@@ -839,8 +839,13 @@ too, and has no gate.
 For other tools, `--json` prints the merge as one JSON document on
 standard output, in place of the report. The document has its version,
 the counts and the score, the verdict files, and each mutant with its
-verdict. A survivor also has the tests that ran it, and an unknown
-mutant has its reason. A test names its verdict file by its index in
+verdict. A survivor also has the tests that ran it. A killed mutant
+has the tests that killed it in `killed_by`: in each run that killed
+it, the first test that failed. The array is empty when a kill names
+no test, as for a kill by a fixture release. It is also empty for a
+mutant killed elsewhere. An unknown mutant has its reason, and the kind
+of the reason in `reason_kind`: `deadline`, `crashed`, `memory`,
+`flaky_kill` or `other`. A test names its verdict file by its index in
 `executables`, because two files can have the same name. Under
 `--lines` or `--diff`, the verdict counts, the score and `mutants` hold
 only the mutants on the lines. But `executables` still lists every
@@ -879,7 +884,9 @@ $ dune exec windtrap -- mutants --json --lines=calc.ml:10
       "file": "calc.ml", "line": 10, "col": 27, "rewrite": "int",
       "end_line": 10, "end_col": 28,
       "before": "1", "after": "0",
-      "verdict": "killed" },
+      "verdict": "killed",
+      "killed_by": [
+        { "executable": 0, "test": ["sign", "is 1 for a positive"] } ] },
     { "id": "calc.ml:10:37:le",
       "file": "calc.ml", "line": 10, "col": 37, "rewrite": "le",
       "end_line": 10, "end_col": 42,
@@ -891,7 +898,9 @@ $ dune exec windtrap -- mutants --json --lines=calc.ml:10
       "file": "calc.ml", "line": 10, "col": 48, "rewrite": "int",
       "end_line": 10, "end_col": 50,
       "before": "(-1)", "after": "0",
-      "verdict": "killed" },
+      "verdict": "killed",
+      "killed_by": [
+        { "executable": 0, "test": ["sign", "is -1 for a negative"] } ] },
     { "id": "calc.ml:10:56:int",
       "file": "calc.ml", "line": 10, "col": 56, "rewrite": "int",
       "end_line": 10, "end_col": 57,

@@ -34,14 +34,27 @@ let collection records = List.fold_left Verdicts.add Verdicts.empty records
 
 let quoted names = String.concat " " (List.map (strf "%S") names)
 
+let tests_row ts =
+  String.concat ", " (List.map (fun t -> "[" ^ quoted t ^ "]") ts)
+
+let int_row = Option.fold ~none:"none" ~some:string_of_int
+
+let reason_row = function
+  | Verdicts.Deadline { seconds } -> strf "deadline of %h s" seconds
+  | Crashed { signal; status; how } ->
+      strf "crashed (signal %s, status %s) %S" (int_row signal) (int_row status)
+        how
+  | Memory { mb } -> strf "memory of %d MB" mb
+  | Flaky_kill { test; failure } ->
+      strf "flaky kill by %s: %S" (tests_row [ test ]) failure
+  | Other reason -> reason
+
 let verdict_row = function
-  | Verdicts.Killed -> "killed"
+  | Verdicts.Killed { by = [] } -> "killed"
+  | Killed { by } -> "killed by " ^ tests_row by
   | Killed_elsewhere { exe } -> strf "killed elsewhere by %S" exe
-  | Unknown reason -> "unknown: " ^ reason
-  | Survived { first; others } ->
-      "survived by "
-      ^ String.concat ", "
-          (List.map (fun t -> "[" ^ quoted t ^ "]") (first :: others))
+  | Unknown reason -> "unknown: " ^ reason_row reason
+  | Survived { first; others } -> "survived by " ^ tests_row (first :: others)
   | Not_evaluated -> "not evaluated"
   | Outside_tests -> "outside tests"
   | Unreached -> "unreached"
@@ -104,12 +117,26 @@ let small_verdict =
   Gen.with_pp pp_verdict
     (Gen.frequency
        [
-         (1, Gen.constant Verdicts.Killed);
+         (2, Gen.map Verdicts.killed (Gen.list ~size:(Gen.int_range 0 2) path));
          ( 1,
            Gen.map
              (fun exe -> Verdicts.Killed_elsewhere { exe })
              (Gen.of_list [ "x"; "y" ]) );
-         (1, Gen.map (fun r -> Verdicts.Unknown r) (Gen.of_list [ "x"; "y" ]));
+         ( 2,
+           Gen.map
+             (fun r -> Verdicts.Unknown r)
+             (Gen.of_list
+                Verdicts.
+                  [
+                    Other "x";
+                    Other "its run y";
+                    Crashed { signal = Some (-10); status = None; how = "y" };
+                    Crashed { signal = None; status = Some 1; how = "y" };
+                    Deadline { seconds = 2. };
+                    Memory { mb = 8 };
+                    Flaky_kill { test = [ "t" ]; failure = "x" };
+                    Flaky_kill { test = [ "u" ]; failure = "x" };
+                  ]) );
          (1, Gen.constant Verdicts.Not_evaluated);
          (3, Gen.map Verdicts.survived (Gen.list ~size:(Gen.int_range 1 3) path));
          (1, Gen.constant Verdicts.Outside_tests);
@@ -148,12 +175,31 @@ let small_collection =
 let any_record =
   let name = Gen.string in
   let path = Gen.list ~size:(Gen.int_range 0 3) name in
+  let int = Gen.option (Gen.int_range (-20) 300) in
+  let reason =
+    Gen.one_of
+      [
+        Gen.map
+          (fun seconds -> Verdicts.Deadline { seconds })
+          (Gen.float_range 0. 1e6);
+        Gen.map
+          (fun ((signal, status), how) ->
+            Verdicts.Crashed { signal; status; how })
+          (Gen.pair (Gen.pair int int) name);
+        Gen.map (fun mb -> Verdicts.Memory { mb }) Gen.nat;
+        Gen.map
+          (fun (test, failure) -> Verdicts.Flaky_kill { test; failure })
+          (Gen.pair path name);
+        Gen.map (fun r -> Verdicts.Other r) name;
+      ]
+  in
   let verdict =
     Gen.one_of
       [
-        Gen.of_list Verdicts.[ Killed; Not_evaluated; Outside_tests; Unreached ];
+        Gen.of_list Verdicts.[ Not_evaluated; Outside_tests; Unreached ];
+        Gen.map Verdicts.killed (Gen.list ~size:(Gen.int_range 0 3) path);
         Gen.map (fun e -> Verdicts.Killed_elsewhere { exe = "e" ^ e }) name;
-        Gen.map (fun r -> Verdicts.Unknown r) name;
+        Gen.map (fun r -> Verdicts.Unknown r) reason;
         Gen.map Verdicts.survived (Gen.list ~size:(Gen.int_range 1 3) path);
       ]
   in
@@ -199,7 +245,7 @@ let any_file =
 (* Verdicts *)
 
 let rank = function
-  | Verdicts.Killed -> 6
+  | Verdicts.Killed _ -> 6
   | Killed_elsewhere _ -> 5
   | Unknown _ -> 4
   | Not_evaluated -> 3
@@ -213,7 +259,10 @@ let join a b =
   match (a, b) with
   | Verdicts.Survived x, Verdicts.Survived y ->
       Verdicts.survived ((x.first :: x.others) @ (y.first :: y.others))
-  | Verdicts.Unknown x, Verdicts.Unknown y -> Verdicts.Unknown (min x y)
+  | Verdicts.Killed x, Verdicts.Killed y -> Verdicts.killed (x.by @ y.by)
+  | Verdicts.Unknown x, Verdicts.Unknown y ->
+      let key r = (Verdicts.reason_text r, r) in
+      Verdicts.Unknown (snd (min (key x) (key y)))
   | Verdicts.Killed_elsewhere x, Verdicts.Killed_elsewhere y ->
       Verdicts.Killed_elsewhere { exe = min x.exe y.exe }
   | _ -> if rank a >= rank b then a else b
@@ -241,18 +290,26 @@ let lattice_examples =
   let e exe = Verdicts.Killed_elsewhere { exe } in
   Verdicts.
     [
-      (Killed, e "x");
-      (e "x", Unknown "crashed");
+      (killed [], e "x");
+      (e "x", Unknown (Other "crashed"));
       (e "x", Not_evaluated);
       (e "y", e "x");
       (s [ [ "a" ] ], e "x");
       (Unreached, e "x");
-      (Killed, s [ [ "a" ] ]);
-      (Unreached, Killed);
-      (Unknown "crashed", Killed);
-      (Unknown "crashed", s [ [ "a" ] ]);
-      (Unknown "crashed", Not_evaluated);
-      (Unknown "refused", Unknown "crashed");
+      (killed [ [ "a" ] ], s [ [ "a" ] ]);
+      (Unreached, killed [ [ "a" ] ]);
+      (Unknown (Other "crashed"), killed []);
+      (killed [ [ "b" ]; [ "a" ] ], killed [ [ "c" ]; [ "b" ] ]);
+      (killed [], killed [ [ "a" ] ]);
+      (killed [ [ "a" ] ], killed [ [ "a" ] ]);
+      ( Unknown (Crashed { signal = Some (-10); status = None; how = "x" }),
+        Unknown (Other "its run x") );
+      ( Unknown (Crashed { signal = None; status = Some 1; how = "x" }),
+        Unknown (Crashed { signal = Some (-10); status = None; how = "x" }) );
+      (Unknown (Deadline { seconds = 2. }), Unknown (Memory { mb = 8 }));
+      (Unknown (Other "crashed"), s [ [ "a" ] ]);
+      (Unknown (Other "crashed"), Not_evaluated);
+      (Unknown (Other "refused"), Unknown (Other "crashed"));
       (Not_evaluated, s [ [ "a" ] ]);
       (Outside_tests, s [ [ "a" ] ]);
       (Not_evaluated, Outside_tests);
@@ -262,11 +319,11 @@ let lattice_examples =
 
 let outcome_cases =
   [
-    ("Killed", Verdicts.Killed, Some "killed");
+    ("Killed", Verdicts.killed [ [ "t" ] ], Some "killed");
     ( "Killed_elsewhere",
       Verdicts.Killed_elsewhere { exe = "default/test/a.exe" },
       None );
-    ("Unknown", Verdicts.Unknown "crashed", None);
+    ("Unknown", Verdicts.Unknown (Other "crashed"), None);
     ("Survived", Verdicts.survived [ [ "t" ] ], Some "survived");
     ("Not_evaluated", Verdicts.Not_evaluated, Some "not evaluated");
     ("Outside_tests", Verdicts.Outside_tests, None);
@@ -311,18 +368,18 @@ let record_of_mutant () =
   in
   equal string
     {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b" of aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: killed|}
-    (record_row (Verdicts.record_of_mutant m Verdicts.Killed));
+    (record_row (Verdicts.record_of_mutant m (Verdicts.killed [])));
   equal string {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b": killed|}
     (record_row
        (Verdicts.record_of_mutant
           { m with source_digest = None }
-          Verdicts.Killed))
+          (Verdicts.killed [])))
 
 (* The previous outcomes of two records combine as their verdicts do, and a
    missing one leaves the other unchanged. *)
 let join_previous a b =
   let verdict = function
-    | `Killed -> Verdicts.Killed
+    | `Killed -> Verdicts.killed []
     | `Survived -> Verdicts.survived [ [ "t" ] ]
     | `Not_evaluated -> Verdicts.Not_evaluated
   in
@@ -364,21 +421,21 @@ let ordered added =
 let changed_cases =
   let s = Verdicts.survived [ [ "t" ] ] in
   [
-    ("no previous outcome", None, Verdicts.Killed, None);
+    ("no previous outcome", None, Verdicts.killed [], None);
     ( "survived to killed",
       Some `Survived,
-      Verdicts.Killed,
+      Verdicts.killed [],
       Some "survived, killed" );
     ("killed to survived", Some `Killed, s, Some "killed, survived");
     ( "not evaluated to killed",
       Some `Not_evaluated,
-      Verdicts.Killed,
+      Verdicts.killed [],
       Some "not evaluated, killed" );
     ( "survived to not evaluated",
       Some `Survived,
       Verdicts.Not_evaluated,
       Some "survived, not evaluated" );
-    ("killed to killed", Some `Killed, Verdicts.Killed, None);
+    ("killed to killed", Some `Killed, Verdicts.killed [], None);
     ( "survived to other reaching tests",
       Some `Survived,
       Verdicts.survived [ [ "a" ]; [ "b" ] ],
@@ -387,7 +444,7 @@ let changed_cases =
       Some `Survived,
       Verdicts.Killed_elsewhere { exe = "x" },
       None );
-    ("killed to unknown", Some `Killed, Verdicts.Unknown "crashed", None);
+    ("killed to unknown", Some `Killed, Verdicts.Unknown (Other "crashed"), None);
     ("survived to unreached", Some `Survived, Verdicts.Unreached, None);
     ("killed to outside tests", Some `Killed, Verdicts.Outside_tests, None);
   ]
@@ -410,27 +467,27 @@ let with_previous_cases =
   let m = id "lib/a.ml" 1 0 "lt" in
   let s = Verdicts.survived [ [ "t" ] ] in
   let other = String.make 32 'b' in
-  let r = record ~source_digest:source m Verdicts.Killed in
+  let r = record ~source_digest:source m (Verdicts.killed []) in
   [
     ("the same mutant", prior ~previous:`Killed s, r, Some "survived");
     ( "another digest",
       prior s,
-      record ~source_digest:other m Verdicts.Killed,
+      record ~source_digest:other m (Verdicts.killed []),
       None );
-    ("no digest in the collection", prior s, record m Verdicts.Killed, None);
+    ("no digest in the collection", prior s, record m (Verdicts.killed []), None);
     ("no digest in the prior", prior ~source_digest:None s, r, None);
     ("another rendering", prior ~before:"c" s, r, None);
     ( "another end",
       prior s,
-      record ~source_digest:source ~end_:(2, 0) m Verdicts.Killed,
+      record ~source_digest:source ~end_:(2, 0) m (Verdicts.killed []),
       None );
     ( "another identifier",
       prior s,
-      record ~source_digest:source (id "lib/b.ml" 1 0 "lt") Verdicts.Killed,
+      record ~source_digest:source (id "lib/b.ml" 1 0 "lt") (Verdicts.killed []),
       None );
     ( "a previous outcome of its own and no prior record",
       Verdicts.empty,
-      record ~source_digest:source ~previous:`Survived m Verdicts.Killed,
+      record ~source_digest:source ~previous:`Survived m (Verdicts.killed []),
       None );
     ( "a prior skip keeps the outcome before it",
       prior ~previous:`Survived (Verdicts.Killed_elsewhere { exe = "x" }),
@@ -441,7 +498,7 @@ let with_previous_cases =
       r,
       None );
     ( "a prior unknown verdict keeps the outcome before it",
-      prior ~previous:`Not_evaluated (Verdicts.Unknown "crashed"),
+      prior ~previous:`Not_evaluated (Verdicts.Unknown (Other "crashed")),
       r,
       Some "not evaluated" );
     ( "a prior unreached mutant keeps the outcome before it",
@@ -635,7 +692,7 @@ let sample =
       record ~before:"a - b" ~after:"a + b" (id "lib/a.ml" 1 2 "add")
         Verdicts.Unreached;
       record ~before:"p && q" ~after:"not (p && q)" ~previous:`Not_evaluated
-        (id "lib/b.ml" 3 4 "not") Verdicts.Killed;
+        (id "lib/b.ml" 3 4 "not") (Verdicts.killed []);
       record ~before:"a || b" ~after:"a && b" ~previous:`Killed
         (id "lib/b.ml" 5 0 "or")
         (Verdicts.survived [ [ "y"; "z" ]; [ "x" ] ]);
@@ -644,13 +701,61 @@ let sample =
       record ~before:"a - b" ~after:"a + b" (id "lib/c.ml" 9 0 "add")
         Verdicts.Outside_tests;
       record ~before:"a < b" ~after:"a <= b" (id "lib/c.ml" 11 3 "le")
-        (Verdicts.Unknown "its run was killed by SIGSEGV");
+        (Verdicts.Unknown (Other "its run was killed by SIGSEGV"));
       record ~before:"a - b" ~after:"a + b" ~source_digest:(String.make 32 'c')
         (id "lib/d.ml" 1 0 "add")
         (Verdicts.Killed_elsewhere { exe = "default/test/a.exe" });
     ]
 
 let digest = String.make 32 'a'
+
+let kills_and_reasons =
+  let at line verdict =
+    record ~before:"a - b" ~after:"a + b" (id "lib/k.ml" line 0 "add") verdict
+  in
+  collection
+    Verdicts.
+      [
+        at 1 (killed []);
+        at 2 (killed [ [ "calc"; "adds" ] ]);
+        at 3 (killed [ [ "calc"; "subs" ]; [ "adds" ]; [ "calc"; "adds" ] ]);
+        at 4 (Unknown (Deadline { seconds = 2.5 }));
+        at 5 (Unknown (Deadline { seconds = 0.1 }));
+        at 6
+          (Unknown
+             (Crashed
+                {
+                  signal = Some Sys.sigsegv;
+                  status = None;
+                  how = "was killed by SIGSEGV";
+                }));
+        at 7
+          (Unknown
+             (Crashed
+                {
+                  signal = None;
+                  status = Some 3;
+                  how = "ended when code under test called exit";
+                }));
+        at 8 (Unknown (Crashed { signal = None; status = None; how = "ended" }));
+        at 9 (Unknown (Memory { mb = 512 }));
+        at 10
+          (Unknown
+             (Flaky_kill
+                {
+                  test = [ "calc"; "adds" ];
+                  failure = "its killing test calc adds also fails";
+                }));
+        at 11 (Unknown (Other "the suite is not deterministic"));
+      ]
+
+let reason_texts =
+  List.filter_map
+    (fun (r : Verdicts.record) ->
+      match r.verdict with
+      | Verdicts.Unknown reason -> Some (Verdicts.reason_text reason)
+      | _ -> None)
+    (Verdicts.records kills_and_reasons)
 
 let round_trip (identity, suite, t) =
   let path = Filename.concat (temp_dir ()) "saved.mutants" in
@@ -685,7 +790,7 @@ let refusal () =
     (String.concat "\n"
        (List.filteri (fun i _ -> i < 3) (String.split_on_char '\n' (read path))))
   @@ __POS_OF__
-       {|windtrap-mutants-v13
+       {|windtrap-mutants-v14
 refused 44 the suite is not deterministic:
 failed twice|};
   equal (option string) (Some reason)
@@ -725,12 +830,12 @@ let headers =
     ("the empty file", "");
     ("a coverage file", "windtrap-coverage-v3\n1\n");
     ("the upstream version before", "windtrap-mutants-v5\ntested\n0\n");
-    ("the version before", "windtrap-mutants-v12\ntested\n0\n");
-    ("two versions before", "windtrap-mutants-v11\ntested\n0\n");
-    ("a fork version before", "windtrap-mutants-v10\ntested\n0\n");
-    ("a later version", "windtrap-mutants-v14\ntested\n0\n");
+    ("the version before", "windtrap-mutants-v13\ntested\n0\n");
+    ("two versions before", "windtrap-mutants-v12\ntested\n0\n");
+    ("a fork version before", "windtrap-mutants-v11\ntested\n0\n");
+    ("a later version", "windtrap-mutants-v15\ntested\n0\n");
     ("the magic in uppercase", "WINDTRAP-MUTANTS-V1\n0\n");
-    ("the magic and a digit", "windtrap-mutants-v130\ntested\n0\n");
+    ("the magic and a digit", "windtrap-mutants-v140\ntested\n0\n");
     ("plain text", "hello\nworld\n");
   ]
 
@@ -742,25 +847,25 @@ let unknown_format (_, text) =
          | Error (Verdicts.Unknown_format { path; _ }) -> Some path | _ -> None)
        loaded)
 
-let record_prefix = "windtrap-mutants-v13\ntested\n1\n8 lib/a.ml "
+let record_prefix = "windtrap-mutants-v14\ntested\n1\n8 lib/a.ml "
 
 let corrupt_files =
   [
-    ("the magic line alone", "windtrap-mutants-v13");
-    ("a negative record count", "windtrap-mutants-v13\ntested\n-1\n");
-    ("a record count past the input", "windtrap-mutants-v13\ntested\n99999999\n");
+    ("the magic line alone", "windtrap-mutants-v14");
+    ("a negative record count", "windtrap-mutants-v14\ntested\n-1\n");
+    ("a record count past the input", "windtrap-mutants-v14\ntested\n99999999\n");
     ( "fewer records than the count",
-      "windtrap-mutants-v13\n\
+      "windtrap-mutants-v14\n\
        tested\n\
        2\n\
        8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none\n" );
     ( "an empty file name",
-      "windtrap-mutants-v13\n\
+      "windtrap-mutants-v14\n\
        tested\n\
        1\n\
        0  1 2 1 5 3 add 0 0 1 b 1 a 0  unreached\n" );
     ( "a file name past the input",
-      "windtrap-mutants-v13\n\
+      "windtrap-mutants-v14\n\
        tested\n\
        1\n\
        80 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached\n" );
@@ -807,37 +912,65 @@ let corrupt_files =
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  survived 2 1 1 g\n" );
     ( "a test name past the input",
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  survived 1 1 80 g\n" );
+    ( "a killing test count past the input",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 99999999\n" );
+    ( "a killing test name past the input",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 1 1 80 g\n" );
+    ( "a reason of the format before",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown 7 crashed none\n" );
+    ( "an unknown reason",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown lost none\n" );
+    ( "a deadline that is no number",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown deadline x none\n" );
+    ( "a negative deadline",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown deadline -0x1p+0 none\n"
+    );
+    ( "a deadline that is not finite",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown deadline nan none\n" );
+    ( "a signal that is no number",
+      record_prefix
+      ^ "1 2 1 5 3 add 1 b 1 a 0  unknown crashed x none 1 a none\n" );
+    ( "an exit status that is no number",
+      record_prefix
+      ^ "1 2 1 5 3 add 1 b 1 a 0  unknown crashed none x 1 a none\n" );
+    ( "a crash with no phrase",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown crashed none none\n" );
+    ( "a negative memory limit",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown memory -1 none\n" );
+    ( "a flaky kill with no failure",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown flaky_kill 1 1 t\n" );
     ( "two records of one identifier",
-      "windtrap-mutants-v13\n\
+      "windtrap-mutants-v14\n\
        tested\n\
        2\n\
        8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none\n\
-       8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed none\n" );
+       8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed 0 none\n" );
     ( "a malformed record after a valid one",
-      "windtrap-mutants-v13\n\
+      "windtrap-mutants-v14\n\
        tested\n\
        2\n\
-       8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed none\n\
+       8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed 0 none\n\
        8 lib/a.ml 0 2 1 5 3 add 1 b 1 a 0  unreached none\n" );
-    ("no previous outcome", record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed\n");
+    ( "no previous outcome",
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0\n" );
     ( "an unknown previous outcome",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed maybe\n" );
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 maybe\n" );
     ( "was and no outcome",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed was\n" );
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 was\n" );
     ( "a previous verdict that is no outcome",
-      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed was unreached\n" );
-    ("a short identity digest", "windtrap-mutants-v13\nexe abcd 1 a\n0\n");
-    ("an empty identity exe", "windtrap-mutants-v13\nexe " ^ digest ^ " 0 \n0\n");
-    ("no status", "windtrap-mutants-v13\n0\n");
-    ("an unknown status", "windtrap-mutants-v13\nwhole\n0\n");
-    ("a refusal past the input", "windtrap-mutants-v13\nrefused 80 r\n0\n");
-    ("a suite past the input", "windtrap-mutants-v13\nsuite 80 s\ntested\n0\n");
-    ("a suite and no status", "windtrap-mutants-v13\nsuite 1 s\n0\n");
+      record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 was unreached\n" );
+    ("a short identity digest", "windtrap-mutants-v14\nexe abcd 1 a\n0\n");
+    ("an empty identity exe", "windtrap-mutants-v14\nexe " ^ digest ^ " 0 \n0\n");
+    ("no status", "windtrap-mutants-v14\n0\n");
+    ("an unknown status", "windtrap-mutants-v14\nwhole\n0\n");
+    ("a refusal past the input", "windtrap-mutants-v14\nrefused 80 r\n0\n");
+    ("a suite past the input", "windtrap-mutants-v14\nsuite 80 s\ntested\n0\n");
+    ("a suite and no status", "windtrap-mutants-v14\nsuite 1 s\n0\n");
     ( "two suite lines",
-      "windtrap-mutants-v13\nsuite 1 s\nsuite 1 t\ntested\n0\n" );
+      "windtrap-mutants-v14\nsuite 1 s\nsuite 1 t\ntested\n0\n" );
     ( "a suite before the identity",
-      "windtrap-mutants-v13\nsuite 1 s\nexe " ^ digest ^ " 1 a\ntested\n0\n" );
-    ("bytes after the last record", "windtrap-mutants-v13\ntested\n0\nextra\n");
+      "windtrap-mutants-v14\nsuite 1 s\nexe " ^ digest ^ " 1 a\ntested\n0\n" );
+    ("bytes after the last record", "windtrap-mutants-v14\ntested\n0\nextra\n");
   ]
 
 let corrupt (_, text) =
@@ -884,11 +1017,23 @@ let corrupt_reasons () =
     a negative test path length: negative test path length
     a test path shorter than its length: expected test path length at offset 83
     a test name past the input: truncated test name
+    a killing test count past the input: killing test count exceeds data
+    a killing test name past the input: truncated test name
+    a reason of the format before: unknown reason "7"
+    an unknown reason: unknown reason "lost"
+    a deadline that is no number: invalid deadline "x"
+    a negative deadline: invalid deadline "-0x1p+0"
+    a deadline that is not finite: invalid deadline "nan"
+    a signal that is no number: invalid signal "x"
+    an exit status that is no number: invalid exit status "x"
+    a crash with no phrase: expected crash length at offset 92
+    a negative memory limit: negative memory limit
+    a flaky kill with no failure: expected failure length at offset 91
     two records of one identifier: duplicate record for lib/a.ml:1:2:add
     a malformed record after a valid one: line 0 is not 1-based
-    no previous outcome: expected previous outcome at offset 73
+    no previous outcome: expected previous outcome at offset 75
     an unknown previous outcome: unknown previous outcome "maybe"
-    was and no outcome: expected previous outcome at offset 77
+    was and no outcome: expected previous outcome at offset 79
     a previous verdict that is no outcome: unknown previous outcome "unreached"
     a short identity digest: identity digest is not 32 hex characters at offset 25
     an empty identity exe: empty executable identity
@@ -917,7 +1062,7 @@ let error_messages () =
        ])
   @@ __POS_OF__
        {|
-    f.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v13", found "junk"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+    f.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v14", found "junk"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
     f.mutants: cannot read verdict file: No such file or directory
     f.mutants: corrupt verdict file: unknown verdict "errored"
     |}
@@ -940,29 +1085,67 @@ let files =
         "format is the magic line, the mutants directory and extension, and \
          the verdict kind" (fun () ->
           equal (list string)
-            [ "windtrap-mutants-v13"; "mutants"; "mutants"; "verdict" ]
+            [ "windtrap-mutants-v14"; "mutants"; "mutants"; "verdict" ]
             Verdicts.[ format.magic; format.dir; format.ext; format.kind ]);
       test
         "save writes the magic line, the count, then the records by identifier"
         (fun () ->
           expect_exact (saved sample)
           @@ __POS_OF__
-               {|windtrap-mutants-v13
+               {|windtrap-mutants-v14
 tested
 7
 8 lib/a.ml 1 2 1 7 3 add 5 a - b 5 a + b 0  unreached none
-8 lib/b.ml 3 4 3 10 3 not 6 p && q 12 not (p && q) 0  killed was not_evaluated
+8 lib/b.ml 3 4 3 10 3 not 6 p && q 12 not (p && q) 0  killed 0 was not_evaluated
 8 lib/b.ml 5 0 5 6 2 or 6 a || b 6 a && b 0  survived 2 1 1 x 2 1 y 1 z was killed
 8 lib/c.ml 7 1 7 6 3 sub 5 a + b 5 a - b 0  not_evaluated none
 8 lib/c.ml 9 0 9 5 3 add 5 a - b 5 a + b 0  outside_tests none
-8 lib/c.ml 11 3 11 8 2 le 5 a < b 6 a <= b 0  unknown 29 its run was killed by SIGSEGV none
+8 lib/c.ml 11 3 11 8 2 le 5 a < b 6 a <= b 0  unknown other 29 its run was killed by SIGSEGV none
 8 lib/d.ml 1 0 1 5 3 add 5 a - b 5 a + b 32 cccccccccccccccccccccccccccccccc killed_elsewhere 18 default/test/a.exe none
 |});
+      test "save writes each kill and each reason" (fun () ->
+          expect_exact (saved kills_and_reasons)
+          @@ __POS_OF__
+               {|windtrap-mutants-v14
+tested
+11
+8 lib/k.ml 1 0 1 5 3 add 5 a - b 5 a + b 0  killed 0 none
+8 lib/k.ml 2 0 2 5 3 add 5 a - b 5 a + b 0  killed 1 2 4 calc 4 adds none
+8 lib/k.ml 3 0 3 5 3 add 5 a - b 5 a + b 0  killed 3 1 4 adds 2 4 calc 4 adds 2 4 calc 4 subs none
+8 lib/k.ml 4 0 4 5 3 add 5 a - b 5 a + b 0  unknown deadline 0x1.4p+1 none
+8 lib/k.ml 5 0 5 5 3 add 5 a - b 5 a + b 0  unknown deadline 0x1.999999999999ap-4 none
+8 lib/k.ml 6 0 6 5 3 add 5 a - b 5 a + b 0  unknown crashed -10 none 21 was killed by SIGSEGV none
+8 lib/k.ml 7 0 7 5 3 add 5 a - b 5 a + b 0  unknown crashed none 3 38 ended when code under test called exit none
+8 lib/k.ml 8 0 8 5 3 add 5 a - b 5 a + b 0  unknown crashed none none 5 ended none
+8 lib/k.ml 9 0 9 5 3 add 5 a - b 5 a + b 0  unknown memory 512 none
+8 lib/k.ml 10 0 10 5 3 add 5 a - b 5 a + b 0  unknown flaky_kill 2 4 calc 4 adds 37 its killing test calc adds also fails none
+8 lib/k.ml 11 0 11 5 3 add 5 a - b 5 a + b 0  unknown other 30 the suite is not deterministic none
+|});
+      test "load reads back each kill and each reason" (fun () ->
+          let path = Filename.concat (temp_dir ()) "saved.mutants" in
+          Verdicts.save path kills_and_reasons;
+          equal
+            (result (list string) string)
+            (Ok (rows kills_and_reasons))
+            (Result.map fst (load_rows (Verdicts.load path))));
+      test "reason_text is the text of each reason" (fun () ->
+          expect (String.concat "\n" reason_texts)
+          @@ __POS_OF__
+               {|
+            its run passed its deadline of 2.5s
+            its run passed its deadline of 0.1s
+            its run was killed by SIGSEGV
+            its run ended when code under test called exit
+            its run ended
+            its run passed its memory limit of 512 MB
+            its killing test calc adds also fails
+            the suite is not deterministic
+            |});
       test "save writes an identity after the magic line" (fun () ->
           expect_exact
             (saved ~identity:{ exe = "test/a.exe"; digest } Verdicts.empty)
           @@ __POS_OF__
-               {|windtrap-mutants-v13
+               {|windtrap-mutants-v14
 exe aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 10 test/a.exe
 tested
 0
@@ -973,7 +1156,7 @@ tested
                ~identity:{ exe = "test/a.exe"; digest }
                ~suite:"lib/a b.ml\n" Verdicts.empty)
           @@ __POS_OF__
-               {|windtrap-mutants-v13
+               {|windtrap-mutants-v14
 exe aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 10 test/a.exe
 suite 11 lib/a b.ml
 
@@ -988,7 +1171,7 @@ tested
                  (fun i previous ->
                    record ?previous
                      (id "lib/a.ml" (i + 1) 0 "lt")
-                     (Verdicts.Unknown "crashed"))
+                     (Verdicts.Unknown (Other "crashed")))
                  [ None; Some `Killed; Some `Survived; Some `Not_evaluated ])
           in
           let path = Filename.concat (temp_dir ()) "saved.mutants" in

@@ -73,12 +73,16 @@ survivor with the tests that ran it in each executable:
         "file": "test/cram/bin/calc.ml", "line": 12, "col": 14, "rewrite": "sub",
         "end_line": 12, "end_col": 19,
         "before": "a + b", "after": "a - b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [
+          { "executable": 0, "test": ["add", "adds two positives"] } ] },
       { "id": "test/cram/bin/calc.ml:13:14:add",
         "file": "test/cram/bin/calc.ml", "line": 13, "col": 14, "rewrite": "add",
         "end_line": 13, "end_col": 19,
         "before": "a - b", "after": "a + b",
-        "verdict": "killed" },
+        "verdict": "killed",
+        "killed_by": [
+          { "executable": 1, "test": ["sub", "subtracts two positives"] } ] },
       { "id": "test/cram/bin/calc.ml:14:17:sub",
         "file": "test/cram/bin/calc.ml", "line": 14, "col": 17, "rewrite": "sub",
         "end_line": 14, "end_col": 22,

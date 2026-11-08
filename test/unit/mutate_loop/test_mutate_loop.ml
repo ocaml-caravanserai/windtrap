@@ -24,6 +24,7 @@ let suite_exe = Filename.concat exe_dir "suite_main.exe"
 let plain_exe = Filename.concat exe_dir "plain_main.exe"
 let runaway_exe = Filename.concat exe_dir "runaway/runaway_main.exe"
 let inline_exe = Filename.concat exe_dir "inline/runner_main.exe"
+let windtrap_exe = Filename.concat exe_dir "../../../bin/main.exe"
 
 (* Under --instrument-with the fixtures link an instrumented core, so every
    loop scenario passes this directory as its scope: the counts below are
@@ -86,9 +87,10 @@ let seconds_masked reason =
   | Some _ | None -> reason
 
 let verdict = function
-  | Verdicts.Killed -> "killed"
+  | Verdicts.Killed _ -> "killed"
   | Verdicts.Killed_elsewhere { exe } -> "killed elsewhere by " ^ exe
-  | Verdicts.Unknown reason -> "unknown: " ^ seconds_masked reason
+  | Verdicts.Unknown reason ->
+      "unknown: " ^ seconds_masked (Verdicts.reason_text reason)
   | Verdicts.Survived { first; others } ->
       "survived by "
       ^ String.concat ", "
@@ -133,11 +135,22 @@ type file = {
   suite : string option;
   refused : string option;
   rows : string list;
+  kills : string list; (* The killing tests of each kill. *)
   previous : string list; (* The previous outcome of each record. *)
   identity : (string * string) option; (* The writer's path and digest. *)
 }
 
 let identity (i : Verdicts.identity) = (i.exe, i.digest)
+
+let kill_row (r : Verdicts.record) =
+  match r.verdict with
+  | Verdicts.Killed { by } ->
+      Some
+        (strf "%s:%d killed by %s" (local r.id.file) r.id.line
+           (match by with
+           | [] -> "no test"
+           | by -> String.concat "; " (List.map (String.concat " \u{203a} ") by)))
+  | _ -> None
 
 let saved path =
   if not (Sys.file_exists path) then None
@@ -151,6 +164,7 @@ let saved path =
             suite;
             refused;
             rows = List.map row (Verdicts.records verdicts);
+            kills = List.filter_map kill_row (Verdicts.records verdicts);
             previous = List.map previous_row (Verdicts.records verdicts);
             identity = Option.map identity writer;
           }
@@ -162,6 +176,7 @@ let saved path =
             suite = None;
             refused = None;
             rows = [ reason ];
+            kills = [];
             previous = [];
             identity = None;
           }
@@ -175,6 +190,45 @@ type ran = {
 
 let rows r = Option.map (fun (f : file) -> f.rows) r.file
 let previous_rows r = Option.map (fun (f : file) -> f.previous) r.file
+let kills r = Option.map (fun (f : file) -> f.kills) r.file
+
+(* The ["reason_kind"] of each unknown mutant in the document of
+   [windtrap mutants --json] over the verdict file of [r]. *)
+let reason_kinds r =
+  let path = Filename.concat (temp_dir ()) "run.mutants" in
+  write path (Option.get r.file).raw;
+  let doc = (Child.run windtrap_exe [ "mutants"; "--json"; path ]).out in
+  let after ~sub s =
+    Option.map
+      (fun i ->
+        let k = i + String.length sub in
+        String.sub s k (String.length s - k))
+      (index_of ~sub s)
+  in
+  (* Each mutant of the document, up to the next one. *)
+  let rec mutants s =
+    match after ~sub:"{ \"id\": " s with
+    | None -> []
+    | Some rest -> (
+        match index_of ~sub:"{ \"id\": " rest with
+        | Some i -> String.sub rest 0 i :: mutants rest
+        | None -> [ rest ])
+  in
+  List.filter_map
+    (fun m ->
+      match
+        ( after ~sub:"\"file\": " m,
+          after ~sub:"\"line\": " m,
+          after ~sub:"\"reason_kind\": \"" m )
+      with
+      | Some file, Some line, Some kind ->
+          Some
+            (strf "%s:%d %s"
+               (local (Scanf.sscanf file " %S" Fun.id))
+               (Scanf.sscanf line "%d" Fun.id)
+               (String.sub kind 0 (String.index kind '"')))
+      | _ -> None)
+    (mutants doc)
 
 (* No test is ever reported slow, so the dry run's report is the same on
    any machine. *)
@@ -1401,7 +1455,7 @@ let elsewhere =
     before = "a - b";
     after = "a + b";
     source_digest = None;
-    verdict = Verdicts.Killed;
+    verdict = Verdicts.killed [];
     previous = Some `Survived;
   }
 
@@ -2609,13 +2663,13 @@ let old_name = "windtrap-old.mutants"
 
 (* A verdict file of the format before. *)
 let plant_old p =
-  write (Filename.concat p.data old_name) "windtrap-mutants-v12\ntested\n0\n"
+  write (Filename.concat p.data old_name) "windtrap-mutants-v13\ntested\n0\n"
 
 let old_warning p =
   strf
     "windtrap: warning: --skip-killed ignores %s/%s: not a windtrap verdict \
-     file (expected header \"windtrap-mutants-v13\", found \
-     \"windtrap-mutants-v12\"); files written by other windtrap versions are \
+     file (expected header \"windtrap-mutants-v14\", found \
+     \"windtrap-mutants-v13\"); files written by other windtrap versions are \
      not readable - delete the stale verdict files, then re-run the mutation \
      tests\n"
     p.data old_name
@@ -2624,7 +2678,7 @@ let old_warning p =
    before lies beside its file. *)
 let killed_project () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   plant_old p;
   p
 
@@ -2659,7 +2713,7 @@ let mirror () =
 
 let survivor_killed_elsewhere () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (18, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (18, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (list string) [] (survivors r.out);
   equal (option string) None (reproduce r.out);
@@ -2681,7 +2735,7 @@ let survivor_killed_elsewhere () =
 let not_a_kill =
   [
     ("killed elsewhere", Verdicts.Killed_elsewhere { exe = "default/third.exe" });
-    ("unknown", Verdicts.Unknown "its run was killed by SIGSEGV");
+    ("unknown", Verdicts.Unknown (Other "its run was killed by SIGSEGV"));
     ("a survivor", Verdicts.survived [ [ "calc"; "sub to zero" ] ]);
     ("not evaluated", Verdicts.Not_evaluated);
     ("outside tests", Verdicts.Outside_tests);
@@ -2705,7 +2759,7 @@ let other_digest (_, source_digest) =
   plant_other
     ~changed:(fun r -> { r with source_digest })
     p "windtrap-other.mutants"
-    [ (15, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (option (list string)) (Some green_rows) (rows r)
 
@@ -2721,7 +2775,7 @@ let other_mutants =
 
 let other_mutant (_, changed) =
   let p = skip_project () in
-  plant_other ~changed p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other ~changed p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (option (list string)) (Some green_rows) (rows r)
 
@@ -2746,7 +2800,7 @@ let recorded_digest () =
   is_true
     (Option.fold ~none:false ~some:Windtrap_runtime.Instr.is_digest compiled);
   equal (list (option string)) [ compiled ] (digests p);
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   equal
     (option (list string))
     (Some (skipped_rows "default/other.exe"))
@@ -2758,7 +2812,7 @@ let same_executable () =
   let p = skip_project () in
   plant_other ~exe:"default/suite_main.exe" ~suite:"another suite" p
     (Filename.basename (Verdicts.output_file ~exe:p.exe ~suite:"another suite"))
-    [ (15, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed ] in
   equal (pair string text) ("exited 0", "") (r.status, r.err);
   equal
@@ -2781,8 +2835,10 @@ let own_file () =
    fails a loop that keeps the first or the last killer. *)
 let smaller_executable first =
   let p = skip_project () in
-  let a = ("default/a.exe", [ (18, Verdicts.Killed) ])
-  and b = ("default/b.exe", [ (15, Verdicts.Killed); (18, Verdicts.Killed) ]) in
+  let a = ("default/a.exe", [ (18, Verdicts.killed []) ])
+  and b =
+    ("default/b.exe", [ (15, Verdicts.killed []); (18, Verdicts.killed []) ])
+  in
   List.iteri
     (fun i (exe, verdicts) ->
       plant_other ~exe p (strf "windtrap-%d.mutants" (i + 1)) verdicts)
@@ -2809,7 +2865,7 @@ let smaller_executable first =
 
 let ignored_files () =
   let p = skip_project () in
-  let kill = [ (15, Verdicts.Killed) ] in
+  let kill = [ (15, Verdicts.killed []) ] in
   plant_other ~named:false p "windtrap-anon.mutants" kill;
   Sys.mkdir (Filename.concat p.data "windtrap-dir.mutants") 0o755;
   plant_other ~exe:"default/gone.exe" ~orphan:true p "windtrap-gone.mutants"
@@ -2861,11 +2917,11 @@ let scope_of_the_skip () =
     {
       elsewhere with
       Verdicts.source_digest = compiled_digest ();
-      verdict = Verdicts.Killed;
+      verdict = Verdicts.killed [];
     }
   in
   plant_other p "windtrap-other.mutants"
-    [ (15, Verdicts.Killed); (21, Verdicts.Killed) ]
+    [ (15, Verdicts.killed []); (21, Verdicts.killed []) ]
     ~records:[ outside ];
   let r = skip_run p [ skip_killed ] in
   equal
@@ -2880,7 +2936,7 @@ let scope_of_the_skip () =
 let line_scope_of_the_skip () =
   let p = skip_project () in
   plant_other p "windtrap-other.mutants"
-    [ (15, Verdicts.Killed); (18, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []); (18, Verdicts.killed []) ];
   let r = skip_run p [ skip_killed; "--lines=" ^ scope ^ "subject.ml:15" ] in
   equal (pair string text) ("exited 0", "") (r.status, r.err);
   equal
@@ -2894,7 +2950,7 @@ let line_scope_of_the_skip () =
 let jobs_of_the_skip () =
   let answer n =
     let p = skip_project () in
-    plant_other p "windtrap-other.mutants" [ (18, Verdicts.Killed) ];
+    plant_other p "windtrap-other.mutants" [ (18, Verdicts.killed []) ];
     let r = skip_run p [ skip_killed; "-j"; string_of_int n ] in
     (masked r.out, rows r)
   in
@@ -2902,7 +2958,7 @@ let jobs_of_the_skip () =
 
 let narrowed_skip () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   let r = skip_run p [ "-f"; "calc"; skip_killed ] in
   equal text not_saved r.err;
   equal (option string)
@@ -2915,7 +2971,7 @@ let narrowed_skip () =
 (* [interrupted]'s child of [widen] hangs until the signal. *)
 let interrupted_skip () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   let pidfile = Filename.concat (temp_dir ()) "hanging" in
   remove (own p);
   let run =
@@ -3068,7 +3124,7 @@ let survived_by test = Verdicts.survived [ [ "calc"; test ] ]
 
 (* [sub] survived and [widen] was killed in the file in between. *)
 let swapped r =
-  at_line 15 (survived_by "sub to zero") (at_line 18 Verdicts.Killed r)
+  at_line 15 (survived_by "sub to zero") (at_line 18 (Verdicts.killed []) r)
 
 (* The first run has no earlier file, so it lists nothing. The third run
    lists nothing again. *)
@@ -3169,7 +3225,7 @@ let same_outcome () =
    the one that the run compares with. *)
 let no_outcome_cases =
   let skip = Verdicts.Killed_elsewhere { exe = "default/test/other.exe" } in
-  let crashed = Verdicts.Unknown "its run was killed by SIGSEGV" in
+  let crashed = Verdicts.Unknown (Other "its run was killed by SIGSEGV") in
   [
     ( "an unknown verdict keeps the outcome before it",
       crashed,
@@ -3307,8 +3363,8 @@ let refused_between () =
    run replaces it. *)
 let unloadable_earlier =
   [
-    ("a file of the format before", "windtrap-mutants-v12\ntested\n0\n");
-    ("a corrupt file", "windtrap-mutants-v13\ntested\n1\njunk\n");
+    ("a file of the format before", "windtrap-mutants-v13\ntested\n0\n");
+    ("a corrupt file", "windtrap-mutants-v14\ntested\n1\njunk\n");
   ]
 
 let unloadable_earlier_file (_, text) =
@@ -3319,7 +3375,7 @@ let unloadable_earlier_file (_, text) =
   equal (option (list string)) None (unstable r.out);
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option (list string)) (Some none_rows) (previous_rows r);
-  starts_with ~prefix:"windtrap-mutants-v13\n" (read path)
+  starts_with ~prefix:"windtrap-mutants-v14\n" (read path)
 
 let narrowed_run () =
   let path = verdicts_path () in
@@ -3376,7 +3432,7 @@ let unwritable_with_prior () =
    with. *)
 let skipped_change () =
   let p = skip_project () in
-  plant_other p "windtrap-other.mutants" [ (15, Verdicts.Killed) ];
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
   equal string "exited 0" (skip_run p []).status;
   rewrite ~path:(own p) (at_line 15 (survived_by "sub to zero"));
   let skipped = skip_run ~keep:true p [ skip_killed ] in
@@ -3970,7 +4026,11 @@ let clean_check () =
   ended_well k.r;
   equal string killed_outcome (outcome k.r.out);
   equal int 6 k.b_runs;
-  equal (option (list string)) (intermittent_rows "killed") (rows k.r)
+  equal (option (list string)) (intermittent_rows "killed") (rows k.r);
+  equal
+    (option (list string))
+    (Some [ strf "subject.ml:18 killed by %s" b ])
+    (kills k.r)
 
 let first_failing_run_stops () =
   let k = kill_run ~env:[ fail_at "3,4" ] [ retry_once ] in
@@ -4515,7 +4575,7 @@ let memory_refused_probe () =
 let memory_all_skipped () =
   let p = skip_project () in
   plant_other ~exe:"default/b.exe" p "windtrap-1.mutants"
-    [ (15, Verdicts.Killed); (18, Verdicts.Killed) ];
+    [ (15, Verdicts.killed []); (18, Verdicts.killed []) ];
   let r = skip_run ~env:[ (memory_var, "1") ] p [ skip_killed ] in
   equal (pair string text) ("exited 0", "") (r.status, without_memory r.err);
   equal (list string)
@@ -4616,6 +4676,86 @@ let memory_records =
         memory_unread memory_not_read;
     ]
 
+(* Killing tests and reasons *)
+
+(* The structured reason of each mutant that the run left unknown by a
+   crash. *)
+let crashes r =
+  let path = Filename.concat (temp_dir ()) "run.mutants" in
+  write path (Option.get r.file).raw;
+  match Verdicts.load path with
+  | Error e -> [ Format.asprintf "%a" Verdicts.pp_error e ]
+  | Ok f ->
+      List.filter_map
+        (fun (r : Verdicts.record) ->
+          match r.verdict with
+          | Verdicts.Unknown (Crashed { signal; status; how }) ->
+              let number = Option.fold ~none:"none" ~some:string_of_int in
+              Some
+                (strf "%s:%d signal %s, status %s: %s" (local r.id.file)
+                   r.id.line
+                   (Option.fold ~none:"none" ~some:signal_name signal)
+                   (number status) how)
+          | _ -> None)
+        (Verdicts.records f.verdicts)
+
+let crash_run name =
+  let r = spawn ~env:[ suite name ] [ mutate ] in
+  equal string "exited 0" r.status;
+  r
+
+let killing_tests =
+  group "Killing tests and reasons"
+    [
+      test "a kill records its killing test" (fun () ->
+          equal
+            (option (list string))
+            (Some
+               [ "subject.ml:15 killed by calc \u{203a} sub of two positives" ])
+            (kills (Lazy.force green)));
+      test "a kill by a fixture release records no test" (fun () ->
+          equal
+            (option (list string))
+            (Some [ "subject.ml:15 killed by no test" ])
+            (kills (Lazy.force release)));
+      test "a run past its deadline gives the reason kind deadline" (fun () ->
+          equal (list string)
+            [ "subject.ml:15 deadline" ]
+            (reason_kinds (Lazy.force blocked).run));
+      test "a worker killed by a signal gives the reason kind crashed"
+        (fun () ->
+          let r = crash_run "signal" in
+          equal (list string) [ "subject.ml:27 crashed" ] (reason_kinds r);
+          equal (list string)
+            [
+              "subject.ml:27 signal SIGKILL, status none: was killed by SIGKILL";
+            ]
+            (crashes r));
+      test
+        "an exit gives the reason kind crashed, with the status of the worker, \
+         which ends with code 0" (fun () ->
+          let r = crash_run "exits" in
+          equal (list string) [ "subject.ml:27 crashed" ] (reason_kinds r);
+          equal (list string)
+            [
+              "subject.ml:27 signal none, status 0: ended when code under test \
+               called exit";
+            ]
+            (crashes r));
+      test "an exit status gives the reason kind crashed" (fun () ->
+          let r = crash_run "crash" in
+          equal (list string) [ "subject.ml:27 crashed" ] (reason_kinds r);
+          equal (list string)
+            [ "subject.ml:27 signal none, status 3: exited with code 3" ]
+            (crashes r));
+      test "a run past its memory limit gives the reason kind memory" (fun () ->
+          let r = hog_run [ "--mutate-memory=64" ] in
+          equal (list string) [ "subject.ml:15 memory" ] (reason_kinds r));
+      test "a flaky kill gives the reason kind flaky_kill" (fun () ->
+          let k = kill_run ~env:[ fail_at "3,5" ] [ retry_once ] in
+          equal (list string) [ "subject.ml:18 flaky_kill" ] (reason_kinds k.r));
+    ]
+
 (* The fixtures' verdict files land in the real _build/_mutants, where
    [windtrap mutants] would merge them into the tree's answer, and no rule
    runs these executables but this suite. A forked child ends past
@@ -4653,4 +4793,5 @@ let () =
          signals;
          effects;
          memory_records;
+         killing_tests;
        ])

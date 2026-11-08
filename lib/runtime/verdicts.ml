@@ -7,10 +7,28 @@
 
 type reaching_test = string list
 
+type unknown_reason =
+  | Deadline of { seconds : float }
+  | Crashed of { signal : int option; status : int option; how : string }
+  | Memory of { mb : int }
+  | Flaky_kill of { test : reaching_test; failure : string }
+  | Other of string
+
+let seconds s =
+  if s < 10. then Printf.sprintf "%.1fs" s else Printf.sprintf "%.0fs" s
+
+let reason_text = function
+  | Deadline { seconds = s } -> "its run passed its deadline of " ^ seconds s
+  | Crashed { how; _ } -> "its run " ^ how
+  | Memory { mb } ->
+      Printf.sprintf "its run passed its memory limit of %d MB" mb
+  | Flaky_kill { failure; _ } -> failure
+  | Other reason -> reason
+
 type verdict =
-  | Killed
+  | Killed of { by : reaching_test list }
   | Killed_elsewhere of { exe : string }
-  | Unknown of string
+  | Unknown of unknown_reason
   | Survived of { first : reaching_test; others : reaching_test list }
   | Not_evaluated
   | Outside_tests
@@ -25,9 +43,11 @@ let survived ts =
         "Windtrap_runtime.Verdicts.survived: a survivor names at least one test"
   | first :: others -> Survived { first; others }
 
+let killed by = Killed { by = List.sort_uniq (List.compare String.compare) by }
+
 (* The order in which verdicts outrank one another in a merge. *)
 let rank = function
-  | Killed -> 6
+  | Killed _ -> 6
   | Killed_elsewhere _ -> 5
   | Unknown _ -> 4
   | Not_evaluated -> 3
@@ -36,26 +56,33 @@ let rank = function
   | Unreached -> 0
 
 (* The verdict of a mutant that one executable saw as [a] and another as
-   [b]. Both are held by a collection, so a survivor is already sorted. Of
-   two reasons or two killers, the smaller stays, so the merge does not depend
-   on the order. *)
+   [b]. Both are held by a collection, so a survivor and a kill are already
+   sorted. Of two reasons or two killers, the smaller stays, so the merge does
+   not depend on the order. *)
 let merge_verdict a b =
   match (a, b) with
   | Survived x, Survived y ->
       survived (x.first :: y.first :: (x.others @ y.others))
-  | Unknown x, Unknown y -> Unknown (if String.compare x y <= 0 then x else y)
+  | Killed x, Killed y -> killed (x.by @ y.by)
+  | Unknown x, Unknown y ->
+      let order =
+        match String.compare (reason_text x) (reason_text y) with
+        | 0 -> compare x y
+        | c -> c
+      in
+      if order <= 0 then a else b
   | Killed_elsewhere x, Killed_elsewhere y ->
       if String.compare x.exe y.exe <= 0 then a else b
-  | ( ( Killed | Killed_elsewhere _ | Unknown _ | Not_evaluated | Survived _
+  | ( ( Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated | Survived _
       | Outside_tests | Unreached ),
-      ( Killed | Killed_elsewhere _ | Unknown _ | Not_evaluated | Survived _
+      ( Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated | Survived _
       | Outside_tests | Unreached ) ) ->
       if rank a >= rank b then a else b
 
 type outcome = [ `Killed | `Survived | `Not_evaluated ]
 
 let outcome = function
-  | Killed -> Some `Killed
+  | Killed _ -> Some `Killed
   | Survived _ -> Some `Survived
   | Not_evaluated -> Some `Not_evaluated
   | Killed_elsewhere _ | Unknown _ | Outside_tests | Unreached -> None
@@ -120,8 +147,9 @@ let add t r =
   let r =
     match r.verdict with
     | Survived s -> { r with verdict = survived (s.first :: s.others) }
-    | Killed | Killed_elsewhere _ | Unknown _ | Not_evaluated | Outside_tests
-    | Unreached ->
+    | Killed { by } -> { r with verdict = killed by }
+    | Killed_elsewhere _ | Unknown _ | Not_evaluated | Outside_tests | Unreached
+      ->
         r
   in
   Id_map.update r.id
@@ -158,7 +186,7 @@ let with_previous ~prior t =
 
 let format =
   {
-    Instr.magic = "windtrap-mutants-v13";
+    Instr.magic = "windtrap-mutants-v14";
     kind = "verdict";
     dir = "mutants";
     ext = "mutants";
@@ -208,29 +236,65 @@ type file = {
 
    with one such line for each record, in [Mutate.compare_id] order.
    [<source>] is a name: the digest of the source file that the instrumenter
-   read, or empty when the instrumenter could not read it. [<verdict>] is [unreached],
-   [outside_tests], [killed], [killed_elsewhere <exe>] with a name that is
-   not empty, [not_evaluated], [unknown <reason>], or [survived <n>] and then
-   [n] reaching tests, each [<k>] and then its [k] names. [<previous>] is
-   [none], or [was] and then [killed], [survived] or [not_evaluated]. [load]
-   reads this grammar and nothing else, and refuses a rewrite outside
-   [Mutate.rewrites], which no report could render. *)
+   read, or empty when the instrumenter could not read it. A test is [<k>]
+   and then its [k] names. [<verdict>] is [unreached], [outside_tests],
+   [killed <n>] and then [n] killing tests, [killed_elsewhere <exe>] with a
+   name that is not empty, [not_evaluated], [unknown <reason>], or
+   [survived <n>] and then [n] reaching tests, with [n] above 0. [<reason>]
+   is [deadline <seconds>] with a hexadecimal float, [crashed <signal>
+   <status> <how>] where each of the two is [none] or an integer,
+   [memory <mb>], [flaky_kill <test> <failure>] or [other <text>], where
+   [<how>], [<failure>] and [<text>] are names. [<previous>] is [none], or
+   [was] and then [killed], [survived] or [not_evaluated]. [load] reads this
+   grammar and nothing else, and refuses a rewrite outside [Mutate.rewrites],
+   which no report could render. *)
 let load path =
   let read_test c =
     List.init (Instr.read_count c "test path length") (fun _ ->
         Instr.read_name c "test name")
   in
+  let read_int c what =
+    match Instr.read_word c what with
+    | "none" -> None
+    | word -> (
+        match int_of_string_opt word with
+        | Some n -> Some n
+        | None -> Instr.parse_fail "invalid %s %S" what word)
+  in
+  let read_reason c =
+    match Instr.read_word c "reason" with
+    | "deadline" -> (
+        let word = Instr.read_word c "deadline" in
+        match float_of_string_opt word with
+        | Some seconds when Float.is_finite seconds && seconds >= 0. ->
+            Deadline { seconds }
+        | Some _ | None -> Instr.parse_fail "invalid deadline %S" word)
+    | "crashed" ->
+        let signal = read_int c "signal" in
+        let status = read_int c "exit status" in
+        let how = Instr.read_name c "crash" in
+        Crashed { signal; status; how }
+    | "memory" -> Memory { mb = Instr.read_nat c "memory limit" }
+    | "flaky_kill" ->
+        let test = read_test c in
+        let failure = Instr.read_name c "failure" in
+        Flaky_kill { test; failure }
+    | "other" -> Other (Instr.read_name c "reason")
+    | word -> Instr.parse_fail "unknown reason %S" word
+  in
   let read_verdict c =
     match Instr.read_word c "verdict" with
     | "unreached" -> Unreached
-    | "killed" -> Killed
+    | "killed" ->
+        let n = Instr.read_count c "killing test count" in
+        killed (List.init n (fun _ -> read_test c))
     | "killed_elsewhere" ->
         let exe = Instr.read_name c "killing executable" in
         if exe = "" then Instr.parse_fail "empty killing executable";
         Killed_elsewhere { exe }
     | "not_evaluated" -> Not_evaluated
     | "outside_tests" -> Outside_tests
-    | "unknown" -> Unknown (Instr.read_name c "reason")
+    | "unknown" -> Unknown (read_reason c)
     | "survived" ->
         let n = Instr.read_count c "reaching test count" in
         if n = 0 then
@@ -315,14 +379,30 @@ let save ?identity ?suite ?refused path t =
     Printf.bprintf b "%d" (List.length names);
     List.iter (Printf.bprintf b " %a" add_name) names
   in
+  let add_int b = function
+    | None -> Buffer.add_string b "none"
+    | Some n -> Printf.bprintf b "%d" n
+  in
+  let add_reason b = function
+    | Deadline { seconds } -> Printf.bprintf b "deadline %h" seconds
+    | Crashed { signal; status; how } ->
+        Printf.bprintf b "crashed %a %a %a" add_int signal add_int status
+          add_name how
+    | Memory { mb } -> Printf.bprintf b "memory %d" mb
+    | Flaky_kill { test; failure } ->
+        Printf.bprintf b "flaky_kill %a %a" add_test test add_name failure
+    | Other reason -> Printf.bprintf b "other %a" add_name reason
+  in
   let add_verdict b = function
     | Unreached -> Buffer.add_string b "unreached"
-    | Killed -> Buffer.add_string b "killed"
+    | Killed { by } ->
+        Printf.bprintf b "killed %d" (List.length by);
+        List.iter (Printf.bprintf b " %a" add_test) by
     | Killed_elsewhere { exe } ->
         Printf.bprintf b "killed_elsewhere %a" add_name exe
     | Not_evaluated -> Buffer.add_string b "not_evaluated"
     | Outside_tests -> Buffer.add_string b "outside_tests"
-    | Unknown reason -> Printf.bprintf b "unknown %a" add_name reason
+    | Unknown reason -> Printf.bprintf b "unknown %a" add_reason reason
     | Survived s ->
         let tests = s.first :: s.others in
         Printf.bprintf b "survived %d" (List.length tests);

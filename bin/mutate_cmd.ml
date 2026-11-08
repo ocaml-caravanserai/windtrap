@@ -166,8 +166,21 @@ let survived_in verdicts =
       match r.verdict with
       | Survived { first; others } ->
           Ids.add (Mutate.id_to_string r.id) (first :: others) acc
-      | Killed | Killed_elsewhere _ | Unknown _ | Not_evaluated | Outside_tests
-      | Unreached ->
+      | Killed _ | Killed_elsewhere _ | Unknown _ | Not_evaluated
+      | Outside_tests | Unreached ->
+          acc)
+    Ids.empty
+    (Verdicts.records verdicts)
+
+(* The killing tests of each mutant that [verdicts] holds as killed, by the
+   spelling of its identifier. *)
+let killed_in verdicts =
+  List.fold_left
+    (fun acc (r : Verdicts.record) ->
+      match r.verdict with
+      | Killed { by } -> Ids.add (Mutate.id_to_string r.id) by acc
+      | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated
+      | Outside_tests | Unreached ->
           acc)
     Ids.empty
     (Verdicts.records verdicts)
@@ -292,7 +305,7 @@ let merge ~source files merged =
         Either.Left
           {
             Sections.mutant = mutant r;
-            reason = strf "%s: %s" (with_suite f) reason;
+            reason = strf "%s: %s" (with_suite f) (Verdicts.reason_text reason);
             invocation = f.invocation;
           }
     | f, _ -> Either.Right (id, f)
@@ -327,7 +340,7 @@ let merge ~source files merged =
     List.length
       (pick (fun r ->
            match r.verdict with
-           | Killed | Killed_elsewhere _ -> Some ()
+           | Killed _ | Killed_elsewhere _ -> Some ()
            | _ -> None))
   in
   let refused =
@@ -449,7 +462,11 @@ let disproved files =
               if g != f && g.exe = Some exe then Ids.find_opt id ids else None)
             held_by
         in
-        held <> [] && not (List.mem Verdicts.Killed held)
+        held <> []
+        && not
+             (List.exists
+                (function Verdicts.Killed _ -> true | _ -> false)
+                held)
     | _ -> false
   in
   let others =
@@ -465,7 +482,8 @@ let disproved files =
   let decided id =
     match Ids.find_opt id others with
     | Some (Outside_tests | Unreached) | None -> false
-    | Some (Killed | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated)
+    | Some
+        (Killed _ | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated)
       ->
         true
   in
@@ -483,10 +501,11 @@ let disproved files =
                 r with
                 verdict =
                   Unknown
-                    (strf
-                       "it skipped the mutant as killed by %s, which does not \
-                        kill it in this merge"
-                       exe);
+                    (Other
+                       (strf
+                          "it skipped the mutant as killed by %s, which does \
+                           not kill it in this merge"
+                          exe));
               }
       | _ -> Some r
     in
@@ -508,7 +527,7 @@ let refuted_notes refutations merged =
   let merged = by_id merged in
   let open_ (f, killer, id) =
     match Ids.find_opt id merged with
-    | Some Verdicts.Killed -> None
+    | Some (Verdicts.Killed _) -> None
     | Some _ | None -> Some ((name f, killer), (id, f.suite))
   in
   let groups =
@@ -631,16 +650,24 @@ let unconfirmed files merged =
 (* The document *)
 
 let verdict_name : Verdicts.verdict -> string = function
-  | Killed | Killed_elsewhere _ -> "killed"
+  | Killed _ | Killed_elsewhere _ -> "killed"
   | Survived _ -> "survived"
   | Not_evaluated -> "not_evaluated"
   | Unknown _ -> "unknown"
   | Outside_tests -> "outside_tests"
   | Unreached -> "unreached"
 
+let reason_kind : Verdicts.unknown_reason -> string = function
+  | Deadline _ -> "deadline"
+  | Crashed _ -> "crashed"
+  | Memory _ -> "memory"
+  | Flaky_kill _ -> "flaky_kill"
+  | Other _ -> "other"
+
 (* A file is named by its index in ["executables"], because two files can
-   have one label. [survived_in] gives the tests of a file sorted and without
-   duplicates, so the tests of a survivor are sorted by file, then by test. *)
+   have one label. [survived_in] and [killed_in] give the tests of a file
+   sorted and without duplicates, so the tests of a survivor or of a kill are
+   sorted by file, then by test. *)
 let json files merged (m : Sections.mutation) =
   let string = Json.string in
   let nullable = function Some s -> string s | None -> "null" in
@@ -649,6 +676,7 @@ let json files merged (m : Sections.mutation) =
   let survivals =
     List.map (fun (i, f) -> (i, survived_in f.verdicts)) indexed
   in
+  let kills = List.map (fun (i, f) -> (i, killed_in f.verdicts)) indexed in
   let verdict_in = verdict_in files in
   let executable f =
     strf "\n    { \"name\": %s, \"path\": %s, \"suite\": %s, \"refused\": %s }"
@@ -658,26 +686,30 @@ let json files merged (m : Sections.mutation) =
     strf "\n        { \"executable\": %d, \"test\": [%s] }" i
       (String.concat ", " (List.map string path))
   in
+  (* The tests of [id] in each file of [per_file], as the array [key]. *)
+  let tests key per_file id =
+    let tests =
+      List.concat_map
+        (fun (i, of_file) ->
+          match Ids.find_opt id of_file with
+          | Some tests -> List.map (fun test -> (i, test)) tests
+          | None -> [])
+        per_file
+    in
+    strf ",\n      \"%s\": [%s ]" key (String.concat "," (List.map test tests))
+  in
   let details (r : Verdicts.record) =
     let id = Mutate.id_to_string r.id in
     match r.verdict with
-    | Survived _ ->
-        let tests =
-          List.concat_map
-            (fun (i, survived) ->
-              match Ids.find_opt id survived with
-              | Some tests -> List.map (fun test -> (i, test)) tests
-              | None -> [])
-            survivals
-        in
-        strf ",\n      \"tests\": [%s ]"
-          (String.concat "," (List.map test tests))
+    | Survived _ -> tests "tests" survivals id
+    | Killed _ | Killed_elsewhere _ -> tests "killed_by" kills id
     | Unknown _ ->
         let f, reason = unknown_in files ~verdict_in id in
-        strf ", \"executable\": %d,\n      \"reason\": %s" (index f)
-          (string reason)
-    | Killed | Killed_elsewhere _ | Not_evaluated | Outside_tests | Unreached ->
-        ""
+        strf ", \"executable\": %d,\n      \"reason\": %s, \"reason_kind\": %s"
+          (index f)
+          (string (Verdicts.reason_text reason))
+          (string (reason_kind reason))
+    | Not_evaluated | Outside_tests | Unreached -> ""
   in
   let mutant (r : Verdicts.record) =
     strf

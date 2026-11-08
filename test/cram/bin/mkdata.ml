@@ -13,9 +13,11 @@
 
    mkdata mutants OUT [--exe EXE] [--suite NAME] [--refused REASON]
        FILE:LINE:COL:REWRITE:BEFORE:AFTER=VERDICT...
-     VERDICT is killed, elsewhere:EXE, not_evaluated, outside_tests,
-     unreached or survived:TESTS, where EXE is the identity of the killing
-     executable and TESTS are ';'-separated paths of '/'-separated names.
+     VERDICT is killed, killed:TESTS, elsewhere:EXE, not_evaluated,
+     outside_tests, unreached, unknown:REASON, crashed:HOW or survived:TESTS,
+     where EXE is the identity of the killing executable and TESTS are
+     ';'-separated paths of '/'-separated names. A plain kill names no test.
+     REASON is a reason of the kind other. HOW is the phrase of a crash.
      VERDICT@PREVIOUS gives the record the previous outcome PREVIOUS:
      killed, survived or not_evaluated. --suite records the suite. No record
      has a source digest.
@@ -66,19 +68,23 @@ let coverage ~identity out records =
     records;
   Instr.write_file out (Buffer.contents b)
 
+let tests_of tests =
+  List.map (String.split_on_char '/') (String.split_on_char ';' tests)
+
 let verdict = function
-  | "killed" -> Verdicts.Killed
+  | "killed" -> Verdicts.killed []
   | "not_evaluated" -> Verdicts.Not_evaluated
   | "outside_tests" -> Verdicts.Outside_tests
   | "unreached" -> Verdicts.Unreached
   | v when String.starts_with ~prefix:"unknown:" v ->
-      Verdicts.Unknown (String.sub v 8 (String.length v - 8))
+      Verdicts.Unknown (Other (String.sub v 8 (String.length v - 8)))
+  | v when String.starts_with ~prefix:"crashed:" v ->
+      let how = String.sub v 8 (String.length v - 8) in
+      Verdicts.Unknown (Crashed { signal = None; status = None; how })
   | v -> (
       match String.split_on_char ':' v with
-      | [ "survived"; tests ] ->
-          Verdicts.survived
-            (List.map (String.split_on_char '/')
-               (String.split_on_char ';' tests))
+      | [ "survived"; tests ] -> Verdicts.survived (tests_of tests)
+      | [ "killed"; tests ] -> Verdicts.killed (tests_of tests)
       | [ "elsewhere"; exe ] -> Verdicts.Killed_elsewhere { exe }
       | _ -> die "%S: not a verdict" v)
 

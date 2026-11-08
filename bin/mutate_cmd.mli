@@ -228,15 +228,25 @@
       elsewhere ({{!section-merge}the merge}) is ["killed"].
     - ["tests"] is in the object of a survivor only. It is an array of the tests
       that reached the survivor.
-    - ["executable"] and ["reason"] are in the object of an unknown mutant only.
-      ["executable"] is the index in ["executables"] of the file that the report
-      names for the mutant ({{!section-merge}the merge}), and ["reason"] is the
-      reason that this file records.
+    - ["killed_by"] is in the object of a killed mutant only. It is an array of
+      the tests that killed the mutant: in each run that killed it, the first
+      counted test that failed in or after the test that first evaluated the
+      armed site. It is empty when no kill names a test, as for a kill by a
+      fixture release or a mutant killed elsewhere.
+    - ["executable"], ["reason"] and ["reason_kind"] are in the object of an
+      unknown mutant only. ["executable"] is the index in ["executables"] of the
+      file that the report names for the mutant ({{!section-merge}the merge}),
+      and ["reason"] is the reason that this file records. ["reason_kind"] is
+      the kind of this reason: ["deadline"] when the run passed its deadline,
+      ["crashed"] when its worker ended first, ["memory"] when it passed its
+      memory limit, ["flaky_kill"] when the killing test also fails with no
+      mutant, and ["other"] for each other reason.
 
-    ["tests"] has one object for each reaching test of the survivor in each file
-    in which it survived. The objects are sorted by file, and then by the names
-    of the test, one name after the other. There are no duplicates. This order
-    can be different from the order of the report. The object has these keys:
+    ["tests"] and ["killed_by"] have one object for each test of the mutant in
+    each file that records it. The objects are sorted by file, and then by the
+    names of the test, one name after the other. There are no duplicates. This
+    order can be different from the order of the report. The object has these
+    keys:
     - ["executable"] is the index of the file in ["executables"].
     - ["test"] is the path of the test as an array of names, the outermost group
       first.
