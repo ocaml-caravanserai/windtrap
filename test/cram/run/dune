@@ -82,11 +82,12 @@
  (deps mutant_main.exe))
 
 ; nodune.t reads OCAMLPATH as POSIX spells it and runs the mutation loop.
-; Under --instrument-with ppx_windtrap.coverage, dune 3.24 closes
-; (package windtrap) over ppx_windtrap, whose runtime depends on windtrap,
-; and reports a dependency cycle; a dune built from main does not. CI's
-; coverage job, on dune 3.24, sets SKIP_PACKAGE_SESSIONS for that reason,
-; and every session that depends on a package is left out under it.
+; Under --instrument-with, dune 3.23.1 and 3.24 close (package windtrap)
+; over ppx_windtrap, whose runtime depends on windtrap, and report a
+; dependency cycle. Thus CI's coverage job, the release smoke run and the
+; @self-cover and @self-mutate commands of doc/dev/testing.md set
+; SKIP_PACKAGE_SESSIONS. The variable skips every session that depends on
+; a package.
 
 (cram
  (applies_to nodune)

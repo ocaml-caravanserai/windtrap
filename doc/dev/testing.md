@@ -288,8 +288,8 @@ the skill teach no alias, and show a user the instrumented
 `dune runtest` and the merge as two commands.
 
 ```
-dune build @self-cover --instrument-with ppx_windtrap.coverage
-WINDTRAP_MUTATE=1 dune build @self-mutate --force --instrument-with ppx_windtrap.mutate
+SKIP_PACKAGE_SESSIONS=true dune build @self-cover --instrument-with ppx_windtrap.coverage
+SKIP_PACKAGE_SESSIONS=true WINDTRAP_MUTATE=1 dune build @self-mutate --force --instrument-with ppx_windtrap.mutate
 ```
 
 Their shape: `(alias_rec runtest)` and `(alias_rec ../examples/runtest)`
@@ -311,11 +311,13 @@ core, which under the coverage backend is instrumented too and adds its
 own rows to the scratch project's report; the session therefore pins the
 scratch library's row alone, never the total. Its dump lands under the
 scratch directory's `_windtrap`, never under `_build/_coverage`, so it
-never enters the number. Dune 3.24, the release CI installs, reports a
-`(package windtrap)` dependency as a cycle under the coverage backend, so
-the coverage job binds `SKIP_PACKAGE_SESSIONS=true` to leave out the
-sessions that have one, `nodune.t` and `cram/ppx/expect_typing.t`; a dune
-built from main runs them under every configuration.
+never enters the number. Dune 3.23.1 and 3.24 report a
+`(package windtrap)` dependency as a cycle under either backend.
+`SKIP_PACKAGE_SESSIONS=true` skips the sessions that depend on a
+package, `nodune.t` and `cram/ppx/expect_typing.t`. The `@self-cover`
+and `@self-mutate` commands of this page, the release smoke run and CI's
+coverage job set it. On a dune without this cycle, run without the
+variable, and the two sessions run under each backend.
 
 `--min 84` is a ratchet: the measured number (86.2% on 2026-08-19, 93.0%
 on 2026-09-16) less a few points of headroom. Raise it when the margin is comfortable;
@@ -379,8 +381,8 @@ standard error at each important point of the run. Use these three
 runs:
 
 ```
-WINDTRAP_DEBUG_MEMORY=100 WINDTRAP_MUTATE=1 dune build @self-mutate --force --instrument-with ppx_windtrap.mutate
-WINDTRAP_DEBUG_MEMORY=100 WINDTRAP_MUTATE=1 dune build -j 1 @self-mutate --force --instrument-with ppx_windtrap.mutate
+SKIP_PACKAGE_SESSIONS=true WINDTRAP_DEBUG_MEMORY=100 WINDTRAP_MUTATE=1 dune build @self-mutate --force --instrument-with ppx_windtrap.mutate
+SKIP_PACKAGE_SESSIONS=true WINDTRAP_DEBUG_MEMORY=100 WINDTRAP_MUTATE=1 dune build -j 1 @self-mutate --force --instrument-with ppx_windtrap.mutate
 WINDTRAP_DEBUG_MEMORY=100 dune exec --instrument-with ppx_windtrap.mutate test/unit/<suite>.exe -- --mutate 2> memory.log
 ```
 
