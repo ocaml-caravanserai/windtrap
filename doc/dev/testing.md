@@ -498,6 +498,25 @@ The limits:
 - `sites` and `reaches` count all sites that a test reached, and the
   sites outside the scope of `--mutate`.
 
+### The mutation gate
+
+The workflow `.github/workflows/mutate-gate.yml` runs a full
+`@self-mutate` on `ubuntu-latest` each Monday. You can also start it by
+hand, and a pull request that changes the gate runs it. The script
+`dev/gate/self-mutate.sh` runs the build and reads the line of the
+merge. It gives a failure in these conditions:
+
+- The run takes more minutes than its bound.
+- The used memory of the machine grows more than its bound in MB.
+- The merge gives no line, for example because the build stopped.
+- The tree has more mutants than the bounds, for example after a new
+  operator.
+
+The bounds are in `dev/gate/bounds`. The exit code of the build is not
+a condition, because `windtrap mutants` exits 1 when a mutant survives.
+A pull request that adds mutants measures the bounds again on the CI
+machine and changes the file.
+
 ## The conformance corpus
 
 The compatibility promise, that most ppx_expect suites run unchanged

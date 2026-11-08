@@ -1,0 +1,6 @@
+; The script reads /proc/meminfo.
+
+(cram
+ (enabled_if
+  (= %{system} linux))
+ (deps self-mutate.sh))
