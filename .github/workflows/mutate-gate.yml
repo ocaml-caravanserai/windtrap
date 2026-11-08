@@ -16,7 +16,9 @@ on:
 jobs:
   self-mutate:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    # The limit of GitHub. It leaves 30 minutes over the time bound of
+    # dev/gate/bounds for the set-up.
+    timeout-minutes: 360
 
     steps:
       - name: Checkout tree

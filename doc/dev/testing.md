@@ -506,9 +506,11 @@ hand, and a pull request that changes the gate runs it. The script
 `dev/gate/self-mutate.sh` runs the build and reads the line of the
 merge. It gives a failure in these conditions:
 
-- The run takes more minutes than its bound.
-- The used memory of the machine grows more than its bound in MB.
-- The merge gives no line, for example because the build stopped.
+- The run takes more than its bound of minutes.
+- The used memory of the machine grows more than its bound of MB. The
+  script reads the memory each 5 s, thus it can miss a short peak.
+- The merge gives no line, or a line with no count of mutants, for
+  example because the build stopped.
 - The tree has more mutants than the bounds, for example after a new
   operator.
 
