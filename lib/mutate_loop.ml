@@ -1218,7 +1218,8 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
   let started = Os.counter () in
   let effort =
     {
-      Verdicts.retries = config.mutate_retry;
+      Verdicts.full_matrix = false;
+      retries = config.mutate_retry;
       pass = 1;
       settings = settings config;
     }

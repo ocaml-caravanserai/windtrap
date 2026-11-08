@@ -1946,7 +1946,7 @@ A truncated file is corrupt, and nothing is reported:
   $ plant "$scratch/truncated" && cd "$scratch/truncated"
   $ mkdata mutants whole.mutants "$add=killed" "$sub=unreached" "$lt=survived:calc/compares"
   $ mkdir -p _build/_mutants
-  $ head -c $(( $(wc -c < whole.mutants) - 59 )) whole.mutants > _build/_mutants/cut.mutants
+  $ head -c $(( $(wc -c < whole.mutants) - 70 )) whole.mutants > _build/_mutants/cut.mutants
   $ run windtrap mutants
   --- stderr
   windtrap: .../cut.mutants: corrupt verdict file: truncated test name
@@ -1959,13 +1959,13 @@ is to delete it, which a coverage dump in the directory shares:
   $ printf 'windtrap-mutants-v0\n1\nsome older payload\n' > _build/_mutants/old.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v16", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v17", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
   $ rm _build/_mutants/old.mutants
   $ printf 'windtrap-coverage-v3\n0\n' > _build/_mutants/cov.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v16", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v17", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
 
 A PATH that cannot be used fails the command, and the files named beside

@@ -1524,8 +1524,15 @@ let elsewhere =
     source_digest = None;
     verdict = Verdicts.killed [];
     previous = Some `Survived;
-    effort = { retries = 0; pass = 1; settings = String.make 32 '0' };
+    effort =
+      {
+        full_matrix = false;
+        retries = 0;
+        pass = 1;
+        settings = String.make 32 '0';
+      };
     prefix = None;
+    matrix = None;
     reused = false;
   }
 
@@ -2744,7 +2751,7 @@ let plant_old p =
 let old_warning p =
   strf
     "windtrap: warning: --skip-killed ignores %s/%s: not a windtrap verdict \
-     file (expected header \"windtrap-mutants-v16\", found \
+     file (expected header \"windtrap-mutants-v17\", found \
      \"windtrap-mutants-v13\"); files written by other windtrap versions are \
      not readable - delete the stale verdict files, then re-run the mutation \
      tests\n"
@@ -3452,8 +3459,9 @@ let refused_between () =
    run replaces it. *)
 let unloadable_earlier =
   [
-    ("a file of the format before", "windtrap-mutants-v14\ntested\n0\n");
-    ("a corrupt file", "windtrap-mutants-v16\ntested\nsample none\n0\n1\njunk\n");
+    ( "a file of the format before",
+      "windtrap-mutants-v16\ntested\nsample none\n0\n0\n" );
+    ("a corrupt file", "windtrap-mutants-v17\ntested\nsample none\n0\n1\njunk\n");
   ]
 
 let unloadable_earlier_file (_, text) =
@@ -3464,7 +3472,7 @@ let unloadable_earlier_file (_, text) =
   equal (option (list string)) None (unstable r.out);
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option (list string)) (Some none_rows) (previous_rows r);
-  starts_with ~prefix:"windtrap-mutants-v16\n" (read path)
+  starts_with ~prefix:"windtrap-mutants-v17\n" (read path)
 
 let narrowed_run () =
   let path = verdicts_path () in
@@ -5298,12 +5306,12 @@ let last_files () =
   equal string "exited 0" r.status;
   equal text
     (ignored_warning
-       "not a windtrap verdict file (expected header \"windtrap-mutants-v16\", \
+       "not a windtrap verdict file (expected header \"windtrap-mutants-v17\", \
         found \"windtrap-mutants-v14\")")
     r.err;
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option string) (Some (reused_line 0)) (reused_of r.out);
-  write path "windtrap-mutants-v16\ntested\nsample none\n0\n1\njunk\n";
+  write path "windtrap-mutants-v17\ntested\nsample none\n0\n1\njunk\n";
   let r = second_run () in
   equal string "exited 0" r.status;
   contains ~sub:"windtrap: warning: --incremental ignores " r.err;

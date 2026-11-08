@@ -112,7 +112,13 @@ let previous = function
   | "not_evaluated" -> `Not_evaluated
   | p -> die "%S: not an outcome" p
 
-let effort = { Verdicts.retries = 0; pass = 1; settings = String.make 32 '0' }
+let effort =
+  {
+    Verdicts.full_matrix = false;
+    retries = 0;
+    pass = 1;
+    settings = String.make 32 '0';
+  }
 
 let record spec =
   let mutant, v = split_last '=' spec in
@@ -150,6 +156,7 @@ let record spec =
         previous;
         effort;
         prefix = None;
+        matrix = None;
         reused;
       }
   | _ -> die "%S: not FILE:LINE:COL:REWRITE:BEFORE:AFTER" mutant
