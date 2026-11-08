@@ -877,10 +877,9 @@ class instrumenter ~keeps ~module_name =
        operator: a chain of one operator carries one mutant, and reading it
        from the tree keeps a bracket from changing the count. A dismissal
        leaves [e] as written, and an arid site ends the chain. [branches] is
-       for the condition of an [if], as [arid] reads it, and [last] is
-       [descend]'s. [parent] and [at_load] hold for the children of [e] while
-       they are rewritten. *)
-    method private mutate ?chained ?branches ?last context e =
+       for the condition of an [if], as [arid] reads it. [parent] and
+       [at_load] hold for the children of [e] while they are rewritten. *)
+    method private mutate ?chained ?branches context e =
       let outer = (parent, at_load, recursive) in
       let mutant =
         match mutant ~keeps context e with
@@ -897,7 +896,7 @@ class instrumenter ~keeps ~module_name =
           recursive <- false
       | Pexp_poly _ | Pexp_object _ | Pexp_newtype _ -> at_load <- false
       | _ -> ());
-      let rewritten = self#rewrite ?chained ?branches ?last context e mutant in
+      let rewritten = self#rewrite ?chained ?branches context e mutant in
       let p, l, r = outer in
       parent <- p;
       at_load <- l;
@@ -913,8 +912,8 @@ class instrumenter ~keeps ~module_name =
         recursive <- outer;
         result
 
-    method private rewrite ?(chained = false) ?(branches = false) ?last context
-        e mutant =
+    method private rewrite ?(chained = false) ?(branches = false) context e
+        mutant =
       let off = off_reason e.pexp_attributes in
       if is_opaque e then e
       else
@@ -924,7 +923,7 @@ class instrumenter ~keeps ~module_name =
             if not chained then
               ignore (self#site e mutant ~dismissed:(Some reason));
             e
-        | None, None -> self#descend ?last e
+        | None, None -> self#descend e
         | None, Some mutant ->
             let arid = self#arid ~branches mutant in
             let index =
@@ -1064,14 +1063,17 @@ class instrumenter ~keeps ~module_name =
        carries one, and its last statement is in the position of [e]. *)
     method private unit_position drop e =
       match e.pexp_desc with
-      | Pexp_sequence _ -> self#mutate ~last:drop Ordinary e
+      | Pexp_sequence _ when Option.is_some (off_reason e.pexp_attributes) -> e
+      | Pexp_sequence (first, rest) ->
+          let first = self#dropped As_statement first in
+          let rest = self#unit_position drop rest in
+          { e with pexp_desc = Pexp_sequence (first, rest) }
       | _ -> self#dropped drop e
 
-    (* [descend ?last e] rewrites the children of [e], each in the context
-       that [e] gives it. [last] is the form of [del] for the last statement
-       of a sequence [e] in a unit position. A connective that carries no
-       mutant still has boolean operands. *)
-    method private descend ?last e =
+    (* [descend e] rewrites the children of [e], each in the context that [e]
+       gives it. A connective that carries no mutant still has boolean
+       operands. *)
+    method private descend e =
       match e.pexp_desc with
       | Pexp_ifthenelse (condition, then_, else_) ->
           let branches =
@@ -1103,11 +1105,7 @@ class instrumenter ~keeps ~module_name =
           { e with pexp_desc = Pexp_for (index, start, stop, direction, body) }
       | Pexp_sequence (first, rest) ->
           let first = self#dropped As_statement first in
-          let rest =
-            match last with
-            | Some drop -> self#unit_position drop rest
-            | None -> self#expression rest
-          in
+          let rest = self#expression rest in
           { e with pexp_desc = Pexp_sequence (first, rest) }
       | Pexp_apply (operator, [ (Nolabel, left); (Nolabel, right) ])
         when is_connective ~keeps e ->
