@@ -1123,8 +1123,8 @@ let lines merged (m : Sections.mutation) =
 let mixed_note =
   "the verdict files that tested their suite have different samples, so the \
    score and the total have no interval: --min and --min-total count each \
-   mutant that is not sampled as survived, and with no scored mutant in the \
-   sample, each mutant that the hash judged"
+   mutant that is not sampled as survived (each judged mutant when the sample \
+   has no scored mutant)"
 
 (* A sample does not count each survivor. *)
 let sampled_survivors o files =

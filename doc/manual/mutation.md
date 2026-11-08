@@ -374,12 +374,12 @@ mutants that no test reached and those that ran outside every test,
 which are exact counts. The interval of the total maps each bound of
 `p` in the same way.
 
-When the sample has no scored mutant and no exact kill, the line gives
-`no scored mutant` for the score, and the total has no estimate. With `--min-total`, the
-line gives `total: no scored mutant`. Each mutant that the hash judged
-can then be killed or not. With no exact kill, the interval of the
-score is 0% to 100%, and `--min` and `--min-total` fail unless the
-minimum is 0. With `X` exact kills, the lower bound of the score is
+When the sample has no scored mutant, the score and the total have no
+estimate. Each mutant that the hash judged can then be killed or not.
+With no exact kill, the line gives `no scored mutant` for the score,
+and `total: no scored mutant` with `--min-total`. The interval of the
+score is then 0% to 100%, and `--min` and `--min-total` fail unless
+the minimum is 0. With `X` exact kills, the lower bound of the score is
 `X / (X + E)`, and that of the total is `X / (X + E + U)`.
 
 The gates compare these lower bounds, and the line gives them, as
@@ -423,8 +423,9 @@ In the document of `--json`, a mutant out of the sample has the verdict
 `not_sampled`. When the merge has a sample, `summary` gives their count
 in `not_sampled`. Under one sample, when the hash judged a reached
 mutant that was not killed elsewhere, `summary` also gives the sample
-and the bounds. With no scored mutant, `score` and `total_percent` are `null`.
-`--sarif` gives no result for a mutant that is not sampled.
+and the bounds. With no scored mutant, `score` and `total_percent`
+are `null`. `--sarif` gives no result for a mutant that is not
+sampled.
 
 ### Samples and the last run
 

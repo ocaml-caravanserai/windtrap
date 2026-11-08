@@ -662,8 +662,8 @@ type estimate = {
   bounds : ((float * float) * (float * float)) option;
       (** Under a [Uniform] sample, the interval of the score and the interval
           of the total, as percentages. When [n] is [0], each judged mutant can
-          be killed or not. Then, where [u] is the mutants that no test reached
-          and those evaluated outside tests, the score is from
+          be killed or not. Then [u] is the mutants that no test reached and
+          those evaluated outside tests. The score is from
           [100 * x / (x + judged)] to [100], and the total is from
           [100 * x / (x + judged + u)] to
           [100 * (x + judged) / (x + judged + u)]. It is [None] under a [Mixed]
