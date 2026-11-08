@@ -317,7 +317,7 @@ never enters the number. Dune 3.23.1 and 3.24 report a
 package, `nodune.t` and `cram/ppx/expect_typing.t`. The `@self-cover`
 and `@self-mutate` commands of this page, the release smoke run and CI's
 coverage job set it. On a dune without this cycle, run without the
-variable, and the two sessions run under the backend.
+variable, and the two sessions run under each backend.
 
 `--min 84` is a ratchet: the measured number (86.2% on 2026-08-19, 93.0%
 on 2026-09-16) less a few points of headroom. Raise it when the margin is comfortable;
