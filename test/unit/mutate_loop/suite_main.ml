@@ -116,6 +116,23 @@ let crash =
         equal int 2 (Subject.crasher 3 1));
   ]
 
+(* Kills its own worker with SIGKILL: armed, the child dies by a signal. *)
+let killed_by_signal =
+  [
+    test "crasher kills its worker when the answer changes" (fun () ->
+        if Subject.crasher 3 1 <> 2 then Unix.kill (Unix.getpid ()) Sys.sigkill;
+        equal int 2 (Subject.crasher 3 1));
+  ]
+
+(* Calls exit, which ends the worker of a mutation job: armed, the child
+   ends with the code of the exit. *)
+let exits =
+  [
+    test "crasher calls exit when the answer changes" (fun () ->
+        if Subject.crasher 3 1 <> 2 then exit 3;
+        equal int 2 (Subject.crasher 3 1));
+  ]
+
 (* Leaves through a FATAL exception, which no failure boundary in the
    runner may swallow ({!Failure.catch} never returns it): armed, it escapes
    [Run.execute] and reaches the mutation child's own wrapper, which is
@@ -886,6 +903,18 @@ let () =
       exit
       @@ run "calc"
            [ group "calc" strong; group "widen" weak; group "crash" crash ]
+  | "signal" ->
+      exit
+      @@ run "calc"
+           [
+             group "calc" strong;
+             group "widen" weak;
+             group "crash" killed_by_signal;
+           ]
+  | "exits" ->
+      exit
+      @@ run "calc"
+           [ group "calc" strong; group "widen" weak; group "crash" exits ]
   | "fatal" ->
       exit
       @@ run "calc"
