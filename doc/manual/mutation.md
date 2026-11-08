@@ -252,6 +252,42 @@ $ git diff -U0 > change.diff
 $ dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --mutate --diff change.diff
 ```
 
+## Testing the mutants of some rewrites
+
+The executable holds each mutant that the rewriter compiled. Two flags
+select the mutants of some rewrites, with no new build. Each takes a
+comma-separated list of rewrite names (see
+[What is mutated](#what-is-mutated)):
+
+- `--rewrites=NAME,...` (mirror `WINDTRAP_REWRITES`) tests only the
+  mutants of these rewrites.
+- `--skip-rewrites=NAME,...` (mirror `WINDTRAP_SKIP_REWRITES`) tests
+  the mutants of all other rewrites.
+
+```
+$ dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --mutate --rewrites=del,int
+```
+
+The two flags narrow `--mutate` as `--lines` does, and they combine
+with its prefixes and with `--lines` or `--diff`. A mutant of another
+rewrite is not tested and not recorded. Thus the run keeps the verdicts
+outside its scope only when the same build wrote the verdict file (see
+[Unstable verdicts](#unstable-verdicts)). A mutant that `[@mutate off]`
+dismisses stays out of the run. `windtrap mutants` does not take the
+two flags.
+
+An unknown name or an empty list is a usage error. The message gives
+the names of the rewrites. The two flags together are a usage error,
+from the command line or from a mirror. If a flag occurs two times, the
+last value applies. If neither the command line nor a mirror gives
+`--mutate`, a flag on the command line is a usage error. A mirror alone
+has no effect on a suite that does not mutate.
+
+A filter that keeps no mutant of the executable is refused, as a prefix
+that keeps none is. Under `--lines` or `--diff`, lines with no site of
+the selected rewrites are not an error: the suite runs without mutation,
+as for lines with no site.
+
 ## What a mutation run runs
 
 A mutation run runs in passes, and prints neither the focus warning nor
@@ -827,8 +863,8 @@ of one mutant, the mutant has the mark only when each record of the
 highest verdict has it. Thus a fresh kill in another file removes the
 mark.
 
-Under `--lines`, `--diff` or `--mutate=PREFIX`, the run uses again only
-the verdicts in its scope. The records outside the scope follow the rule
+Under `--lines`, `--diff`, `--rewrites`, `--skip-rewrites` or
+`--mutate=PREFIX`, the run uses again only the verdicts in its scope. The records outside the scope follow the rule
 of a scoped run (see [Unstable verdicts](#unstable-verdicts)). Thus after
 a new build, a run under `--diff` keeps only the records of the diff, and
 the next full run can use again only these records. Under
@@ -906,8 +942,8 @@ again. It must come from the same suite.
 
 These runs show no section: a run whose selection narrows the suite, a
 refused run, a run that a signal stopped, and a run whose file cannot
-be written. Under `--lines`, `--diff` or `--mutate=PREFIX`, the section
-has only the mutants of the scope. The section does not change the
+be written. Under `--lines`, `--diff`, `--rewrites`, `--skip-rewrites`
+or `--mutate=PREFIX`, the section has only the mutants of the scope. The section does not change the
 score or the exit code.
 
 A scoped run keeps the records outside its scope only when the same
@@ -1205,7 +1241,9 @@ mutants: 10 reached, 10 killed, 1 executable, score 100.0% (10/10), reach 100.0%
 ## What is mutated
 
 Each mutant rewrites one expression, and the last part of its
-identifier names the rewrite:
+identifier names the rewrite. `--rewrites` and `--skip-rewrites` take
+these names (see
+[Testing the mutants of some rewrites](#testing-the-mutants-of-some-rewrites)):
 
 - `not` negates a condition that is neither a comparison nor a
   connective: the condition of an `if` or a `while`, or a guard.

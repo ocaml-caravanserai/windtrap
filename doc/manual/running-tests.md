@@ -431,6 +431,12 @@ OPTIONS:
       Test only the mutants on the lines that FILE, the output of git diff -U0,
       adds or changes (with --mutate).
 
+  --rewrites=NAME,... (env WINDTRAP_REWRITES)
+      Test only the mutants of these rewrites (with --mutate).
+
+  --skip-rewrites=NAME,... (env WINDTRAP_SKIP_REWRITES)
+      Test the mutants of all rewrites but these (with --mutate).
+
   --skip-killed (env WINDTRAP_SKIP_KILLED)
       Skip the mutants that the verdict file of another suite killed (with
       --mutate).

@@ -478,6 +478,11 @@ change. The report then gives `reused: N verdicts from the last run`. It
 does not examine helper modules or data files, so do a full run each
 night.
 
+`--rewrites=del,int` (`WINDTRAP_REWRITES`) tests only the mutants of
+these rewrites, and `--skip-rewrites=NAME,...`
+(`WINDTRAP_SKIP_REWRITES`) tests all others, with no new build. Each
+narrows `--mutate` as `--lines` does.
+
 `--mutate-workers` (`WINDTRAP_MUTATE_WORKERS=1`) lets a stateful test on
 several domains spawn its worker domains under `--mutate` and `--arm`.
 Without it, such a test runs each program on one domain, and a mutant
