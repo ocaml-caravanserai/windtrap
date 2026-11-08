@@ -73,3 +73,20 @@ let quiet_last flag =
   if flag then (
     incr count;
     (print_string "x" [@mutate off "the output is not checked"]))
+
+(* No site on [()] as a loop body or as the last statement of a sequence,
+   and none on an opaque [lazy]. *)
+let idle more =
+  while more () do
+    ()
+  done
+
+let bump_only flag =
+  if flag then (
+    incr count;
+    ())
+
+let deferred n =
+  for _ = 1 to n do
+    lazy count
+  done

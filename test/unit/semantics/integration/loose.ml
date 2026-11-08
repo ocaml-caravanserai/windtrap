@@ -4,9 +4,9 @@
   ---------------------------------------------------------------------------*)
 
 (* Without -strict-sequence, a loop body can have a type other than [unit],
-   with warning 10 alone. The [del] guard of such a body keeps its type, and
-   gives warning 10 where the source gives it, under the attribute of the
-   binding. *)
+   with warning 10 alone. The [del] guard of such a body keeps its type.
+   Under fatal warnings, this file compiles: the attribute of each binding
+   disables warning 10, and the guards give no other warning. *)
 
 let add_to total i =
   total := !total + i;

@@ -80,17 +80,21 @@
     - [ari] swaps [+] and [-] under the names [sub] and [add], and [+.] and [-.]
       under [fsub] and [fadd].
     - [del] drops a statement, under the name [del]: the statement does not run.
-      A statement is [e1] in [e1; e2], the branch [e] of [if c then e] with no
-      [else], the body of a [while] or a [for], and the last statement of a
-      sequence that is such a branch or body. In [e1; e2] the guard is
-      [(if armed then () else (e1; ())); e2], which types [e1] as the statement
-      that it was. A loop body takes the same form, because without
-      [-strict-sequence] its type can be other than [unit]. The guard of a
-      branch is [if c then (if armed then () else e)], which keeps [e] in tail
+      A statement is [e1] in [e1; e2]. A statement is also the branch [e] of
+      [if c then e] with no [else], and the body of a [while] or a [for]. In
+      such a branch or body, the last statement of a sequence is a statement
+      too, and it takes the guard of its position. In [e1; e2] the guard is
+      [(if armed then () else (e1; ()) : Stdlib.Unit.t); e2], which types [e1]
+      as the statement that it was. The constraint selects the predefined [()]
+      in a file that declares its own. A loop body takes the same form, because
+      without [-strict-sequence] its type can be other than [unit]. The guard of
+      a branch is [if c then (if armed then () else e)], which keeps [e] in tail
       position. A branch or a loop body that is a sequence has no [del] of its
-      own, because the [del] of each of its statements covers it. [()] and an
-      [assert] are no statement that it drops, and neither is the value [e2] of
-      a sequence in another position.
+      own, because the [del] of each of its statements covers it. In the
+      arguments of a logging call, of [failwith] or of [invalid_arg], a branch
+      and a loop body have no [del] site. [()] and an [assert] are no statement
+      that it drops, and neither is the value [e2] of a sequence outside these
+      positions.
     - [int] nudges an integer literal by one in the type that its suffix gives,
       under the name [int]: [1] becomes [0], and any other [n] becomes [n + 1].
       A literal whose nudge leaves its type, as [max_int], and a literal with a

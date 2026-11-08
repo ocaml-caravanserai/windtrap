@@ -150,15 +150,15 @@ before and after, and the reason of a dismissed site.
 
   $ mut --impl ./fixture_del.ml | ../elide.exe
   mutation sites of "./fixture_del.ml" in Windtrap_mut_________fixture_del___ml:
-    0: 7:2-7:18 "del" "log := (x :: (!log))" -> "()"
-    1: 7:9-7:18 "tail" "x :: (!log)" -> "!log"
-    2: 11:10-11:11 "int" "1" -> "0"
-    3: 12:4-12:15 "del" "print_int i" -> "()"
-    4: 13:4-13:20 "del" "print_newline ()" -> "()"
-    5: 25:2-25:62 "del" "print_string \"x\"" -> "()", dismissed "the output is not checked"
-    6: 30:2-30:8 "del" "a || b" -> "()"
-    7: 30:2-30:8 "and" "a || b" -> "a && b"
-    8: 40:2-40:25 "del" "output_string oc \"done\"" -> "()"
+    0: 8:2-8:18 "del" "log := (x :: (!log))" -> "()"
+    1: 8:9-8:18 "tail" "x :: (!log)" -> "!log"
+    2: 12:10-12:11 "int" "1" -> "0"
+    3: 13:4-13:15 "del" "print_int i" -> "()"
+    4: 14:4-14:20 "del" "print_newline ()" -> "()"
+    5: 26:2-26:62 "del" "print_string \"x\"" -> "()", dismissed "the output is not checked"
+    6: 31:2-31:8 "del" "a || b" -> "()"
+    7: 31:2-31:8 "and" "a || b" -> "a && b"
+    8: 41:2-41:25 "del" "output_string oc \"done\"" -> "()"
   let log = ref []
   let push x =
     (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 0
@@ -252,6 +252,10 @@ branch in tail position:
     32: 74:4-74:14 "del" "incr count" -> "()"
     33: 75:4-75:64 "del" "print_string \"x\"" -> "()", dismissed "the output is not checked"
     34: 73:5-73:9 "not" "flag" -> "not flag"
+    35: 80:8-80:15 "not" "more ()" -> "not (more ())"
+    36: 86:4-86:14 "del" "incr count" -> "()"
+    37: 85:5-85:9 "not" "flag" -> "not flag"
+    38: 90:10-90:11 "int" "1" -> "0"
   let count = ref 0
   let bump flag =
     if
@@ -431,6 +435,30 @@ branch in tail position:
         else (incr count; ()) : Stdlib.Unit.t);
        ((print_string "x")
        [@mutate off "the output is not checked"]))
+  let idle more =
+    while
+      let __windtrap_mut_35_p = more () in
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 35
+      then Stdlib.not __windtrap_mut_35_p
+      else __windtrap_mut_35_p do () done
+  let bump_only flag =
+    if
+      let __windtrap_mut_37_p = flag in
+      (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 37
+       then Stdlib.not __windtrap_mut_37_p
+       else __windtrap_mut_37_p)
+    then
+      ((if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 36
+        then ()
+        else (incr count; ()) : Stdlib.Unit.t);
+       ())
+  let deferred n =
+    for _ =
+      if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 38
+      then 0
+      else 1 to n do
+      lazy count
+    done
 
   $ mut --impl ./fixture_literals.ml | ../elide.exe
   mutation sites of "./fixture_literals.ml" in Windtrap_mut_________fixture_literals___ml, with type 'a operands:
