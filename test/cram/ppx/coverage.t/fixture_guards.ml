@@ -45,7 +45,8 @@ let wrap f x = Some (f x)
 let push f g x xs = f x :: g xs
 
 (* A statement keeps its out-edge, and a loop body keeps its entry point and
-   its out-edge. *)
+   its out-edge. In [count] they are two points, because the callee [f] has
+   one byte: the coverage rewriter alone gives them one point. *)
 let twice f x =
   f x;
   f x

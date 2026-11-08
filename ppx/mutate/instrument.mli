@@ -103,13 +103,11 @@
     [-strict-sequence] its type can be other than [unit]. The guard of a branch
     is [if c then (if armed then () else e)], which keeps [e] in tail position.
     The constraint selects the predefined [()] in a file that declares its own,
-    and each [()] of the guard turns off warnings 41 and 42.
+    and each [()] of the guard disables warnings 41 and 42.
 
     The last statement of a sequence in a branch or a loop body takes the guard
     of its position. A branch or a loop body that is a sequence has no [del] of
-    its own, because the [del] of each of its statements covers it. In the
-    arguments of a logging call, of [failwith] or of [invalid_arg], a branch and
-    a loop body have no [del] site.
+    its own, because the [del] of each of its statements covers it.
 
     The guard of [int] and of [bool] is [if armed then n' else n], an [if] whose
     two arms are constants. The guard of [none] is
@@ -198,10 +196,11 @@
     A statement in the arguments of a logging function, of [failwith] or of
     [invalid_arg] keeps its mutants, with the sites inside it. A statement acts
     on the state of the program. Here a statement is [e1] in [e1; e2], or the
-    expression of [let () = e in]. A then-branch with no [else] and a loop body
-    are no statement here, and they have no [del] site. A logging call that is a
-    statement keeps its own [del] mutant. These two rules do not see other
-    effects, for example of a function that the message calls.
+    expression of [let () = e in]. Outside such a statement, a then-branch with
+    no [else] and a loop body have no [del] site, and the rules of the message
+    apply to them. A logging call that is a statement keeps its own [del]
+    mutant. These two rules do not see other effects, for example of a function
+    that the message calls.
 
     Two expressions are one expression when their parsetrees are equal without
     their locations. An expression whose value can depend on its location is one
@@ -361,11 +360,11 @@
     In the driver that dune builds for a stanza naming both backends this
     rewriter runs first, so its sites are those stated here and the coverage
     rewriter receives its guards. The coverage rewriter marks the disarmed arm
-    of a guard, and the locations of the [del] guard let it key the entry of a
-    loop body and the out-edge of a statement. The points of the file are not
-    those of the coverage rewriter alone. For example, an application that is a
-    [neg] site has no out-edge, and the disarmed arm of an [int] guard has a
-    point. The [del] guard gives these known differences:
+    of a guard. It takes the key of the entry of a loop body and of the out-edge
+    of a statement from the locations of the [del] guard. The points of the file
+    are not those of the coverage rewriter alone. For example, an application
+    that is a [neg] site has no out-edge, and the disarmed arm of an [int] guard
+    has a point. The [del] guard gives these known differences:
     - In [if c then (a; b)], the guard of [b] is an [if] with an [else], and its
       disarmed arm [b] has one more point.
     - After a statement [if c then x] that has a [del] site, the rest of the
@@ -373,6 +372,9 @@
       counts the same evaluations.
     - A loop body that ends with [if c then x] has one more point, of zero
       width, at the [()] of its guard.
+    - A loop body that is an application [f x] with a callee of one byte has two
+      points. The coverage rewriter alone gives its entry and its out-edge one
+      point.
 
     When the coverage rewriter ran on the file first, which is the order of a
     driver that links this library before [ppx_windtrap.coverage], the file
