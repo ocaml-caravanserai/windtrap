@@ -66,6 +66,12 @@ let ints = List.map Int.to_string
 let bools = List.map Bool.to_string
 let floats = List.map Float.to_string
 
+(* [raised f] is [f ()] as a string, or the exception that it raises. *)
+let raised f =
+  match f () with
+  | n -> Int.to_string n
+  | exception e -> "raised " ^ Printexc.to_string e
+
 (* [traced f] is the operands [f] evaluated, in order. *)
 let traced f =
   ignore (f ());
@@ -101,6 +107,18 @@ let originals =
       fun () -> Bool.to_string (Oracle.con_or true false) );
     ("ari_add 5 3", "8", fun () -> Int.to_string (Oracle.ari_add 5 3));
     ("ari_sub 5 3", "2", fun () -> Int.to_string (Oracle.ari_sub 5 3));
+    ("mul_mul 7 3", "21", fun () -> Int.to_string (Oracle.mul_mul 7 3));
+    ("mul_div 7 3", "2", fun () -> Int.to_string (Oracle.mul_div 7 3));
+    ("mul_mod 7 3", "1", fun () -> Int.to_string (Oracle.mul_mod 7 3));
+    ("fmul_mul 7. 2.", "14.", fun () -> Float.to_string (Oracle.fmul_mul 7. 2.));
+    ("fmul_div 7. 2.", "3.5", fun () -> Float.to_string (Oracle.fmul_div 7. 2.));
+    ("bit_and 12 10", "8", fun () -> Int.to_string (Oracle.bit_and 12 10));
+    ("bit_or 12 10", "14", fun () -> Int.to_string (Oracle.bit_or 12 10));
+    ("bit_xor 12 10", "6", fun () -> Int.to_string (Oracle.bit_xor 12 10));
+    ("bit_lsl 8 1", "16", fun () -> Int.to_string (Oracle.bit_lsl 8 1));
+    ("bit_lsr 8 1", "4", fun () -> Int.to_string (Oracle.bit_lsr 8 1));
+    ("bit_asr -8 1", "-4", fun () -> Int.to_string (Oracle.bit_asr (-8) 1));
+    ("scale_by 3 0", "0", fun () -> raised (fun () -> Oracle.scale_by 3 0));
     ("del_count", "1", fun () -> Int.to_string (Oracle.del_count ()));
     ("del_then true", "7", fun () -> Int.to_string (Oracle.del_then true));
     ("del_last true", "10", fun () -> Int.to_string (Oracle.del_last true));
@@ -134,6 +152,9 @@ let originals =
     ( "the operands of ari_order",
       "r,l",
       fun () -> traced (fun () -> Oracle.ari_order 1 2) );
+    ( "the operands of mul_order",
+      "r,l",
+      fun () -> traced (fun () -> Oracle.mul_order 1 2) );
     ( "the right operand of con_short false",
       "",
       fun () -> traced (fun () -> Oracle.con_short false true) );
@@ -248,6 +269,25 @@ let armings =
     oracle "add" "a - b" (fun () -> ints [ Oracle.ari_sub 5 3 ]) [ "8" ];
     oracle "fsub" "a +. b" (fun () -> floats [ Oracle.ari_fadd 5. 3. ]) [ "2." ];
     oracle "fadd" "a -. b" (fun () -> floats [ Oracle.ari_fsub 5. 3. ]) [ "8." ];
+    oracle "div" "a * b" (fun () -> ints [ Oracle.mul_mul 7 3 ]) [ "2" ];
+    oracle "mul" "a / b" (fun () -> ints [ Oracle.mul_div 7 3 ]) [ "21" ];
+    oracle "mod" "a mod b" (fun () -> ints [ Oracle.mul_mod 7 3 ]) [ "21" ];
+    oracle "fdiv" "a *. b"
+      (fun () -> floats [ Oracle.fmul_mul 7. 2. ])
+      [ "3.5" ];
+    oracle "fmul" "a /. b"
+      (fun () -> floats [ Oracle.fmul_div 7. 2. ])
+      [ "14." ];
+    oracle "lor" "a land b" (fun () -> ints [ Oracle.bit_and 12 10 ]) [ "14" ];
+    oracle "land" "a lor b" (fun () -> ints [ Oracle.bit_or 12 10 ]) [ "8" ];
+    oracle "xor" "a lxor b" (fun () -> ints [ Oracle.bit_xor 12 10 ]) [ "8" ];
+    oracle "lsr" "a lsl b" (fun () -> ints [ Oracle.bit_lsl 8 1 ]) [ "4" ];
+    oracle "lsl" "a lsr b" (fun () -> ints [ Oracle.bit_lsr 8 1 ]) [ "16" ];
+    oracle "asr" "a asr b" (fun () -> ints [ Oracle.bit_asr (-8) 1 ]) [ "-16" ];
+    (* Armed, [n * d] is [n / d], and the exception escapes the guard. *)
+    oracle "div" "n * d"
+      (fun () -> [ raised (fun () -> Oracle.scale_by 3 0) ])
+      [ "raised Division_by_zero" ];
     oracle "del" "incr dropped" (fun () -> ints [ Oracle.del_count () ]) [ "0" ];
     oracle "del" "shown := 7" (fun () -> ints [ Oracle.del_then true ]) [ "0" ];
     oracle "del" "steps := ((!steps) * 10)"
@@ -294,6 +334,9 @@ let armings =
       [ "r,l" ];
     oracle "sub" "(note \"l\" a) + (note \"r\" b)"
       (fun () -> [ traced (fun () -> Oracle.ari_order 1 2) ])
+      [ "r,l" ];
+    oracle "div" "(note \"l\" a) * (note \"r\" b)"
+      (fun () -> [ traced (fun () -> Oracle.mul_order 1 2) ])
       [ "r,l" ];
     oracle "or" "a && (note \"r\" b)"
       (fun () ->
@@ -378,13 +421,19 @@ let armed_mutants =
 
 (* [forced ()] reads the functions of forced.ml that its mutants change. *)
 let forced () =
-  strf "%d %d %.1f %b %b %b %b %d %d %d %d %b" (Forced.sum 2 3)
+  strf "%d %d %.1f %b %b %b %b %d %d %d %d %b %s" (Forced.sum 2 3)
     (Forced.diff 9 4) (Forced.fsum 1.5 2.5) (Forced.both true false)
     (Forced.either false true) (Forced.window 0 10 5)
     (Forced.chain true true false)
     (Forced.below 1 2) (Forced.same 1 1) (Forced.at_least 3 3)
     (Forced.scaled 2 3)
     (Forced.search (fun x -> x > 2) [ 1; 2; 3 ])
+    (strf "%d %d %d %.1f %.1f %d %d %d %d %d %d" (Forced.product 7 3)
+       (Forced.quotient 7 3) (Forced.remainder 7 3) (Forced.fproduct 7. 2.)
+       (Forced.fquotient 7. 2.) (Forced.masked 12 10) (Forced.merged 12 10)
+       (Forced.flipped 12 10) (Forced.shifted_left 8 1)
+       (Forced.shifted_right 8 1)
+       (Forced.shifted_arith (-8) 1))
 
 let every_forced_mutant () =
   let original = forced () in
@@ -417,13 +466,15 @@ let every_mutant =
 
 let arid_reading () =
   Arid.logged 4;
-  strf "%d %d %b %d %d %d" (Arid.zero 4) (Arid.chain 5 3) (Arid.same true)
-    (Arid.branches false 7) (Arid.message 2)
+  strf "%d %d %b %d %d %d %d %d %.1f %.1f %d" (Arid.zero 4) (Arid.chain 5 3)
+    (Arid.same true) (Arid.branches false 7) (Arid.message 2)
     (Queue.take Windtrap_mutate_forced.Logs.logged)
+    (Arid.mul_one 4) (Arid.div_minus 4) (Arid.fmul_one 2.) (Arid.fdiv_minus 2.)
+    (Arid.same_bits 6)
 
 let arid_sites () =
   let site (m : Mutate.mutant) = strf "%s %s" m.id.rewrite m.before in
-  equal string "4 8 true 7 2 8" (arid_reading ());
+  equal string "4 8 true 7 2 8 4 -4 2.0 -2.0 6" (arid_reading ());
   equal (list string)
     [ "sub a + b"; "le n < 0" ]
     (List.map site (mutants_of "arid.ml"))
@@ -468,15 +519,43 @@ let aliased () =
   equal int 1 (Windtrap_mutate_forced.Aliased.pick 1 2 1 0);
   equal (list string) [ "le" ] (List.map rewrite (mutants_of "aliased.ml"))
 
+(* The test calls [sum], so that the module is linked. *)
+let rebound () =
+  let rewrite (m : Mutate.mutant) = m.id.rewrite in
+  equal int 3 (Windtrap_mutate_forced.Rebound.sum 1 2);
+  equal (list string)
+    [ "sub"; "fdiv"; "lor"; "int" ]
+    (List.map rewrite (mutants_of "rebound.ml"))
+
 let lost =
   group "Lost families"
     [
+      test "a file that binds / has no mul mutant" rebound;
       test "a file that declares Some and (::) has no none and no tail mutant"
         lost_families;
       test "an alias pattern of an operator loses its family" aliased;
     ]
 
+(* Stdlib scope *)
+
+(* The sites of scoped.ml outside its opens, and the [tail] site of a list
+   under an open, which needs no Stdlib scope. The test calls [product], so
+   that the module is linked. *)
+let scoped () =
+  let site (m : Mutate.mutant) = strf "%s %s" m.id.rewrite m.before in
+  equal int 6 (Windtrap_mutate_scoped.Scoped.product 2 3);
+  equal (list string)
+    [ "div a * b"; "tail [a * b]"; "mul a / b"; "fmul a /. b"; "lsr a lsl b" ]
+    (List.map site (mutants_of "scoped.ml"))
+
+let stdlib_scope =
+  group "Stdlib scope"
+    [
+      test "an operator under an opaque open has no mul, fmul or bit mutant"
+        scoped;
+    ]
+
 let () =
   exit
     (run "mutate registration"
-       [ disarmed; armed_mutants; every_mutant; arid; lost ])
+       [ disarmed; armed_mutants; every_mutant; arid; lost; stdlib_scope ])

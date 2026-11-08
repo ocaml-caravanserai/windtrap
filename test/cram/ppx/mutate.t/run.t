@@ -180,6 +180,236 @@ before and after, and the reason of a dismissed site.
       then __windtrap_mut_2_l -. __windtrap_mut_2_r
       else __windtrap_mut_2_l +. __windtrap_mut_2_r
 
+  $ mut --impl ./fixture_mul.ml | ../elide.exe
+  mutation sites of "./fixture_mul.ml" in Windtrap_mut_________fixture_mul___ml, with type ints, type floats:
+    0: 6:16-6:21 "div" "a * b" -> "a / b"
+    1: 7:17-7:22 "mul" "a / b" -> "a * b"
+    2: 8:17-8:24 "mod" "a mod b" -> "a * b"
+    3: 9:17-9:23 "fdiv" "a *. b" -> "a /. b"
+    4: 10:18-10:24 "fmul" "a /. b" -> "a *. b"
+    5: 11:15-11:23 "lor" "a land b" -> "a lor b"
+    6: 12:17-12:24 "land" "a lor b" -> "a land b"
+    7: 13:17-13:25 "xor" "a lxor b" -> "a land b"
+    8: 14:15-14:22 "lsr" "a lsl b" -> "a lsr b"
+    9: 15:16-15:23 "lsl" "a lsr b" -> "a lsl b"
+    10: 16:16-16:23 "asr" "a asr b" -> "a lsl b"
+    11: 19:18-19:27 "div" "(a * b) * c" -> "(a * b) / c"
+    12: 20:18-20:27 "mul" "(a * b) / c" -> "(a * b) * c"
+    13: 20:18-20:23 "div" "a * b" -> "a / b"
+    14: 21:16-21:27 "mod" "(a / b) mod c" -> "(a / b) * c"
+    15: 21:16-21:21 "mul" "a / b" -> "a * b"
+    16: 22:19-22:36 "xor" "(a land b) lxor c" -> "(a land b) land c"
+    17: 22:19-22:29 "lor" "a land b" -> "a lor b"
+    18: 23:20-23:35 "lsl" "(a asr b) lsr c" -> "(a asr b) lsl c"
+    19: 23:20-23:29 "asr" "a asr b" -> "a lsl b"
+    20: 26:15-26:28 "lsr" "x lsl (1 lsl 2)" -> "x lsr (1 lsl 2)"
+    21: 26:21-26:28 "lsr" "1 lsl 2" -> "1 lsr 2"
+    22: 26:21-26:22 "int" "1" -> "0"
+    23: 26:27-26:28 "int" "2" -> "3"
+    24: 27:18-27:33 "lsr" "(x lsl 1) lsl 2" -> "(x lsl 1) lsr 2"
+    25: 27:25-27:26 "int" "1" -> "0"
+    26: 27:32-27:33 "int" "2" -> "3"
+    27: 31:17-31:26 "div" "a * b" -> "a / b"
+    28: 32:32-32:33 "int" "2" -> "3"
+    29: 36:15-36:20 "div" "x * 2" -> "x / 2"
+    30: 37:19-37:26 "lsr" "x lsl 2" -> "x lsr 2"
+    31: 37:25-37:26 "int" "2" -> "3"
+    32: 40:11-40:19 "div" "4 * 1024" -> "4 / 1024"
+    33: 41:20-41:27 "div" "a * b" -> "a / b", dismissed "the product is a size"
+    34: 42:16-42:21 "div" "x * 0" -> "x / 0"
+    35: 44:41-44:48 "div" "a * b" -> "a / b"
+  let times a b =
+    let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 0
+    then __windtrap_mut_0_l / __windtrap_mut_0_r
+    else __windtrap_mut_0_l * __windtrap_mut_0_r
+  let divide a b =
+    let (__windtrap_mut_1_l, __windtrap_mut_1_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 1
+    then __windtrap_mut_1_l * __windtrap_mut_1_r
+    else __windtrap_mut_1_l / __windtrap_mut_1_r
+  let modulo a b =
+    let (__windtrap_mut_2_l, __windtrap_mut_2_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 2
+    then __windtrap_mut_2_l * __windtrap_mut_2_r
+    else __windtrap_mut_2_l mod __windtrap_mut_2_r
+  let ftimes a b =
+    let (__windtrap_mut_3_l, __windtrap_mut_3_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.floats) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 3
+    then __windtrap_mut_3_l /. __windtrap_mut_3_r
+    else __windtrap_mut_3_l *. __windtrap_mut_3_r
+  let fdivide a b =
+    let (__windtrap_mut_4_l, __windtrap_mut_4_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.floats) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 4
+    then __windtrap_mut_4_l *. __windtrap_mut_4_r
+    else __windtrap_mut_4_l /. __windtrap_mut_4_r
+  let both a b =
+    let (__windtrap_mut_5_l, __windtrap_mut_5_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 5
+    then __windtrap_mut_5_l lor __windtrap_mut_5_r
+    else __windtrap_mut_5_l land __windtrap_mut_5_r
+  let either a b =
+    let (__windtrap_mut_6_l, __windtrap_mut_6_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 6
+    then __windtrap_mut_6_l land __windtrap_mut_6_r
+    else __windtrap_mut_6_l lor __windtrap_mut_6_r
+  let differ a b =
+    let (__windtrap_mut_7_l, __windtrap_mut_7_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 7
+    then __windtrap_mut_7_l land __windtrap_mut_7_r
+    else __windtrap_mut_7_l lxor __windtrap_mut_7_r
+  let left a b =
+    let (__windtrap_mut_8_l, __windtrap_mut_8_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 8
+    then __windtrap_mut_8_l lsr __windtrap_mut_8_r
+    else __windtrap_mut_8_l lsl __windtrap_mut_8_r
+  let right a b =
+    let (__windtrap_mut_9_l, __windtrap_mut_9_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 9
+    then __windtrap_mut_9_l lsl __windtrap_mut_9_r
+    else __windtrap_mut_9_l lsr __windtrap_mut_9_r
+  let arith a b =
+    let (__windtrap_mut_10_l, __windtrap_mut_10_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 10
+    then __windtrap_mut_10_l lsl __windtrap_mut_10_r
+    else __windtrap_mut_10_l asr __windtrap_mut_10_r
+  let chain a b c =
+    let (__windtrap_mut_11_l, __windtrap_mut_11_r) =
+      (((a * b), c) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 11
+    then __windtrap_mut_11_l / __windtrap_mut_11_r
+    else __windtrap_mut_11_l * __windtrap_mut_11_r
+  let mixed a b c =
+    let (__windtrap_mut_12_l, __windtrap_mut_12_r) =
+      (((let (__windtrap_mut_13_l, __windtrap_mut_13_r) =
+           ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+         if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 13
+         then __windtrap_mut_13_l / __windtrap_mut_13_r
+         else __windtrap_mut_13_l * __windtrap_mut_13_r), c) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 12
+    then __windtrap_mut_12_l * __windtrap_mut_12_r
+    else __windtrap_mut_12_l / __windtrap_mut_12_r
+  let two a b c =
+    let (__windtrap_mut_14_l, __windtrap_mut_14_r) =
+      (((let (__windtrap_mut_15_l, __windtrap_mut_15_r) =
+           ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+         if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 15
+         then __windtrap_mut_15_l * __windtrap_mut_15_r
+         else __windtrap_mut_15_l / __windtrap_mut_15_r), c) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 14
+    then __windtrap_mut_14_l * __windtrap_mut_14_r
+    else __windtrap_mut_14_l mod __windtrap_mut_14_r
+  let masked a b c =
+    let (__windtrap_mut_16_l, __windtrap_mut_16_r) =
+      (((let (__windtrap_mut_17_l, __windtrap_mut_17_r) =
+           ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+         if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 17
+         then __windtrap_mut_17_l lor __windtrap_mut_17_r
+         else __windtrap_mut_17_l land __windtrap_mut_17_r), c) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 16
+    then __windtrap_mut_16_l land __windtrap_mut_16_r
+    else __windtrap_mut_16_l lxor __windtrap_mut_16_r
+  let shifted a b c =
+    let (__windtrap_mut_18_l, __windtrap_mut_18_r) =
+      (((let (__windtrap_mut_19_l, __windtrap_mut_19_r) =
+           ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+         if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 19
+         then __windtrap_mut_19_l lsl __windtrap_mut_19_r
+         else __windtrap_mut_19_l asr __windtrap_mut_19_r), c) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 18
+    then __windtrap_mut_18_l lsl __windtrap_mut_18_r
+    else __windtrap_mut_18_l lsr __windtrap_mut_18_r
+  let nested x =
+    let (__windtrap_mut_20_l, __windtrap_mut_20_r) =
+      ((x,
+         (let (__windtrap_mut_21_l, __windtrap_mut_21_r) =
+            (((if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 22
+               then 0
+               else 1),
+               (if
+                  Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 23
+                then 3
+                else 2)) : Windtrap_mut_________fixture_mul___ml.ints) in
+          if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 21
+          then __windtrap_mut_21_l lsr __windtrap_mut_21_r
+          else __windtrap_mut_21_l lsl __windtrap_mut_21_r)) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 20
+    then __windtrap_mut_20_l lsr __windtrap_mut_20_r
+    else __windtrap_mut_20_l lsl __windtrap_mut_20_r
+  let bracketed x =
+    let (__windtrap_mut_24_l, __windtrap_mut_24_r) =
+      (((x lsl
+           (if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 25
+            then 0
+            else 1)),
+         (if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 26
+          then 3
+          else 2)) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 24
+    then __windtrap_mut_24_l lsr __windtrap_mut_24_r
+    else __windtrap_mut_24_l lsl __windtrap_mut_24_r
+  let prefix a b =
+    let (__windtrap_mut_27_l, __windtrap_mut_27_r) =
+      ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 27
+    then __windtrap_mut_27_l / __windtrap_mut_27_r
+    else __windtrap_mut_27_l * __windtrap_mut_27_r
+  let partial l =
+    List.map
+      (( *
+         ) (if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 28
+            then 3
+            else 2)) l
+  let qualified a b = Stdlib.( * ) a b
+  let scaled x =
+    let (__windtrap_mut_29_l, __windtrap_mut_29_r) =
+      ((x, 2) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 29
+    then __windtrap_mut_29_l / __windtrap_mut_29_r
+    else __windtrap_mut_29_l * __windtrap_mut_29_r
+  let quadrupled x =
+    let (__windtrap_mut_30_l, __windtrap_mut_30_r) =
+      ((x,
+         (if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 31
+          then 3
+          else 2)) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 30
+    then __windtrap_mut_30_l lsr __windtrap_mut_30_r
+    else __windtrap_mut_30_l lsl __windtrap_mut_30_r
+  let size =
+    let (__windtrap_mut_32_l, __windtrap_mut_32_r) =
+      ((4, 1024) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 32
+    then __windtrap_mut_32_l / __windtrap_mut_32_r
+    else __windtrap_mut_32_l * __windtrap_mut_32_r
+  let dismissed a b = ((a * b)[@mutate off "the product is a size"])
+  let by_zero x =
+    let (__windtrap_mut_34_l, __windtrap_mut_34_r) =
+      ((x, 0) : Windtrap_mut_________fixture_mul___ml.ints) in
+    if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 34
+    then __windtrap_mut_34_l / __windtrap_mut_34_r
+    else __windtrap_mut_34_l * __windtrap_mut_34_r
+  let logged a b = Logs.debug (fun m -> m "%d" (a * b))
+  let failed a b =
+    failwith
+      (string_of_int
+         (let (__windtrap_mut_35_l, __windtrap_mut_35_r) =
+            ((a, b) : Windtrap_mut_________fixture_mul___ml.ints) in
+          if Windtrap_mut_________fixture_mul___ml.___windtrap_armed___ 35
+          then __windtrap_mut_35_l / __windtrap_mut_35_r
+          else __windtrap_mut_35_l * __windtrap_mut_35_r))
+
   $ mut --impl ./fixture_del.ml | ../elide.exe
   mutation sites of "./fixture_del.ml" in Windtrap_mut_________fixture_del___ml:
     0: 8:2-8:18 "del" "log := (x :: (!log))" -> "()"
@@ -1644,6 +1874,29 @@ Code that gives its location keeps the mutants of its two copies:
     14: 21:48-21:49 "int" "1" -> "0"
     15: 21:26-21:27 "not" "c" -> "not c"
 
+  $ sites --impl ./fixture_equivalent_mul.ml
+    0: 16:20-16:21 "int" "0" -> "1"
+    1: 17:18-17:19 "int" "0" -> "1"
+    2: 18:18-18:19 "int" "0" -> "1"
+    3: 19:19-19:20 "int" "0" -> "1"
+    4: 24:17-24:22 "div" "1 * x" -> "1 / x"
+    5: 25:16-25:23 "mod" "x mod 1" -> "x * 1"
+    6: 26:18-26:26 "mod" "x mod (-1)" -> "x * (-1)"
+    7: 27:16-27:21 "div" "x * 0" -> "x / 0"
+    8: 28:18-28:23 "div" "0 * x" -> "0 / x"
+    9: 29:16-29:23 "land" "x lor 0" -> "x land 0"
+    10: 29:22-29:23 "int" "0" -> "1"
+    11: 30:16-30:25 "lor" "x land (-1)" -> "x lor (-1)"
+    12: 30:23-30:25 "int" "(-1)" -> "0"
+    13: 31:17-31:25 "xor" "x lxor 0" -> "x land 0"
+    14: 31:24-31:25 "int" "0" -> "1"
+    15: 32:17-32:25 "xor" "a lxor a" -> "a land a"
+    16: 33:18-33:25 "fdiv" "1. *. x" -> "1. /. x"
+    17: 34:14-34:21 "fdiv" "x *. 0." -> "x /. 0."
+    18: 35:20-35:33 "div" "x * (1 : int)" -> "x / (1 : int)"
+    19: 35:25-35:26 "int" "1" -> "0"
+    20: 38:16-38:21 "div" "a * b" -> "a / b"
+
   $ mut --impl ./fixture_equivalent_log.ml | ../elide.exe
   mutation sites of "./fixture_equivalent_log.ml" in Windtrap_mut_________fixture_equivalent_log___ml, with type ints:
     0: 12:33-12:40 "sub" "x + 1" -> "x - 1"
@@ -2157,6 +2410,17 @@ and keeps its reason:
        then __windtrap_mut_9_l + __windtrap_mut_9_r
        else __windtrap_mut_9_l - __windtrap_mut_9_r)
 
+  $ sites --impl ./fixture_lost_mul.ml
+    0: 9:19-9:20 "int" "2" -> "3"
+    1: 10:14-10:19 "sub" "a + b" -> "a - b"
+    2: 11:15-11:20 "add" "a - b" -> "a + b"
+    3: 12:17-12:23 "fdiv" "a *. b" -> "a /. b"
+    4: 13:15-13:23 "lor" "a land b" -> "a lor b"
+
+  $ sites --impl ./fixture_lost_fmul_bit.ml
+    0: 10:16-10:21 "div" "a * b" -> "a / b"
+    1: 11:14-11:19 "sub" "a + b" -> "a - b"
+
   $ mut --impl ./fixture_lost_ret.ml | ../elide.exe
   type found =
     | Some of int 
@@ -2505,6 +2769,17 @@ and keeps its reason:
     then __windtrap_mut_0_l - __windtrap_mut_0_r
     else __windtrap_mut_0_l + __windtrap_mut_0_r
 
+  $ sites --impl ./fixture_scope.ml
+    0: 16:17-16:22 "div" "a * b" -> "a / b"
+    1: 21:19-21:28 "tail" "[a * b]" -> "[]"
+    2: 47:19-47:28 "sub" "(a * b) + x" -> "(a * b) - x"
+    3: 56:23-56:28 "div" "a * b" -> "a / b"
+    4: 60:27-60:32 "div" "a * b" -> "a / b"
+    5: 75:25-75:34 "sub" "(a * b) + x" -> "(a * b) - x"
+    6: 88:28-88:41 "sub" "((a * b) + y) + z" -> "((a * b) + y) - z"
+    7: 88:28-88:33 "div" "a * b" -> "a / b"
+    8: 97:21-97:30 "sub" "a + (b * c)" -> "a - (b * c)"
+
   $ mut --impl ./fixture_shadow.ml | ../elide.exe
   mutation sites of "./fixture_shadow.ml" in Windtrap_mut_________fixture_shadow___ml, with type 'a operands:
     0: 16:39-16:40 "int" "0" -> "1"
@@ -2641,6 +2916,7 @@ driver, coverage_first.exe:
     2: 10:40-10:41 "int" "0" -> "1"
     3: 10:33-10:34 "int" "1" -> "0"
     4: 10:18-10:27 "le" "(___windtrap_post_visit___ 2 (f x)) < (___windtrap_post_visit___ 3 (g x))" -> "(___windtrap_post_visit___ 2 (f x)) <= (___windtrap_post_visit___ 3 (g x))"
+    5: 14:24-14:25 "int" "2" -> "3"
   coverage points of "./fixture_visits.ml" in Windtrap_cov_________fixture_visits___ml, with ___windtrap_post_visit___:
     0: 262-263
     1: 267-268
@@ -2649,6 +2925,7 @@ driver, coverage_first.exe:
     4: 384-385
     5: 377-378
     6: 359-385
+    7: 519-522
   let either a b =
     ___windtrap_visit___ 0;
     if
@@ -2685,6 +2962,12 @@ driver, coverage_first.exe:
        if Windtrap_mut_________fixture_visits___ml.___windtrap_armed___ 2
        then 1
        else 0)
+  let product f x =
+    ___windtrap_visit___ 7;
+    (___windtrap_post_visit___ 7 (f x)) *
+      (if Windtrap_mut_________fixture_visits___ml.___windtrap_armed___ 5
+       then 3
+       else 2)
 
 A file under an input name that is not a source file's is returned as
 parsed:

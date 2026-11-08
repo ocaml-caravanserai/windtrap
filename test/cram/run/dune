@@ -122,3 +122,24 @@
   inline/test_shapes.exe
   inline/scene_runner.exe
   (glob_files inline/*.ml)))
+
+; division.t runs the mutation loop over a suite whose mutant raises
+; Division_by_zero.
+
+(library
+ (name division_subject)
+ (modules division_subject)
+ (preprocess
+  (pps ppx_windtrap.mutate)))
+
+(executable
+ (name division_main)
+ (modules division_main)
+ (libraries windtrap division_subject))
+
+(cram
+ (package ppx_windtrap)
+ (applies_to division)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps division_main.exe))

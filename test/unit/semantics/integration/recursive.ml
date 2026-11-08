@@ -48,6 +48,13 @@ class cycles =
 (* A function and a [lazy] in the right-hand side run later, and keep their
    sites. *)
 
+(* A [let rec] whose right-hand side is a site of [mul]: the guard reads no
+   variable of the [let rec]. *)
+
+let product () =
+  let rec v = 2 * 3 and g () = v in
+  g ()
+
 let sevens () =
   let rec sevens = lazy (7 :: Lazy.force sevens)
   and count n = if n = 0 then [] else n :: count (n - 1) in

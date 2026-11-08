@@ -192,6 +192,21 @@ let ari_exception_order () =
   | s -> s
   | exception Boom tag -> tag
 
+(* {1 [mul], [fmul] and [bit]: operand order}
+
+   The three families take the guard of [ari], with the operands pinned to
+   [int] or [float]. *)
+
+let mul_order a b = string_of_int (note "l" a * note "r" b)
+
+let mul_exception_order () =
+  match string_of_int (boom "l" * boom "r") with
+  | s -> s
+  | exception Boom tag -> tag
+
+let fmul_order a b = Printf.sprintf "%.2f" (note "l" a *. note "r" b)
+let bit_order a b = string_of_int (note "l" a land note "r" b)
+
 (* {1 [con]: short-circuiting}
 
    The connective encoding turns [a && b] into
@@ -482,6 +497,10 @@ let witnesses : (string * (unit -> string)) list =
     ("ari two families", fun () -> show (ari_mixed 1 2 3));
     ("ari under an application", fun () -> show (ari_in_args 1 2 3 4));
     ("ari operand exceptions", fun () -> show (ari_exception_order ()));
+    ("mul *", fun () -> show (mul_order 6 3));
+    ("mul operand exceptions", fun () -> show (mul_exception_order ()));
+    ("fmul *.", fun () -> show (fmul_order 1.5 2.));
+    ("bit land", fun () -> show (bit_order 12 10));
     ("con && skips b on false", fun () -> show (con_and false true));
     ("con && runs b on true", fun () -> show (con_and true false));
     ("con && both true", fun () -> show (con_and true true));

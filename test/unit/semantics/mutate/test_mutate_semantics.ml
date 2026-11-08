@@ -148,10 +148,12 @@ let catalogue =
           equal (list string)
             [
               "ari";
+              "bit";
               "bool";
               "cmp";
               "con";
               "del";
+              "fmul";
               "int";
               "mul";
               "neg";
@@ -230,7 +232,20 @@ let observable_families () =
       (fixture_catalogue ())
   in
   equal (list string)
-    [ "ari"; "bool"; "cmp"; "con"; "del"; "int"; "neg"; "none"; "tail" ]
+    [
+      "ari";
+      "bit";
+      "bool";
+      "cmp";
+      "con";
+      "del";
+      "fmul";
+      "int";
+      "mul";
+      "neg";
+      "none";
+      "tail";
+    ]
     (families (List.filter changes mutants));
   equal ~msg:"after disarming"
     (list (pair string string))

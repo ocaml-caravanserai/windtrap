@@ -8,3 +8,7 @@ let either a b = a || b
 
 (* The [before] and [after] texts of a site hold the visits inside it. *)
 let lt f g x = if f x < g x then 1 else 0
+
+(* The [open] of the coverage module is opaque, so [*] has no [div] site,
+   and its [2] keeps its [int] site. *)
+let product f x = f x * 2

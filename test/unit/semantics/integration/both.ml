@@ -16,3 +16,4 @@ let clamp lo hi x = if x < lo then lo else if x > hi then hi else x
 let both p q x = p x && q x
 let wrap x = Some (x + 1)
 let push x xs = x :: [ xs ]
+let scale a b = a * b
