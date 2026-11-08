@@ -314,7 +314,9 @@ scratch directory's `_windtrap`, never under `_build/_coverage`, so it
 never enters the number. Dune 3.23.1 and 3.24 report a
 `(package windtrap)` dependency as a cycle under either backend.
 `SKIP_PACKAGE_SESSIONS=true` skips the sessions that have one,
-`nodune.t` and `cram/ppx/expect_typing.t`.
+`nodune.t` and `cram/ppx/expect_typing.t`. The commands of this page and
+CI's coverage job set it. On a dune without this cycle, the two sessions
+run under the backend.
 
 `--min 84` is a ratchet: the measured number (86.2% on 2026-08-19, 93.0%
 on 2026-09-16) less a few points of headroom. Raise it when the margin is comfortable;
