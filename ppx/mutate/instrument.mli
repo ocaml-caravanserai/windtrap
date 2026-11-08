@@ -50,12 +50,13 @@
     naming [-]. A file that rebinds an operator where the rewriter can see it
     thus loses the whole family of that operator: [ari] for [+], [-], [+.] and
     [-.], [cmp] for the six comparisons, and [con] for [&&] and [||]. [neg]
-    names [Stdlib.not] alone and is never lost. A rebinding is seen when a
-    variable pattern or an alias pattern anywhere in the file, or a value
-    description such as an [external], bears the name of the operator. What an
-    [open] brings into scope is not seen. When such an operator does not fit an
-    arm, the file fails to compile under instrumentation, with the error at the
-    expression in the source, and [[@@@mutate exclude_file]] is the way out. *)
+    names [Stdlib.not] and [Stdlib.Bool.t] alone and is never lost. A rebinding
+    is seen when a variable pattern or an alias pattern anywhere in the file, or
+    a value description such as an [external], bears the name of the operator.
+    What an [open] brings into scope is not seen. When such an operator does not
+    fit an arm, the file fails to compile under instrumentation, with the error
+    at the expression in the source, and [[@@@mutate exclude_file]] is the way
+    out. *)
 
 (** {1:sites Sites}
 

@@ -26,11 +26,12 @@
  (preprocess
   (pps ppx_windtrap.mutate)))
 
-; A [None] of another type in scope, under fatal warnings and -principal.
+; A [None] of another type in scope, and a GADT match at a site, under
+; fatal warnings and -principal.
 
 (library
  (name windtrap_mutate_principal)
- (modules levels opened_levels)
+ (modules gadt levels opened_levels)
  (flags
   (:standard -principal -w +a-70 -warn-error +a))
  (preprocess

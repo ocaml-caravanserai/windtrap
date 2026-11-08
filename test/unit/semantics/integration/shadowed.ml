@@ -10,11 +10,12 @@
    a project's mutants share one binary and one ill-typed arm is a broken
    build for the whole project. This file shadows every unqualified name
    a guard could otherwise reach - the value [not], and the TYPE [bool],
-   which the [con] guard constrains its binder with - and then writes one
-   expression per operator, so the guards are actually emitted here.
+   which the [neg] and [con] guards constrain their binder with - and then
+   writes one expression per operator, so the guards are actually emitted
+   here.
 
    It compiles only because the instrumenter writes [Stdlib.not] and
-   [(… : Stdlib.Bool.t)]. Dropping either qualification fails this
+   [Stdlib.Bool.t]. Dropping either qualification fails this
    module and nothing else in the tree. There is no [Stdlib.bool]: the
    predefined types are not re-exported from [Stdlib], which is why the
    constraint names the alias module.
@@ -32,8 +33,9 @@ let flip x = not x
 (* [neg]: the armed arm is [Stdlib.not] on a predefined boolean. *)
 let pick flag x y = if flag then x else y
 
-(* [con]: the armed arm compares the binder against the guard with
-   [Stdlib.( <> )] under a [Stdlib.Bool.t] constraint. *)
+(* [con]: the guard binds the left operand under a [Stdlib.Bool.t]
+   constraint, and compares the binder with the armed flag by
+   [Stdlib.( <> )]. *)
 let both p q = p && q
 
 (* [cmp]: the armed arm is [Stdlib.not] applied to the source's own

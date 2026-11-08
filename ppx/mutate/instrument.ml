@@ -538,11 +538,12 @@ let armed ~loc ~module_name index =
 
 (* [neg], and [cmp] on an equality. The value is bound once, so it is
    evaluated as often as before, and binding the whole comparison leaves its
-   operands the order the compiler gives them. *)
+   operands the order the compiler gives them. The constraint gives the value
+   the expected type that a condition has, as a GADT [match] needs. *)
 let negation ~loc ~module_name ~index value =
   let p = binder index "p" in
   [%expr
-    let [%p pvar ~loc p] = [%e value] in
+    let ([%p pvar ~loc p] : Stdlib.Bool.t) = [%e value] in
     if [%e armed ~loc ~module_name index] then Stdlib.not [%e evar ~loc p]
     else [%e evar ~loc p]]
 
@@ -601,19 +602,20 @@ let binary ~loc ~module_name ~index ~pin e app ~armed_arm left right =
 (* [con] branches once on the armed flag, which keeps the short circuit, the
    tail position of [b] and one copy of each operand:
 
-     a && b  ->  let p = a in
-                 if Stdlib.( <> ) (p : Stdlib.Bool.t) (armed i) then b else p
-     a || b  ->  let p = a in
-                 if Stdlib.( = ) (p : Stdlib.Bool.t) (armed i) then b else p
+     a && b  ->  let (p : Stdlib.Bool.t) = a in
+                 if Stdlib.( <> ) p (armed i) then b else p
+     a || b  ->  let (p : Stdlib.Bool.t) = a in
+                 if Stdlib.( = ) p (armed i) then b else p
 
    Armed, the first reads [if not p then b else p], which is [a || b]. The
-   constraint makes the comparison an integer one, and it names
+   constraint gives [a] the expected type that an operand of [&&] has, as a
+   GADT [match] needs, and makes the comparison an integer one. It names
    [Stdlib.Bool.t] because a file may declare its own [bool]. No node of the
    guard is the original expression, so the whole guard takes its
    attributes. *)
 let branch ~loc ~module_name ~index e app left right =
   let p = binder index "p" in
-  let value = [%expr ([%e evar ~loc p] : Stdlib.Bool.t)] in
+  let value = evar ~loc p in
   let armed = armed ~loc ~module_name index in
   let test =
     if String.equal app.name "&&" then
@@ -622,7 +624,7 @@ let branch ~loc ~module_name ~index e app left right =
   in
   {
     ([%expr
-       let [%p pvar ~loc p] = [%e left] in
+       let ([%p pvar ~loc p] : Stdlib.Bool.t) = [%e left] in
        if [%e test] then [%e right] else [%e evar ~loc p]])
     with
     pexp_attributes = e.pexp_attributes;

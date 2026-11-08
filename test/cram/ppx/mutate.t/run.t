@@ -193,9 +193,9 @@ before and after, and the reason of a dismissed site.
     (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 6
      then ((())[@ocaml.warning "-41-42"])
      else
-       ((let __windtrap_mut_7_p = a in
+       ((let __windtrap_mut_7_p : Stdlib.Bool.t = a in
          if
-           Stdlib.(=) (__windtrap_mut_7_p : Stdlib.Bool.t)
+           Stdlib.(=) __windtrap_mut_7_p
              (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 7)
          then b
          else __windtrap_mut_7_p);
@@ -262,7 +262,7 @@ branch in tail position:
   let count = ref 0
   let bump flag =
     if
-      let __windtrap_mut_1_p = flag in
+      let __windtrap_mut_1_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 1
        then Stdlib.not __windtrap_mut_1_p
        else __windtrap_mut_1_p)
@@ -272,7 +272,7 @@ branch in tail position:
        else incr count)
   let both flag =
     if
-      let __windtrap_mut_5_p = flag in
+      let __windtrap_mut_5_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 5
        then Stdlib.not __windtrap_mut_5_p
        else __windtrap_mut_5_p)
@@ -376,7 +376,7 @@ branch in tail position:
             else __windtrap_mut_21_l - __windtrap_mut_21_r))
   let either flag =
     if
-      let __windtrap_mut_24_p = flag in
+      let __windtrap_mut_24_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 24
        then Stdlib.not __windtrap_mut_24_p
        else __windtrap_mut_24_p)
@@ -384,28 +384,28 @@ branch in tail position:
     else print_string "b"
   let nothing flag =
     if
-      let __windtrap_mut_25_p = flag in
+      let __windtrap_mut_25_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 25
        then Stdlib.not __windtrap_mut_25_p
        else __windtrap_mut_25_p)
     then ()
   let checked flag =
     if
-      let __windtrap_mut_26_p = flag in
+      let __windtrap_mut_26_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 26
        then Stdlib.not __windtrap_mut_26_p
        else __windtrap_mut_26_p)
     then assert false
   let finish flag oc =
     if
-      let __windtrap_mut_27_p = flag in
+      let __windtrap_mut_27_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 27
        then Stdlib.not __windtrap_mut_27_p
        else __windtrap_mut_27_p)
     then close_out oc
   let finish_all more next =
     while
-      let __windtrap_mut_28_p = more () in
+      let __windtrap_mut_28_p : Stdlib.Bool.t = more () in
       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 28
       then Stdlib.not __windtrap_mut_28_p
       else __windtrap_mut_28_p do close_in (next ()) done
@@ -421,14 +421,14 @@ branch in tail position:
   let () = for _ = 1 to 2 do print_string "loaded" done
   let quiet flag =
     if
-      let __windtrap_mut_31_p = flag in
+      let __windtrap_mut_31_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 31
        then Stdlib.not __windtrap_mut_31_p
        else __windtrap_mut_31_p)
     then ((print_string "x")[@mutate off "the output is not checked"])
   let quiet_last flag =
     if
-      let __windtrap_mut_34_p = flag in
+      let __windtrap_mut_34_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 34
        then Stdlib.not __windtrap_mut_34_p
        else __windtrap_mut_34_p)
@@ -440,13 +440,13 @@ branch in tail position:
        [@mutate off "the output is not checked"]))
   let idle more =
     while
-      let __windtrap_mut_35_p = more () in
+      let __windtrap_mut_35_p : Stdlib.Bool.t = more () in
       if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 35
       then Stdlib.not __windtrap_mut_35_p
       else __windtrap_mut_35_p do () done
   let bump_only flag =
     if
-      let __windtrap_mut_37_p = flag in
+      let __windtrap_mut_37_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 37
        then Stdlib.not __windtrap_mut_37_p
        else __windtrap_mut_37_p)
@@ -502,7 +502,7 @@ branch in tail position:
     34: 31:20-31:22 "int" "67" -> "68"
   let pick b =
     if
-      let __windtrap_mut_2_p = b in
+      let __windtrap_mut_2_p : Stdlib.Bool.t = b in
       (if Windtrap_mut_________fixture_literals___ml.___windtrap_armed___ 2
        then Stdlib.not __windtrap_mut_2_p
        else __windtrap_mut_2_p)
@@ -538,14 +538,14 @@ branch in tail position:
     ((if Windtrap_mut_________fixture_literals___ml.___windtrap_armed___ 9
       then false
       else true),
-      (let __windtrap_mut_10_p = x in
+      (let __windtrap_mut_10_p : Stdlib.Bool.t = x in
        if
-         Stdlib.(<>) (__windtrap_mut_10_p : Stdlib.Bool.t)
+         Stdlib.(<>) __windtrap_mut_10_p
            (Windtrap_mut_________fixture_literals___ml.___windtrap_armed___ 10)
        then false
        else __windtrap_mut_10_p),
       (if
-         let __windtrap_mut_12_p = true in
+         let __windtrap_mut_12_p : Stdlib.Bool.t = true in
          (if Windtrap_mut_________fixture_literals___ml.___windtrap_armed___ 12
           then Stdlib.not __windtrap_mut_12_p
           else __windtrap_mut_12_p)
@@ -758,7 +758,7 @@ branch in tail position:
          else Lazy.force stream) in
     let rec count n =
       if
-        let __windtrap_mut_15_p =
+        let __windtrap_mut_15_p : Stdlib.Bool.t =
           n =
             (if Windtrap_mut_________fixture_ret___ml.___windtrap_armed___ 16
              then 1
@@ -911,20 +911,20 @@ branch in tail position:
       then 1
       else 0
   let as_operand a b =
-    let __windtrap_mut_3_p =
+    let __windtrap_mut_3_p : Stdlib.Bool.t =
       let (__windtrap_mut_4_l, __windtrap_mut_4_r) =
         ((a, b) : _ Windtrap_mut_________fixture_assert___ml.operands) in
       if Windtrap_mut_________fixture_assert___ml.___windtrap_armed___ 4
       then Stdlib.not (__windtrap_mut_4_r < __windtrap_mut_4_l)
       else __windtrap_mut_4_l < __windtrap_mut_4_r in
     if
-      Stdlib.(<>) (__windtrap_mut_3_p : Stdlib.Bool.t)
+      Stdlib.(<>) __windtrap_mut_3_p
         (Windtrap_mut_________fixture_assert___ml.___windtrap_armed___ 3)
     then assert false
     else __windtrap_mut_3_p
   let sequenced a b =
     if
-      let __windtrap_mut_7_p = assert (a < b); a > b in
+      let __windtrap_mut_7_p : Stdlib.Bool.t = assert (a < b); a > b in
       (if Windtrap_mut_________fixture_assert___ml.___windtrap_armed___ 7
        then Stdlib.not __windtrap_mut_7_p
        else __windtrap_mut_7_p)
@@ -973,9 +973,9 @@ branch in tail position:
   let conn a b c =
     if
       a &&
-        (let __windtrap_mut_5_p = b in
+        (let __windtrap_mut_5_p : Stdlib.Bool.t = b in
          (if
-            Stdlib.(<>) (__windtrap_mut_5_p : Stdlib.Bool.t)
+            Stdlib.(<>) __windtrap_mut_5_p
               (Windtrap_mut_________fixture_chain___ml.___windtrap_armed___ 5)
           then c
           else __windtrap_mut_5_p))
@@ -1002,9 +1002,9 @@ branch in tail position:
   let conn_arg f a b c =
     f
       (a &&
-         (let __windtrap_mut_8_p = b in
+         (let __windtrap_mut_8_p : Stdlib.Bool.t = b in
           if
-            Stdlib.(<>) (__windtrap_mut_8_p : Stdlib.Bool.t)
+            Stdlib.(<>) __windtrap_mut_8_p
               (Windtrap_mut_________fixture_chain___ml.___windtrap_armed___ 8)
           then c
           else __windtrap_mut_8_p))
@@ -1135,7 +1135,7 @@ branch in tail position:
         else 0
   let same a b =
     if
-      let __windtrap_mut_12_p = a = b in
+      let __windtrap_mut_12_p : Stdlib.Bool.t = a = b in
       (if Windtrap_mut_________fixture_cmp___ml.___windtrap_armed___ 12
        then Stdlib.not __windtrap_mut_12_p
        else __windtrap_mut_12_p)
@@ -1149,7 +1149,7 @@ branch in tail position:
       else 0
   let differs a b =
     if
-      let __windtrap_mut_15_p = a <> b in
+      let __windtrap_mut_15_p : Stdlib.Bool.t = a <> b in
       (if Windtrap_mut_________fixture_cmp___ml.___windtrap_armed___ 15
        then Stdlib.not __windtrap_mut_15_p
        else __windtrap_mut_15_p)
@@ -1162,14 +1162,14 @@ branch in tail position:
       then 1
       else 0
   let window lo hi x =
-    let __windtrap_mut_16_p =
+    let __windtrap_mut_16_p : Stdlib.Bool.t =
       let (__windtrap_mut_17_l, __windtrap_mut_17_r) =
         ((x, lo) : _ Windtrap_mut_________fixture_cmp___ml.operands) in
       if Windtrap_mut_________fixture_cmp___ml.___windtrap_armed___ 17
       then Stdlib.not (__windtrap_mut_17_r >= __windtrap_mut_17_l)
       else __windtrap_mut_17_l >= __windtrap_mut_17_r in
     if
-      Stdlib.(<>) (__windtrap_mut_16_p : Stdlib.Bool.t)
+      Stdlib.(<>) __windtrap_mut_16_p
         (Windtrap_mut_________fixture_cmp___ml.___windtrap_armed___ 16)
     then
       let (__windtrap_mut_18_l, __windtrap_mut_18_r) =
@@ -1191,24 +1191,24 @@ branch in tail position:
     5: 11:34-11:39 "bool" "false" -> "true"
     6: 11:55-11:75 "and" "(p x) || (search p rest)" -> "(p x) && (search p rest)"
   let both a b =
-    let __windtrap_mut_0_p = a in
+    let __windtrap_mut_0_p : Stdlib.Bool.t = a in
     if
-      Stdlib.(<>) (__windtrap_mut_0_p : Stdlib.Bool.t)
+      Stdlib.(<>) __windtrap_mut_0_p
         (Windtrap_mut_________fixture_con___ml.___windtrap_armed___ 0)
     then b
     else __windtrap_mut_0_p
   let either a b =
-    let __windtrap_mut_1_p = a in
+    let __windtrap_mut_1_p : Stdlib.Bool.t = a in
     if
-      Stdlib.(=) (__windtrap_mut_1_p : Stdlib.Bool.t)
+      Stdlib.(=) __windtrap_mut_1_p
         (Windtrap_mut_________fixture_con___ml.___windtrap_armed___ 1)
     then b
     else __windtrap_mut_1_p
   let gate ready x =
     if
-      let __windtrap_mut_4_p = ready in
+      let __windtrap_mut_4_p : Stdlib.Bool.t = ready in
       (if
-         Stdlib.(<>) (__windtrap_mut_4_p : Stdlib.Bool.t)
+         Stdlib.(<>) __windtrap_mut_4_p
            (Windtrap_mut_________fixture_con___ml.___windtrap_armed___ 4)
        then x
        else __windtrap_mut_4_p)
@@ -1227,9 +1227,9 @@ branch in tail position:
         then true
         else false
     | x::rest ->
-        let __windtrap_mut_6_p = p x in
+        let __windtrap_mut_6_p : Stdlib.Bool.t = p x in
         if
-          Stdlib.(=) (__windtrap_mut_6_p : Stdlib.Bool.t)
+          Stdlib.(=) __windtrap_mut_6_p
             (Windtrap_mut_________fixture_con___ml.___windtrap_armed___ 6)
         then search p rest
         else __windtrap_mut_6_p
@@ -1259,20 +1259,20 @@ branch in tail position:
     20: 34:33-34:48 "not" "Float.(<) a b" -> "not (Float.(<) a b)"
     21: 40:16-40:21 "sub" "a + b" -> "a - b"
   let either a b c =
-    let __windtrap_mut_0_p =
+    let __windtrap_mut_0_p : Stdlib.Bool.t =
       let (__windtrap_mut_1_l, __windtrap_mut_1_r) =
         ((a, b) : _ Windtrap_mut_________fixture_contexts___ml.operands) in
       if Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 1
       then Stdlib.not (__windtrap_mut_1_r < __windtrap_mut_1_l)
       else __windtrap_mut_1_l < __windtrap_mut_1_r in
     if
-      Stdlib.(=) (__windtrap_mut_0_p : Stdlib.Bool.t)
+      Stdlib.(=) __windtrap_mut_0_p
         (Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 0)
     then c
     else __windtrap_mut_0_p
   let through_let a b =
     if
-      let __windtrap_mut_4_p = let x = a in x < b in
+      let __windtrap_mut_4_p : Stdlib.Bool.t = let x = a in x < b in
       (if Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 4
        then Stdlib.not __windtrap_mut_4_p
        else __windtrap_mut_4_p)
@@ -1286,7 +1286,7 @@ branch in tail position:
       else 0
   let through_constraint a b =
     if
-      let __windtrap_mut_7_p = (a < b : bool) in
+      let __windtrap_mut_7_p : Stdlib.Bool.t = (a < b : bool) in
       (if Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 7
        then Stdlib.not __windtrap_mut_7_p
        else __windtrap_mut_7_p)
@@ -1300,7 +1300,7 @@ branch in tail position:
       else 0
   let through_not a b =
     if
-      let __windtrap_mut_10_p = not (a < b) in
+      let __windtrap_mut_10_p : Stdlib.Bool.t = not (a < b) in
       (if Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 10
        then Stdlib.not __windtrap_mut_10_p
        else __windtrap_mut_10_p)
@@ -1319,9 +1319,9 @@ branch in tail position:
        if Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 14
        then Stdlib.not (__windtrap_mut_14_r < __windtrap_mut_14_l)
        else __windtrap_mut_14_l < __windtrap_mut_14_r) &&
-        (let __windtrap_mut_13_p = c in
+        (let __windtrap_mut_13_p : Stdlib.Bool.t = c in
          (if
-            Stdlib.(=) (__windtrap_mut_13_p : Stdlib.Bool.t)
+            Stdlib.(=) __windtrap_mut_13_p
               (Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___
                  13)
           then d
@@ -1338,7 +1338,7 @@ branch in tail position:
   let old_or a b = a or b
   let old_condition a b =
     if
-      let __windtrap_mut_17_p = a & b in
+      let __windtrap_mut_17_p : Stdlib.Bool.t = a & b in
       (if Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 17
        then Stdlib.not __windtrap_mut_17_p
        else __windtrap_mut_17_p)
@@ -1353,7 +1353,7 @@ branch in tail position:
   let qualified a b = Stdlib.(+) a b
   let qualified_condition a b =
     if
-      let __windtrap_mut_20_p = Float.(<) a b in
+      let __windtrap_mut_20_p : Stdlib.Bool.t = Float.(<) a b in
       (if Windtrap_mut_________fixture_contexts___ml.___windtrap_armed___ 20
        then Stdlib.not __windtrap_mut_20_p
        else __windtrap_mut_20_p)
@@ -1418,17 +1418,17 @@ it keep their mutants:
   let either a = a || a
   let field r = r.ok && r.ok
   let calls f x =
-    let __windtrap_mut_0_p = f x in
+    let __windtrap_mut_0_p : Stdlib.Bool.t = f x in
     if
-      Stdlib.(<>) (__windtrap_mut_0_p : Stdlib.Bool.t)
+      Stdlib.(<>) __windtrap_mut_0_p
         (Windtrap_mut_________fixture_equivalent_con___ml.___windtrap_armed___
            0)
     then f x
     else __windtrap_mut_0_p
   let other a b =
-    let __windtrap_mut_1_p = a in
+    let __windtrap_mut_1_p : Stdlib.Bool.t = a in
     if
-      Stdlib.(<>) (__windtrap_mut_1_p : Stdlib.Bool.t)
+      Stdlib.(<>) __windtrap_mut_1_p
         (Windtrap_mut_________fixture_equivalent_con___ml.___windtrap_armed___
            1)
     then b
@@ -1487,9 +1487,9 @@ it keep their mutants:
       else 0
   let both a b x =
     if
-      let __windtrap_mut_5_p = a in
+      let __windtrap_mut_5_p : Stdlib.Bool.t = a in
       (if
-         Stdlib.(<>) (__windtrap_mut_5_p : Stdlib.Bool.t)
+         Stdlib.(<>) __windtrap_mut_5_p
            (Windtrap_mut_________fixture_equivalent_neg___ml.___windtrap_armed___
               5)
        then b
@@ -1498,7 +1498,7 @@ it keep their mutants:
     else x
   let other c =
     if
-      let __windtrap_mut_8_p = c in
+      let __windtrap_mut_8_p : Stdlib.Bool.t = c in
       (if
          Windtrap_mut_________fixture_equivalent_neg___ml.___windtrap_armed___
            8
@@ -1517,7 +1517,7 @@ it keep their mutants:
       else 2
   let line c =
     if
-      let __windtrap_mut_9_p = c in
+      let __windtrap_mut_9_p : Stdlib.Bool.t = c in
       (if
          Windtrap_mut_________fixture_equivalent_neg___ml.___windtrap_armed___
            9
@@ -1527,7 +1527,7 @@ it keep their mutants:
     else __LINE__
   let blanks c =
     if
-      let __windtrap_mut_10_p = c in
+      let __windtrap_mut_10_p : Stdlib.Bool.t = c in
       (if
          Windtrap_mut_________fixture_equivalent_neg___ml.___windtrap_armed___
            10
@@ -1537,7 +1537,7 @@ it keep their mutants:
     else "a b"
   let partial c x =
     if
-      let __windtrap_mut_11_p = c in
+      let __windtrap_mut_11_p : Stdlib.Bool.t = c in
       (if
          Windtrap_mut_________fixture_equivalent_neg___ml.___windtrap_armed___
            11
@@ -1935,7 +1935,7 @@ and keeps its reason:
       else 0
   let plain x =
     if
-      let __windtrap_mut_4_p = x in
+      let __windtrap_mut_4_p : Stdlib.Bool.t = x in
       (if
          Windtrap_mut_________fixture_lazy_condition___ml.___windtrap_armed___
            4
@@ -1985,7 +1985,7 @@ and keeps its reason:
   let not b = b
   let ordered a b =
     if
-      let __windtrap_mut_3_p = a < b in
+      let __windtrap_mut_3_p : Stdlib.Bool.t = a < b in
       (if Windtrap_mut_________fixture_lost_cmp___ml.___windtrap_armed___ 3
        then Stdlib.not __windtrap_mut_3_p
        else __windtrap_mut_3_p)
@@ -2001,9 +2001,9 @@ and keeps its reason:
        else __windtrap_mut_1_l - __windtrap_mut_1_r)
   let both a b =
     if
-      let __windtrap_mut_6_p = a in
+      let __windtrap_mut_6_p : Stdlib.Bool.t = a in
       (if
-         Stdlib.(<>) (__windtrap_mut_6_p : Stdlib.Bool.t)
+         Stdlib.(<>) __windtrap_mut_6_p
            (Windtrap_mut_________fixture_lost_cmp___ml.___windtrap_armed___ 6)
        then b
        else __windtrap_mut_6_p)
@@ -2033,7 +2033,7 @@ and keeps its reason:
   external (&&) : bool -> bool -> bool = "%sequand"
   let both a b =
     if
-      let __windtrap_mut_2_p = a && b in
+      let __windtrap_mut_2_p : Stdlib.Bool.t = a && b in
       (if Windtrap_mut_________fixture_lost_con___ml.___windtrap_armed___ 2
        then Stdlib.not __windtrap_mut_2_p
        else __windtrap_mut_2_p)
@@ -2047,7 +2047,7 @@ and keeps its reason:
       else 0
   let either a b =
     if
-      let __windtrap_mut_5_p = a || b in
+      let __windtrap_mut_5_p : Stdlib.Bool.t = a || b in
       (if Windtrap_mut_________fixture_lost_con___ml.___windtrap_armed___ 5
        then Stdlib.not __windtrap_mut_5_p
        else __windtrap_mut_5_p)
@@ -2061,7 +2061,7 @@ and keeps its reason:
       else 0
   let compared a b c =
     if
-      let __windtrap_mut_8_p = (a < b) && c in
+      let __windtrap_mut_8_p : Stdlib.Bool.t = (a < b) && c in
       (if Windtrap_mut_________fixture_lost_con___ml.___windtrap_armed___ 8
        then Stdlib.not __windtrap_mut_8_p
        else __windtrap_mut_8_p)
@@ -2152,7 +2152,7 @@ and keeps its reason:
     10: 20:23-20:24 "not" "a" -> "not a"
   let pick flag x y =
     if
-      let __windtrap_mut_0_p = flag in
+      let __windtrap_mut_0_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 0
        then Stdlib.not __windtrap_mut_0_p
        else __windtrap_mut_0_p)
@@ -2160,7 +2160,7 @@ and keeps its reason:
     else y
   let announce flag =
     if
-      let __windtrap_mut_2_p = flag in
+      let __windtrap_mut_2_p : Stdlib.Bool.t = flag in
       (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 2
        then Stdlib.not __windtrap_mut_2_p
        else __windtrap_mut_2_p)
@@ -2170,7 +2170,7 @@ and keeps its reason:
        else print_string "on")
   let drain ready step =
     while
-      let __windtrap_mut_4_p = ready () in
+      let __windtrap_mut_4_p : Stdlib.Bool.t = ready () in
       if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 4
       then Stdlib.not __windtrap_mut_4_p
       else __windtrap_mut_4_p do
@@ -2181,16 +2181,16 @@ and keeps its reason:
   let classify p x =
     match x with
     | y when
-        let __windtrap_mut_5_p = p y in
+        let __windtrap_mut_5_p : Stdlib.Bool.t = p y in
         if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 5
         then Stdlib.not __windtrap_mut_5_p
         else __windtrap_mut_5_p -> "yes"
     | _ -> "no"
   let nested a b =
     if
-      let __windtrap_mut_8_p =
+      let __windtrap_mut_8_p : Stdlib.Bool.t =
         if
-          let __windtrap_mut_10_p = a in
+          let __windtrap_mut_10_p : Stdlib.Bool.t = a in
           (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 10
            then Stdlib.not __windtrap_mut_10_p
            else __windtrap_mut_10_p)
@@ -2227,25 +2227,25 @@ and keeps its reason:
     11: 13:18-13:19 "not" "a" -> "not a"
   let chain a b c =
     a &&
-      (let __windtrap_mut_0_p = b in
+      (let __windtrap_mut_0_p : Stdlib.Bool.t = b in
        if
-         Stdlib.(<>) (__windtrap_mut_0_p : Stdlib.Bool.t)
+         Stdlib.(<>) __windtrap_mut_0_p
            (Windtrap_mut_________fixture_nesting___ml.___windtrap_armed___ 0)
        then c
        else __windtrap_mut_0_p)
   let mixed a b c =
-    (let __windtrap_mut_1_p = a in
+    (let __windtrap_mut_1_p : Stdlib.Bool.t = a in
      if
-       Stdlib.(<>) (__windtrap_mut_1_p : Stdlib.Bool.t)
+       Stdlib.(<>) __windtrap_mut_1_p
          (Windtrap_mut_________fixture_nesting___ml.___windtrap_armed___ 1)
      then b
      else __windtrap_mut_1_p) || c
   let deep a b c d =
     a ||
       (b &&
-         (let __windtrap_mut_2_p = c in
+         (let __windtrap_mut_2_p : Stdlib.Bool.t = c in
           if
-            Stdlib.(=) (__windtrap_mut_2_p : Stdlib.Bool.t)
+            Stdlib.(=) __windtrap_mut_2_p
               (Windtrap_mut_________fixture_nesting___ml.___windtrap_armed___ 2)
           then d
           else __windtrap_mut_2_p))
@@ -2266,9 +2266,9 @@ and keeps its reason:
       else 0
   let by_con a b =
     if
-      let __windtrap_mut_8_p = a in
+      let __windtrap_mut_8_p : Stdlib.Bool.t = a in
       (if
-         Stdlib.(<>) (__windtrap_mut_8_p : Stdlib.Bool.t)
+         Stdlib.(<>) __windtrap_mut_8_p
            (Windtrap_mut_________fixture_nesting___ml.___windtrap_armed___ 8)
        then b
        else __windtrap_mut_8_p)
@@ -2282,7 +2282,7 @@ and keeps its reason:
       else 0
   let by_neg a =
     if
-      let __windtrap_mut_11_p = a in
+      let __windtrap_mut_11_p : Stdlib.Bool.t = a in
       (if Windtrap_mut_________fixture_nesting___ml.___windtrap_armed___ 11
        then Stdlib.not __windtrap_mut_11_p
        else __windtrap_mut_11_p)
@@ -2458,9 +2458,9 @@ and keeps its reason:
       then 1
       else 0
   let both a b =
-    let __windtrap_mut_3_p = a in
+    let __windtrap_mut_3_p : Stdlib.Bool.t = a in
     if
-      Stdlib.(<>) (__windtrap_mut_3_p : Stdlib.Bool.t)
+      Stdlib.(<>) __windtrap_mut_3_p
         (Windtrap_mut_________fixture_shadow___ml.___windtrap_armed___ 3)
     then b
     else __windtrap_mut_3_p
@@ -2477,7 +2477,7 @@ and keeps its reason:
     6: 11:22-11:29 "le" "a < b" -> "a <= b"
   let spaced s =
     if
-      let __windtrap_mut_2_p = s = "a   b" in
+      let __windtrap_mut_2_p : Stdlib.Bool.t = s = "a   b" in
       (if Windtrap_mut_________fixture_texts___ml.___windtrap_armed___ 2
        then Stdlib.not __windtrap_mut_2_p
        else __windtrap_mut_2_p)
@@ -2566,14 +2566,14 @@ driver, coverage_first.exe:
   let either a b =
     ___windtrap_visit___ 0;
     if
-      (let __windtrap_mut_1_p = a in
+      (let __windtrap_mut_1_p : Stdlib.Bool.t = a in
        if Windtrap_mut_________fixture_visits___ml.___windtrap_armed___ 1
        then Stdlib.not __windtrap_mut_1_p
        else __windtrap_mut_1_p)
     then (___windtrap_visit___ 0; true)
     else
       if
-        (let __windtrap_mut_0_p = b in
+        (let __windtrap_mut_0_p : Stdlib.Bool.t = b in
          if Windtrap_mut_________fixture_visits___ml.___windtrap_armed___ 0
          then Stdlib.not __windtrap_mut_0_p
          else __windtrap_mut_0_p)
