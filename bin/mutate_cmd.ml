@@ -790,6 +790,40 @@ let json ~crash_kills files merged (m : Sections.mutation) =
     (String.concat "," (List.map mutant records))
     (String.concat "," (List.map change (unstable files)))
 
+(* A survivor, an unknown mutant that does not count as killed and a
+   mutant that a child did not evaluate give a result, in the order of
+   [merged]. The mutants of a refused suite are not in [m]. *)
+let sarif merged (m : Sections.mutation) =
+  let add (mutant : Sections.mutant) verdict acc =
+    Ids.add mutant.id verdict acc
+  in
+  let verdicts =
+    List.fold_left
+      (fun acc (s : Sections.survivor) ->
+        add s.mutant (Mutants_sarif.Survived s) acc)
+      Ids.empty m.survivors
+  in
+  let verdicts =
+    List.fold_left
+      (fun acc (u : Sections.unknown) ->
+        if u.counted_as_killed then acc
+        else add u.mutant (Mutants_sarif.Unknown u) acc)
+      verdicts m.unknown
+  in
+  let verdicts =
+    List.fold_left
+      (fun acc (n : Sections.not_evaluated) ->
+        add n.mutant (Mutants_sarif.Not_evaluated n) acc)
+      verdicts m.not_evaluated
+  in
+  let result (r : Verdicts.record) =
+    Option.map
+      (fun verdict -> { Mutants_sarif.rewrite = r.id.rewrite; verdict })
+      (Ids.find_opt (Mutate.id_to_string r.id) verdicts)
+  in
+  Mutants_sarif.document ?version:Windtrap.Private.version
+    (List.filter_map result (Verdicts.records merged))
+
 (* Running *)
 
 let usage = "usage: windtrap mutants [OPTIONS] [PATH...]"
@@ -835,6 +869,10 @@ OPTIONS:
   --json
       Machine-readable report on standard output.
 
+  --sarif
+      SARIF 2.1.0 document of the survivors, the unknown and the not
+      evaluated mutants on standard output, for code scanning.
+
   --lines=FILE:A-B,...
       Report only the mutants on these lines of these files.
 
@@ -852,10 +890,12 @@ ENVIRONMENT (no flag):
   NO_COLOR
       Any value: never style output (--color auto).|}
 
+type format = [ `Report | `Json | `Sarif ]
+
 type options = {
   gates : Sections.gates;
   crash_kills : bool;
-  json : bool;
+  format : format;
   color : Os.color_mode option; (* [--color], which hides [WINDTRAP_COLOR] *)
   lines : Lines.t option; (* [--lines] and [--diff], added up *)
   paths : string list;
@@ -917,7 +957,14 @@ let options args =
                  "invalid value '%s' for --max-survivors: expected a \
                   non-negative integer"
                  value))
-    | "--json" :: args -> parse { o with json = true } args
+    | (("--json" | "--sarif") as flag) :: args -> (
+        let format = if flag = "--json" then `Json else `Sarif in
+        match o.format with
+        | `Report -> parse { o with format } args
+        | given when given = format -> parse o args
+        | `Json | `Sarif ->
+            let other = if flag = "--json" then "--sarif" else "--json" in
+            usage_error (Cli.error_message (Incompatible_flags (other, flag))))
     | "--crash-kills" :: args -> parse { o with crash_kills = true } args
     | "--lines" :: value :: args -> (
         match Lines.of_spec value with
@@ -957,7 +1004,7 @@ let options args =
     {
       gates = Sections.no_gates;
       crash_kills = false;
-      json = false;
+      format = `Report;
       color = None;
       lines = None;
       paths = [];
@@ -968,7 +1015,7 @@ let options args =
    terms and never read as [auto] out of a typo. A document is never styled,
    so it reads no [WINDTRAP_COLOR]. *)
 let ansi o =
-  if o.json then Ok false
+  if o.format <> `Report then Ok false
   else
     let color =
       match o.color with Some color -> Ok color | None -> Cli.color_mode ()
@@ -986,7 +1033,7 @@ let gate o (m : Sections.mutation) =
   if not (Sections.gated o.gates) then
     if m.survivors = [] && m.refused = [] then 0 else 1
   else (
-    if o.json then
+    if o.format <> `Report then
       Os.say
         (Sections.render ~ansi:false (Sections.mutation_line ~gates:o.gates m));
     if Sections.mutation_gates_met o.gates m then 0 else 1)
@@ -1023,11 +1070,13 @@ let run args =
     in
     let* () =
       write
-        (if o.json then json ~crash_kills:o.crash_kills files merged mutation
-         else
-           Pp.str "%a"
-             (fun out -> Sections.print ~out ~ansi)
-             (Sections.mutation_report ~invocation ~gates:o.gates mutation))
+        (match o.format with
+        | `Json -> json ~crash_kills:o.crash_kills files merged mutation
+        | `Sarif -> sarif merged mutation
+        | `Report ->
+            Pp.str "%a"
+              (fun out -> Sections.print ~out ~ansi)
+              (Sections.mutation_report ~invocation ~gates:o.gates mutation))
     in
     Ok (gate o mutation)
   in

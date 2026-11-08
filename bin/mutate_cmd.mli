@@ -16,8 +16,8 @@
     holds. This interface states the {{!section-files}files} that are merged,
     what the {{!section-merge}merge} decides (the verdicts, the reaching tests,
     the order of the survivors and the launcher of the [reproduce:] command),
-    the {{!section-gate}gates}, and the {{!section-format}machine format}, whose
-    keys and values are frozen. *)
+    the {{!section-gate}gates}, the {{!section-format}machine format}, whose
+    keys and values are frozen, and the {{!section-sarif}SARIF document}. *)
 
 (** {1:files Files}
 
@@ -291,6 +291,24 @@
 
     {!Windtrap.Private.Json.string} writes each string. *)
 
+(** {1:sarif SARIF document}
+
+    [--sarif] makes standard output one SARIF 2.1.0 document, so the report is
+    not printed. It acts as [--json] does for the outcome line, the gates,
+    [--lines], [--diff] and the write. Each mutant that follows gives one
+    result, in the order of [Windtrap_runtime.Mutate.compare_id]:
+    - A survivor, at the level [warning], with the sentence of its reaching
+      tests.
+    - An unknown mutant, at the level [note], with the reason of the report. A
+      mutant that [--crash-kills] counts as killed gives no result.
+    - A mutant that was not evaluated, at the level [note].
+
+    A killed mutant, a mutant killed elsewhere, a mutant that no test reached
+    and a mutant evaluated outside tests give no result. The mutants that only
+    refused files hold give no result either. The driver gives
+    {!Windtrap.Private.version} when it is known. [bin/mutants_sarif.mli] gives
+    the fields of the document. *)
+
 (** {1:running Running} *)
 
 val run : string list -> int
@@ -301,10 +319,12 @@ val run : string list -> int
     The command line is [windtrap mutants [OPTIONS] [PATH...]]. [-h], [--help]
     and [-help] print the help page on standard output. [--min PCT],
     [--min-reach PCT], [--min-total PCT] and [--max-survivors N] are those of
-    the {{!section-gate}gates}, and [--json] is that of the
-    {{!section-format}machine format}. A [PCT] that is not a number from [0] to
-    [100] is a usage error, and so is an [N] that is not a non-negative integer
-    of decimal digits. A repeated gate keeps its last value. [--lines SPEC] and
+    the {{!section-gate}gates}, [--json] is that of the
+    {{!section-format}machine format}, and [--sarif] is that of the
+    {{!section-sarif}SARIF document}. A repeated [--json] or [--sarif] is the
+    same as one. A [PCT] that is not a number from [0] to [100] is a usage
+    error, and so is an [N] that is not a non-negative integer of decimal
+    digits. A repeated gate keeps its last value. [--lines SPEC] and
     [--diff FILE] repeat and add up into a {!Windtrap.Private.Lines.t}, read by
     {!Windtrap.Private.Lines.of_spec} and {!Windtrap.Private.Lines.of_diff}.
     Each file's records off those lines are dropped before the
@@ -324,8 +344,8 @@ val run : string list -> int
     - It finds the {{!section-files}files}, judges them and loads them.
     - It judges the skips and says the notes of the mutants killed elsewhere
       ({{!section-merge}the merge}) on standard error.
-    - It prints the report or the document of the {{!section-merge}merge} on
-      standard output.
+    - It prints the report, the document or the SARIF document of the
+      {{!section-merge}merge} on standard output.
     - It runs the gate.
 
     A step before the gate that fails gives its code, and the steps after it do
@@ -359,8 +379,8 @@ val run : string list -> int
       unless the parent ignores that signal.
     - [2] for a usage error. A usage error is an unknown option, a flag that
       does not have its value, a [--min] that is not in the interval
-      \[[0];[100]\], a malformed [--lines], an unreadable [--diff], or a
-      [--color] value that the flag refuses.
+      \[[0];[100]\], a malformed [--lines], an unreadable [--diff], a [--color]
+      value that the flag refuses, or [--json] with [--sarif].
     - [2] also for a [WINDTRAP_COLOR] that the flag would refuse, when [--color]
       is absent and the report is printed. A document reads no [WINDTRAP_COLOR].
 *)

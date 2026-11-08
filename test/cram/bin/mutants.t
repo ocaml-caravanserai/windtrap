@@ -1812,6 +1812,10 @@ The command line
     --json
         Machine-readable report on standard output.
   
+    --sarif
+        SARIF 2.1.0 document of the survivors, the unknown and the not
+        evaluated mutants on standard output, for code scanning.
+  
     --lines=FILE:A-B,...
         Report only the mutants on these lines of these files.
   

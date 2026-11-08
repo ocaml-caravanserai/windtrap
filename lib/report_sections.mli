@@ -644,6 +644,13 @@ val mutation_line : gates:gates -> mutation -> span list
     [m.refused] is not empty. A measure is styled as failing only when it is
     below its minimum. *)
 
+val reaching_sentence : witness list -> string option
+(** [reaching_sentence ws] is the sentence that counts the reaching tests [ws],
+    with no final punctuation, as in [2 tests ran this line and none failed]. It
+    also counts their executables when they name several, as in
+    [3 tests in 2 executables ran this line and none failed]. It is [None] when
+    [ws] is empty. *)
+
 val survivor_block :
   ?runs:int ->
   ?early:(int * string) list ->
@@ -657,8 +664,7 @@ val survivor_block :
       number of runs in which the mutant survived, as in [(3 runs)].
     - the mutated source line, as an {!type-entry} holds a source line, when
       [source] is known and holds the line.
-    - the sentence that counts the reaching tests, and their executables when
-      they name several.
+    - the {!reaching_sentence} of the reaching tests, followed by a colon.
     - one row per reaching test: its name, then its location when it has one.
       Under [exe_width = Some w] the executable comes first, in a column at
       least [w] wide that is empty for a test that names none.
