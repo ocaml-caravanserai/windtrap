@@ -894,6 +894,9 @@ dune builds for a stanza naming both backends:
     33: 2424-2430
     34: 2418-2443
     35: 2408-2443
+    36: 2687-2691
+    37: 2697-2701
+    38: 2674-2703
   mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands:
     0: 14:34-14:35 "int" "0" -> "1"
     1: 14:27-14:28 "int" "1" -> "0"
@@ -918,6 +921,8 @@ dune builds for a stanza naming both backends:
     20: 62:4-62:10 "del" "step a" -> "()"
     21: 63:4-63:10 "del" "step b" -> "()"
     22: 61:5-61:6 "not" "c" -> "not c"
+    23: 68:27-68:35 "keep" "{ p with x = (f ()); y = (g ()) }" -> "{ p with y = (g ()) }"
+    24: 68:37-68:45 "keep" "{ p with x = (f ()); y = (g ()) }" -> "{ p with x = (f ()) }"
   let lt a b =
     ___windtrap_visit___ 3;
     if
@@ -1078,6 +1083,23 @@ dune builds for a stanza naming both backends:
        if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 21
        then ((())[@ocaml.warning "-41-42"])
        else (___windtrap_visit___ 32; step b))
+  let place p f g =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 23)
+    then
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 24)
+       then
+         (___windtrap_visit___ 38;
+          {
+            p with
+            x = (___windtrap_post_visit___ 36 (f ()));
+            y = (___windtrap_post_visit___ 37 (g ()))
+          })
+       else (({ p with x = (f ()) })[@ocaml.warning "-18-40-41-42"]))
+    else (({ p with y = (g ()) })[@ocaml.warning "-18-40-41-42"])
 
 A file is instrumented under its own name, and returned as parsed under
 an input name that is not a source file's:

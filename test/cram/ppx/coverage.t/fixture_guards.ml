@@ -61,3 +61,8 @@ let both_steps step a b c =
   if c then (
     step a;
     step b)
+
+(* The disarmed arm of a [keep] guard keeps the location of its site, and
+   has the points of the coverage rewriter alone. Each armed arm is a copy
+   of the update with ghost locations, which has no point. *)
+let place p f g = { p with x = f (); y = g () }
