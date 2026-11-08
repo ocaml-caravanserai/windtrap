@@ -5239,6 +5239,42 @@ let reused_in_order () =
       equal (option string) (reproduce whole_run.out) (reproduce r.out))
     [ []; [ retry_once ] ]
 
+(* In [flaky_kill] under [MUTATE_KILL_SUB], lines 15 and 18 survive. The
+   second run kills line 15 in run 3 and reuses line 18. No mutant gets a
+   retry, and a signal stops the check of the kill at run 4. The survivor of
+   line 18 comes after the retries and before the check, and thus prints. *)
+let reused_before_a_check () =
+  remove (verdicts_path ());
+  let whole_run =
+    rerun ~env:[ suite "flaky_kill"; kill_sub ] [ mutate; retry_once ]
+  in
+  equal string "exited 0" whole_run.status;
+  equal (list string) [ site 15; site 18 ] (survivors whole_run.out);
+  rewrite (other_settings_at 15);
+  let dir = temp_dir () in
+  let began = Filename.concat dir "began" in
+  let run =
+    start
+      ~env:
+        [
+          suite "flaky_kill";
+          kill_sub;
+          ("MUTATE_RUNS", Filename.concat dir "b-runs");
+          fail_at "3";
+          ("MUTATE_STARTED", began);
+          ("MUTATE_GATE", Filename.concat dir "gate");
+          ("MUTATE_GATE_AT", "4");
+        ]
+      [ mutate; incremental; retry_once ]
+  in
+  await ~what:"the wait at the gate" run began;
+  Unix.kill run.pid Sys.sigint;
+  let r = finish run in
+  equal string "killed by SIGINT" r.status;
+  equal text (waits_for_check 15) r.err;
+  equal (list string) [ site 18 ] (survivors r.out);
+  equal (option string) (Some (reused_line 1)) (reused_of r.out)
+
 let ignored_warning text =
   strf
     "windtrap: warning: --incremental ignores %s: %s; files written by other \
@@ -5401,6 +5437,10 @@ let incremental_reuse =
         "a reused survivor prints in the order of a whole run, which arms the \
          same survivor"
         reused_in_order;
+      test
+        "a reused survivor with no pass of the last retry prints before a \
+         check that a signal stops"
+        reused_before_a_check;
       test
         "a reused verdict is not unstable, also after another previous \
          outcome, and the next full run lists its change"
