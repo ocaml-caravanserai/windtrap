@@ -132,12 +132,12 @@ let operators =
    [mul], [fmul] and [bit] name their replacement, [con] turns [&&] into an
    [if], and [cmp] swaps operands of one type. A binding that this pass sees
    loses the family of its name. What an [open] brings in is not seen, so
-   [mul], [fmul] and [bit] also need Stdlib scope at the site. The guards of [none] and
-   [tail] name the predefined [None] and give [t] the type of [h :: t], so a
-   file that declares a constructor [Some], [None] or [(::)], in a type or as
-   an extension constructor, loses them. A file that binds [failwith] or
-   [invalid_arg] loses [Message], and one that declares a module [Logs] loses
-   [Log]. *)
+   [mul], [fmul] and [bit] also need Stdlib scope at the site. The guards of
+   [none] and [tail] name the predefined [None] and give [t] the type of
+   [h :: t], so a file that declares a constructor [Some], [None] or [(::)],
+   in a type or as an extension constructor, loses them. A file that binds
+   [failwith] or [invalid_arg] loses [Message], and one that declares a
+   module [Logs] loses [Log]. *)
 let kept_families structure =
   let lose name lost =
     match (name, List.assoc_opt name operators) with
@@ -655,7 +655,8 @@ let scoping = [ "ocaml.warning"; "warning"; "ocaml.alert"; "alert" ]
 
 type pin = Operands | Ints | Floats
 
-(* The pin of a Stdlib operator of [ari], from the type of its operands. *)
+(* The pin of a Stdlib operator of [ari], [mul], [fmul] or [bit], from the
+   type of its operands. *)
 let numbers name =
   match name with "+." | "-." | "*." | "/." -> Floats | _ -> Ints
 
@@ -934,8 +935,8 @@ class instrumenter ~keeps ~module_name =
        where no run can judge it. [int] skips a constant whose nudge is ROR's
        own boundary move, an operand of [+] or [-], which AOR moves, an
        operand of [*], [/] or [mod] where [mul] can move it, and a [create]
-       argument. [bool] flips a literal outside a boolean context,
-       where [neg] already acts, and skips an OS flag. *)
+       argument. [bool] flips a literal outside a boolean context, where
+       [neg] already acts, and skips an OS flag. *)
     method private literal context e =
       let is_child arg = arg == e in
       let applied =
