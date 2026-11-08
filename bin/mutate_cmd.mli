@@ -148,7 +148,10 @@
     ({!Windtrap.Private.Report_sections.sample_line}). In each other case the
     sample is [Mixed], the outcome line gives no interval, and a note on
     standard error tells why. For the two, [judged] is the merged reached
-    mutants, and [sampled] is those that are not [Not_sampled].
+    mutants less the mutants killed elsewhere. A mutant killed elsewhere is an
+    exact kill, which the hash did not judge, and [exact] is their count
+    ({!Windtrap.Private.Report_sections.mutation_estimate}). A refused file
+    counts its unknown mutants in [judged], and the merge fails anyway.
 
     {b Reaching tests.} The reaching tests of a survivor are the union of those
     of every file in which the mutant survived. Each is paired with the label of
@@ -217,10 +220,12 @@
     ({!Windtrap.Private.Report_sections.mutation_lower}). [--min-reach] compares
     the exact reach. [--max-survivors] with a file that tested its suite and
     records a sample is a usage error, because the sample does not count each
-    survivor. The gates run after the report or the document is printed, and do
-    not run when the write fails. The outcome line of the report then gives each
-    gate and its result ({!Windtrap.Private.Report_sections.mutation_line}), and
-    each measure with its two counts beside its rounding. *)
+    survivor. Without a gate, a merge with a [Not_sampled] mutant fails, and a
+    sentence on standard error tells to give [--min] or [--min-total]. The gates
+    run after the report or the document is printed, and do not run when the
+    write fails. The outcome line of the report then gives each gate and its
+    result ({!Windtrap.Private.Report_sections.mutation_line}), and each measure
+    with its two counts beside its rounding. *)
 
 (** {1:format Machine format}
 
@@ -251,10 +256,13 @@
     - ["refused"] is the count of the refused files.
     - ["score"] is the score of the {{!section-gate}gate}, with two decimals. It
       is [100.00] when no mutant is scored, as the ["percentage"] of
-      [windtrap coverage --json] is with no point.
+      [windtrap coverage --json] is with no point. Under a sample, it is the
+      estimate, and it is [null] when the sample has no scored mutant and its
+      [judged] is above [0].
     - ["reach_percent"] and ["total_percent"] are the reach and the total of the
       {{!section-gate}gates}, with two decimals. Each is [100.00] when its
-      denominator is [0].
+      denominator is [0]. Under a sample, ["total_percent"] is the estimate, and
+      it is [null] when ["score"] is [null].
     - ["not_sampled"] is the count of the merged mutants that are not sampled.
       It is in the object only when the merge has a sample
       ({{!section-merge}the merge}) or such a mutant.
@@ -403,19 +411,21 @@ val run : string list -> int
 
     The result is:
     - [0] when the report or the document was printed and the merge passes.
-      Without [--min], the merge passes when no mutant survived and every file
-      was tested. Under [--min], it passes when the score meets the gate and
-      every file was tested, and a survivor does not fail it. Unreached, unknown
-      and not-evaluated mutants are listed and do not fail the merge by
-      themselves. The result is also [0] for the help page.
+      Without [--min], the merge passes when no mutant survived, no mutant is
+      not sampled and every file was tested. Under [--min], it passes when the
+      score meets the gate and every file was tested, and a survivor does not
+      fail it. Unreached, unknown and not-evaluated mutants are listed and do
+      not fail the merge by themselves. The result is also [0] for the help
+      page.
     - [1] when the report or the document was printed and the merge fails.
       Without [--min], the merge fails when at least one mutant survived every
-      executable that reached it. Under [--min], it fails when the score is
-      below the gate. Thus under the gate, a merge with no survivor can fail,
-      because a mutant that was not evaluated lowers the score. The merge also
-      fails when a file is refused: a merge without the verdicts of that suite
-      is not the project's. Without the gate, a mutant that is equivalent to the
-      original is dismissed at its site with [[@mutate off]].
+      executable that reached it, or when a mutant is not sampled. Under
+      [--min], it fails when the score is below the gate. Thus under the gate, a
+      merge with no survivor can fail, because a mutant that was not evaluated
+      lowers the score. The merge also fails when a file is refused: a merge
+      without the verdicts of that suite is not the project's. Without the gate,
+      a mutant that is equivalent to the original is dismissed at its site with
+      [[@mutate off]].
     - [1], with no report, when a [PATH] cannot be used or when no verdict file
       is found. It is also [1] when a file that is not excluded cannot be read,
       is corrupt or has another format version. It is also [1] when every file

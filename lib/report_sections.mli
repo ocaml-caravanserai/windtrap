@@ -548,18 +548,19 @@ type scope =
           the suites of one executable count as one. *)
 
 (** The type for the sample of a report ([--sample]). [judged] is the reached
-    mutants whose sample the hash judged: those of a run less the mutants that
-    it skipped under [--skip-killed], or the reached mutants of a merge.
-    [sampled] is the members of [judged] in the sample, unknown and not tested
-    mutants included. *)
+    mutants that the hash judged. In the report of a run, they are the reached
+    mutants less the mutants that it skipped under [--skip-killed]. In a merge,
+    they are the reached mutants less the mutants killed elsewhere. [exact] is
+    the killed mutants that the hash did not judge: [0] in the report of a run,
+    and the mutants killed elsewhere in a merge. *)
 type sample =
   | Uniform of {
       percent : float;  (** The percent of the sample. *)
       seed : Seed.seed;  (** The root seed of the runs. *)
       judged : int;
-      sampled : int;
+      exact : int;
     }  (** One sample: each tested suite has the same percent and seed. *)
-  | Mixed of { judged : int; sampled : int }
+  | Mixed of { judged : int; exact : int }
       (** The tested suites of a merge have different samples, or a sample and
           no sample. *)
 
@@ -619,7 +620,8 @@ val mutation_score : mutation -> float
     survived and those not evaluated. An unknown mutant that is not counted as
     killed, a mutant that no test reached and a mutant that no worker tested do
     not count. It is {!percent} of the killed mutants in their number, and thus
-    [100.] when [m] has none. *)
+    [100.] when [m] has none. Under a sample, it is the score of
+    {!mutation_estimate} when that score is [Some _]. *)
 
 val mutation_reach : mutation -> float
 (** [mutation_reach m] is the percentage of reached mutants among the reached
@@ -631,42 +633,62 @@ val mutation_total : mutation -> float
 (** [mutation_total m] is the percentage of killed mutants among the scored
     mutants, the mutants that no test reached and the mutants evaluated outside
     tests of [m], unrounded. It is {!percent}, and thus [100.] when [m] has none
-    of them.
-
-    Under a sample whose [judged] is above [0], with [n] scored mutants above
-    [0], it is an estimate: [score *. pop /. (pop +. u)]. [score] is
-    {!mutation_score} and [u] the mutants that no test reached and those
-    evaluated outside tests. [pop] is the estimated number of scored mutants of
-    the population, [n *. judged /. sampled], unrounded. *)
+    of them. Under a sample, it is the total of {!mutation_estimate} when that
+    total is [Some _]. *)
 
 val wilson : killed:int -> scored:int -> population:float -> float * float
 (** [wilson ~killed ~scored ~population] is the two-sided 95% Wilson score
     interval of the fraction [killed / scored], as [(low, high)] in \[[0];[1]\].
     The sample of [scored] mutants comes from a population of [population]
-    scored mutants. Thus [z{^ 2}], with [z = 1.959963984540054], is multiplied
-    by the finite population correction
+    scored mutants. Thus the function multiplies [z{^ 2}], with
+    [z = 1.959963984540054], by the finite population correction
     [(population - scored) / (population - 1)], or by [0] when [population] is
-    at most [scored]. The bounds are clamped to \[[0];[1]\]. [low] is [0] when
-    [killed] is [0], and [high] is [1] when [killed] is [scored]. It is
+    at most [scored]. The function clamps the bounds to \[[0];[1]\]. [low] is
+    [0] when [killed] is [0], and [high] is [1] when [killed] is [scored]. It is
     [(0., 1.)] when [scored] is [0]. *)
 
+type estimate = {
+  sampled_killed : int;
+      (** [k]: the killed mutants, less the [exact] of the sample. *)
+  sampled_scored : int;
+      (** [n]: the scored mutants, less the [exact] of the sample. *)
+  exact : int;  (** [x]: the [exact] of the sample. *)
+  score : float option;
+      (** The estimate of the score, as a percentage, or [None] when [n] is [0].
+      *)
+  total : float option;
+      (** The estimate of the total, as a percentage, or [None] when [n] is [0].
+      *)
+  bounds : ((float * float) * (float * float)) option;
+      (** Under a [Uniform] sample, the interval of the score and the interval
+          of the total, as percentages. Each is [(0., 100.)] when [n] is [0]. It
+          is [None] under a [Mixed] sample. *)
+  lower : float * float;
+      (** What the gates [min] and [min_total] compare: the lower bounds of
+          [bounds]. Under a [Mixed] sample, the bounds that are always true:
+          each mutant out of a sample counts as survived, so the score is the
+          killed mutants among the scored mutants and [not_sampled], and the
+          total adds the mutants that no test reached and those evaluated
+          outside tests. The two are [0.] when [n] is [0]. *)
+}
+(** The type for the estimates of a sample. *)
+
+val mutation_estimate : mutation -> estimate option
+(** [mutation_estimate m] is the estimates of the sample of [m], or [None] when
+    [m] has no sample or its [judged] is [0]. [p] is [k / n]. The population
+    [pop] is [n *. judged /. (judged - not_sampled)], unrounded: the scored
+    mutants that the hash judged. The score is [(x + p * pop) / (x + pop)], and
+    the total is [(x + p * pop) / (x + pop + u)], where [u] is the mutants that
+    no test reached and those evaluated outside tests. Each bound of [bounds] is
+    the {!wilson} bound of [p], with the population [pop], mapped in the same
+    way. *)
+
 val mutation_bounds : mutation -> ((float * float) * (float * float)) option
-(** [mutation_bounds m] is the interval of {!mutation_score} and the interval of
-    {!mutation_total}, as percentages, under a [Uniform] sample whose [judged]
-    is above [0]. The first is {!wilson} with the population of
-    {!mutation_total}. The second maps each bound of the first as
-    {!mutation_total} maps the score. With no scored mutant, each interval is
-    [(0., 100.)]. It is [None] for each other report. *)
+(** [mutation_bounds m] is the [bounds] of {!mutation_estimate}, or [None]. *)
 
 val mutation_lower : mutation -> float * float
-(** [mutation_lower m] is what the gates [min] and [min_total] compare: the
-    lower bounds of {!mutation_bounds} when it is [Some _]. Under a [Mixed]
-    sample whose [judged] is above [0], it is the bounds that are always true:
-    each mutant out of a sample counts as survived, so the score is the killed
-    mutants among the scored mutants and [not_sampled], and the total adds the
-    mutants that no test reached and those evaluated outside tests. Both are
-    [0.] when there is no scored mutant. In each other case it is
-    [(mutation_score m, mutation_total m)]. *)
+(** [mutation_lower m] is the [lower] of {!mutation_estimate}, or
+    [(mutation_score m, mutation_total m)] when there is no estimate. *)
 
 val sample_line : sample -> string option
 (** [sample_line s] is the line of a [Uniform] sample, as in
@@ -715,15 +737,18 @@ val mutation_line : gates:gates -> mutation -> span list
     below its minimum.
 
     The count [N not sampled] follows [not tested]. Under a sample whose
-    [judged] is above [0], the score and the total are estimates. A [Uniform]
-    sample gives each with its interval ({!mutation_bounds}), as in
-    [score 70.0% (70/100, 63.4% to 75.9%)] and [total 60.2% (54.5% to 65.5%)]. A
-    [Mixed] sample gives the bound of {!mutation_lower}, as in
-    [score 70.0% (70/100, at least 52.0%)] and [total 60.2% (at least 45.0%)].
-    With no scored mutant, the score is [no scored mutant], and the total is
-    [total: no scored mutant] under its gate and absent without it. A gate on
-    the two names the bound, as in [minimum 65% of the lower bound: FAILED], and
-    the bound decides the style and the result. *)
+    [judged] is above [0], the score and the total are the estimates of
+    {!mutation_estimate}, and the counts of the score are [k/n]. When [x] is
+    above [0], [and x killed elsewhere] follows them. With 70 killed, 30
+    survived, 95 not sampled and 20 never reached, a [Uniform] sample gives each
+    estimate with its interval, as in [score 70.0% (70/100, 63.4% to 75.9%)] and
+    [total 63.5% (57.5% to 68.8%)]. A [Mixed] sample gives the bound of [lower],
+    as in [score 70.0% (70/100, at least 35.9%)] and
+    [total 63.5% (at least 32.6%)]. With no scored mutant, the score is
+    [no scored mutant], and the total is [total: no scored mutant] under its
+    gate and absent without it. A gate on the two names the bound, as in
+    [minimum 65% of the lower bound: FAILED], and the bound decides the style
+    and the result. *)
 
 val reaching_sentence : witness list -> string option
 (** [reaching_sentence ws] is the sentence that counts the reaching tests [ws],

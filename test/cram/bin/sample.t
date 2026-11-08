@@ -75,6 +75,8 @@ and the line of the sample:
   sample: 50% of the reached mutants, seed s1:6d7574616e747321
   reproduce: dune exec --instrument-with ppx_windtrap.mutate test/pins_add.exe -- --arm test/cram/bin/calc.ml:13:14:add
   mutants: 1 survived of 3 reached, 1 killed, 1 never reached, 1 not sampled, 1 executable, score 50.0% (1/2, 15.0% to 85.0%), reach 75.0% (3/4), total 37.5% (11.3% to 63.7%)
+  --- stderr
+  windtrap: 1 mutant is not sampled, so no gate tells that each mutant was killed: give --min or --min-total to gate a sample
   [1]
 
 --min and --min-total compare the lower bound of the interval:
@@ -150,6 +152,68 @@ rule:
   >   'lib/b.ml:1:0:add:a + b:a - b=killed' 'lib/b.ml:2:0:add:a + b:a - b=not_sampled'
   $ "$bin/mkdata.exe" mutants c.mutants --suite c --refused 'it crashed' \
   >   'lib/c.ml:1:0:add:a + b:a - b=unknown:it crashed'
-  $ run windtrap mutants a.mutants b.mutants c.mutants | tail -n 2
-  reproduce: WINDTRAP_MUTATE_ARM=lib/a.ml:3:0:add dune runtest --force --instrument-with ppx_windtrap.mutate
+  $ run windtrap mutants a.mutants b.mutants c.mutants | grep '^mutants:'
   mutants: 1 survived of 6 reached, 2 killed, 1 unknown, 1 never reached, 2 not sampled, 3 executables, 1 suite not mutation-tested, score 66.7% (2/3, 32.1% to 89.4%), reach 85.7% (6/7), total 54.5% (26.3% to 73.2%)
+
+A refused file counts its unknown mutants in the estimate, and the merge
+fails anyway.
+
+A mutant killed elsewhere is an exact kill, and the hash did not judge
+it. The estimate adds such kills as they are, beside the estimate of the
+sample. Here 50 skips stand, and the sample of 25 of 50 mutants has 5
+kills:
+
+  $ mkdir ../exact && cd ../exact
+  $ specs() { for i in $(seq "$2" "$3"); do echo "lib/e.ml:$i:0:add:a+b:a-b=$1"; done; }
+  $ "$bin/mkdata.exe" mutants e.mutants --suite e --sample 50 42 \
+  >   $(specs elsewhere:default/gone.exe 1 50) $(specs not_sampled 51 75) \
+  >   $(specs killed 76 80) $(specs survived:t/s 81 100)
+  $ run windtrap mutants --min=65 e.mutants | grep '^mutants:'
+  mutants: 20 survived of 100 reached, 55 killed, 25 not sampled, 1 executable, score 60.0% (5/25 and 50 killed elsewhere, 55.6% to 66.6%), minimum 65% of the lower bound: FAILED, reach 100.0% (100/100), total 60.0% (55.6% to 66.6%)
+  $ run windtrap mutants --json e.mutants | grep -E '"(score|score_low|score_high)"'
+      "unreached": 0, "refused": 0, "score": 60.00,
+      "score_low": 55.59, "score_high": 66.59,
+
+Without a gate, a merge with a mutant that is not sampled exits 1, because
+the sample does not tell that each mutant was killed. A sampled file can
+also hide the survivor of a full file:
+
+  $ "$bin/mkdata.exe" mutants k.mutants --suite k --sample 50 42 \
+  >   'lib/k.ml:1:0:add:a+b:a-b=killed' 'lib/k.ml:2:0:add:a+b:a-b=not_sampled' \
+  >   'lib/k.ml:3:0:add:a+b:a-b=not_sampled'
+  $ run windtrap mutants k.mutants > /dev/null
+  [1]
+  $ grep '^mutants:' "$bin/out"; cat "$bin/err"
+  mutants: 3 reached, 1 killed, 2 not sampled, 1 executable, score 100.0% (1/1, 20.7% to 100.0%), reach 100.0% (3/3), total 100.0% (20.7% to 100.0%)
+  windtrap: 2 mutants are not sampled, so no gate tells that each mutant was killed: give --min or --min-total to gate a sample
+  $ "$bin/mkdata.exe" mutants full.mutants --suite full \
+  >   'lib/k.ml:2:0:add:a+b:a-b=survived:t/s'
+  $ run windtrap mutants k.mutants full.mutants > /dev/null
+  [1]
+  $ grep '^mutants:' "$bin/out"; cat "$bin/err"
+  mutants: 3 reached, 1 killed, 2 not sampled, 2 executables, score 100.0% (1/1, at least 33.3%), reach 100.0% (3/3), total 100.0% (at least 33.3%)
+  windtrap: the verdict files that tested their suite have different samples, so the score and the total have no interval: --min and --min-total count each mutant that is not sampled as survived
+  windtrap: 2 mutants are not sampled, so no gate tells that each mutant was killed: give --min or --min-total to gate a sample
+
+A gate gives the exit code, also for a sample:
+
+  $ run windtrap mutants --min=0 k.mutants | grep '^mutants:'
+  mutants: 3 reached, 1 killed, 2 not sampled, 1 executable, score 100.0% (1/1, 20.7% to 100.0%), minimum 0% of the lower bound: ok, reach 100.0% (3/3), total 100.0% (20.7% to 100.0%)
+
+--sarif gives no result for a mutant that is not sampled:
+
+  $ run windtrap mutants --sarif full.mutants | grep -c '"ruleId"'
+  1
+  $ run windtrap mutants --sarif k.mutants | grep -c '"ruleId"' || true
+  0
+
+The document gives null for the score and the total of a sample with no
+scored mutant, beside an interval of 0 to 100:
+
+  $ "$bin/mkdata.exe" mutants z.mutants --suite z --sample 50 42 \
+  >   'lib/z.ml:1:0:add:a+b:a-b=not_sampled'
+  $ run windtrap mutants --json z.mutants | grep -E '"(score|total_percent|score_low|total_low)"'
+      "unreached": 0, "refused": 0, "score": null,
+      "reach_percent": 100.00, "total_percent": null,
+      "score_low": 0.00, "score_high": 100.00,
+      "total_low": 0.00, "total_high": 100.00 },

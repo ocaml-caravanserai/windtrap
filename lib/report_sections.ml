@@ -1598,13 +1598,8 @@ type unstable = {
 type scope = Suite | Selected of int | Executables of int
 
 type sample =
-  | Uniform of {
-      percent : float;
-      seed : Seed.seed;
-      judged : int;
-      sampled : int;
-    }
-  | Mixed of { judged : int; sampled : int }
+  | Uniform of { percent : float; seed : Seed.seed; judged : int; exact : int }
+  | Mixed of { judged : int; exact : int }
 
 type mutation = {
   survivors : survivor list;
@@ -1733,40 +1728,10 @@ let reached (m : mutation) =
 let unreached_count (m : mutation) =
   List.length m.unreached + List.length m.outside_tests
 
-let mutation_score m = percent ~visited:(killed m) ~total:(scored m)
-
 (* The denominators of the reach and of the total. *)
 let reach_base m = reached m + unreached_count m
 let total_base m = scored m + unreached_count m
 let mutation_reach m = percent ~visited:(reached m) ~total:(reach_base m)
-
-(* A sample estimates only when the hash judged a reached mutant. *)
-let judged (m : mutation) =
-  match m.sample with
-  | Some (Uniform { judged; sampled; _ } | Mixed { judged; sampled })
-    when judged > 0 ->
-      Some (judged, sampled)
-  | Some _ | None -> None
-
-(* The scored mutants that the population holds, by the fraction of the
-   judged mutants that the sample holds. *)
-let population m ~judged ~sampled =
-  float_of_int (scored m) *. float_of_int judged /. float_of_int sampled
-
-(* A fraction of the scored mutants of the population as a fraction of the
-   total. *)
-let to_total m population x =
-  x *. population /. (population +. float_of_int (unreached_count m))
-
-let mutation_total m =
-  match judged m with
-  | Some (judged, sampled) when scored m > 0 ->
-      100.
-      *. to_total m
-           (population m ~judged ~sampled)
-           (float_of_int (killed m) /. float_of_int (scored m))
-  | Some _ | None -> percent ~visited:(killed m) ~total:(total_base m)
-
 let z = 1.959963984540054
 
 let wilson ~killed ~scored ~population =
@@ -1787,30 +1752,95 @@ let wilson ~killed ~scored ~population =
     ( (if killed = 0 then 0. else clamp (centre -. half)),
       if killed = scored then 1. else clamp (centre +. half) )
 
-let mutation_bounds m =
-  match (m.sample, judged m) with
-  | Some (Uniform _), Some (judged, sampled) ->
-      if scored m = 0 then Some ((0., 100.), (0., 100.))
-      else
-        let population = population m ~judged ~sampled in
-        let low, high =
-          wilson ~killed:(killed m) ~scored:(scored m) ~population
-        in
-        let total x = 100. *. to_total m population x in
-        Some ((100. *. low, 100. *. high), (total low, total high))
-  | (Some (Uniform _ | Mixed _) | None), _ -> None
+type estimate = {
+  sampled_killed : int;
+  sampled_scored : int;
+  exact : int;
+  score : float option;
+  total : float option;
+  bounds : ((float * float) * (float * float)) option;
+  lower : float * float;
+}
 
-(* Under mixed samples, each mutant out of a sample counts as survived. *)
+(* A sample estimates only when the hash judged a reached mutant. The
+   population of the scored mutants that the hash judged is the scored
+   mutants of the sample, by the fraction of the judged mutants that the
+   sample holds. The exact kills join each fraction of that population as
+   they are. *)
+let mutation_estimate (m : mutation) =
+  match m.sample with
+  | None -> None
+  | Some (Uniform { judged; _ } | Mixed { judged; _ }) when judged <= 0 -> None
+  | Some ((Uniform { judged; exact; _ } | Mixed { judged; exact }) as sample) ->
+      let uniform = match sample with Uniform _ -> true | Mixed _ -> false in
+      let k = killed m - exact and n = scored m - exact in
+      if n = 0 then
+        Some
+          {
+            sampled_killed = k;
+            sampled_scored = n;
+            exact;
+            score = None;
+            total = None;
+            bounds = (if uniform then Some ((0., 100.), (0., 100.)) else None);
+            lower = (0., 0.);
+          }
+      else
+        let population =
+          float_of_int n *. float_of_int judged
+          /. float_of_int (judged - m.not_sampled)
+        in
+        let x = float_of_int exact and u = float_of_int (unreached_count m) in
+        let score p = 100. *. (x +. (p *. population)) /. (x +. population) in
+        let total p =
+          100. *. (x +. (p *. population)) /. (x +. population +. u)
+        in
+        let bounds =
+          if not uniform then None
+          else
+            let low, high = wilson ~killed:k ~scored:n ~population in
+            Some ((score low, score high), (total low, total high))
+        in
+        let lower =
+          match bounds with
+          | Some ((low, _), (total_low, _)) -> (low, total_low)
+          | None ->
+              (* Each mutant out of a sample counts as survived. *)
+              let scored = scored m + m.not_sampled in
+              ( percent ~visited:(killed m) ~total:scored,
+                percent ~visited:(killed m) ~total:(scored + unreached_count m)
+              )
+        in
+        let p = float_of_int k /. float_of_int n in
+        Some
+          {
+            sampled_killed = k;
+            sampled_scored = n;
+            exact;
+            score = Some (score p);
+            total = Some (total p);
+            bounds;
+            lower;
+          }
+
+let mutation_score m =
+  match mutation_estimate m with
+  | Some { score = Some score; _ } -> score
+  | Some { score = None; _ } | None ->
+      percent ~visited:(killed m) ~total:(scored m)
+
+let mutation_total m =
+  match mutation_estimate m with
+  | Some { total = Some total; _ } -> total
+  | Some { total = None; _ } | None ->
+      percent ~visited:(killed m) ~total:(total_base m)
+
+let mutation_bounds m = Option.bind (mutation_estimate m) (fun e -> e.bounds)
+
 let mutation_lower m =
-  match (mutation_bounds m, m.sample, judged m) with
-  | Some ((low, _), (total_low, _)), _, _ -> (low, total_low)
-  | None, Some (Mixed _), Some _ when scored m = 0 -> (0., 0.)
-  | None, Some (Mixed _), Some _ ->
-      let scored = scored m + m.not_sampled in
-      ( percent ~visited:(killed m) ~total:scored,
-        percent ~visited:(killed m) ~total:(scored + unreached_count m) )
-  | None, (Some (Uniform _ | Mixed _) | None), _ ->
-      (mutation_score m, mutation_total m)
+  match mutation_estimate m with
+  | Some e -> e.lower
+  | None -> (mutation_score m, mutation_total m)
 
 let sample_line = function
   | Uniform { percent; seed; _ } ->
@@ -1905,32 +1935,35 @@ let mutation_line ~gates:(g : gates) (m : mutation) =
         ]
   in
   let score, total =
-    match judged m with
+    match mutation_estimate m with
     | None ->
         ( measure ~name:"score" ~visited:(killed m) ~total:(scored m) ~min:g.min
             ~none:(Some "no scored mutant"),
           measure ~name:"total" ~visited:(killed m) ~total:(total_base m)
             ~min:g.min_total ~none:None )
-    | Some _ ->
-        let n = scored m in
-        let low, total_low = mutation_lower m in
+    | Some e ->
+        let low, total_low = e.lower in
         let texts =
-          if n = 0 then ("no scored mutant", "total: no scored mutant")
-          else
-            let score = mutation_score m and total = mutation_total m in
-            let counts = strf "%d/%d" (killed m) n in
-            match mutation_bounds m with
-            | Some ((low, high), (total_low, total_high)) ->
-                ( strf "score %.1f%% (%s, %.1f%% to %.1f%%)" score counts low
-                    high,
-                  strf "total %.1f%% (%.1f%% to %.1f%%)" total total_low
-                    total_high )
-            | None ->
-                ( strf "score %.1f%% (%s, at least %.1f%%)" score counts low,
-                  strf "total %.1f%% (at least %.1f%%)" total total_low )
+          match (e.score, e.total) with
+          | Some score, Some total -> (
+              let counts =
+                strf "%d/%d%s" e.sampled_killed e.sampled_scored
+                  (if e.exact = 0 then ""
+                   else strf " and %d killed elsewhere" e.exact)
+              in
+              match e.bounds with
+              | Some ((low, high), (total_low, total_high)) ->
+                  ( strf "score %.1f%% (%s, %.1f%% to %.1f%%)" score counts low
+                      high,
+                    strf "total %.1f%% (%.1f%% to %.1f%%)" total total_low
+                      total_high )
+              | None ->
+                  ( strf "score %.1f%% (%s, at least %.1f%%)" score counts low,
+                    strf "total %.1f%% (at least %.1f%%)" total total_low ))
+          | None, _ | _, None -> ("no scored mutant", "total: no scored mutant")
         in
         ( estimate ~text:(fst texts) ~low ~min:g.min,
-          if n = 0 && Option.is_none g.min_total then []
+          if Option.is_none e.score && Option.is_none g.min_total then []
           else estimate ~text:(snd texts) ~low:total_low ~min:g.min_total )
   in
   let terms =

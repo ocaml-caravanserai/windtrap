@@ -2073,8 +2073,6 @@ let mutation_entries () =
               Sections.survivors = [ add_survivor ];
               killed = 0;
               not_tested = 2;
-              not_sampled = 0;
-              sample = None;
             }) );
     ( "the lines print in order above the reproduce line",
       rendered ~config:(config ~invocation:loop_invocation ()) (fun r ->
@@ -2090,8 +2088,6 @@ let mutation_entries () =
               loop_report with
               Sections.survivors = [ add_survivor ];
               not_tested = 1;
-              not_sampled = 0;
-              sample = None;
             }) );
     ( "the lines print above a lone outcome line, and a note follows them",
       rendered (fun r ->
@@ -2107,8 +2103,6 @@ let mutation_entries () =
               Sections.survivors = [];
               unreached = [];
               not_tested = 1;
-              not_sampled = 0;
-              sample = None;
             }) );
     ( "an interrupted loop prints its lines",
       rendered (fun r ->
@@ -2124,8 +2118,6 @@ let mutation_entries () =
               Sections.survivors = [];
               unreached = [];
               not_tested = 2;
-              not_sampled = 0;
-              sample = None;
             }) );
     ( "stopped before a child ended",
       rendered (fun r ->
@@ -2136,8 +2128,6 @@ let mutation_entries () =
               unreached = [];
               killed = 0;
               not_tested = 5;
-              not_sampled = 0;
-              sample = None;
             }) );
   ]
 

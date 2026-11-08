@@ -1055,15 +1055,6 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   in
   (ended, found)
 
-(* [sample] is the sample of the run and the reached mutants that its hash
-   judged. *)
-let sampled ~sample ~not_sampled =
-  Option.map
-    (fun ((percent, seed), judged) ->
-      Report_sections.Uniform
-        { percent; seed; judged; sampled = judged - List.length not_sampled })
-    sample
-
 let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside
     ~sample ~not_sampled found : Report_sections.mutation =
   let lines = List.map (fun (m : Mutate.mutant) -> (m.id.file, m.id.line)) in
@@ -1094,7 +1085,7 @@ let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside
     not_tested =
       List.length reached - List.length found.records - List.length not_sampled;
     not_sampled = List.length not_sampled;
-    sample = sampled ~sample ~not_sampled;
+    sample;
     scope =
       (if narrowed then Report_sections.Selected (List.length dry_run)
        else Report_sections.Suite);
@@ -1330,7 +1321,10 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                       to_test
               in
               let sample =
-                Option.map (fun pair -> (pair, judged)) scope.sample
+                Option.map
+                  (fun (percent, seed) ->
+                    Report_sections.Uniform { percent; seed; judged; exact = 0 })
+                  scope.sample
               in
               let to_test =
                 match if config.incremental then last_run ~suite else None with
@@ -1352,9 +1346,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                 skip_lines
                 @ (if config.incremental then [ reused_line found ] else [])
                 @ Option.to_list
-                    (Option.bind
-                       (sampled ~sample ~not_sampled)
-                       Report_sections.sample_line)
+                    (Option.bind sample Report_sections.sample_line)
               in
               let narrowed = narrows_suite config ~focus:outcome.focus_active in
               let save records =

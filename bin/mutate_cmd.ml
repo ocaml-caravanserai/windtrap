@@ -405,22 +405,21 @@ let merge ~crash_kills ~source files merged =
         compare (List.length b.witnesses) (List.length a.witnesses))
       survivors
   in
-  let not_sampled =
+  let count verdict =
     List.length
-      (pick (fun r -> match r.verdict with Not_sampled -> Some () | _ -> None))
+      (List.filter (fun (r : Verdicts.record) -> verdict r.verdict) records)
+  in
+  let not_sampled = count (( = ) Verdicts.Not_sampled) in
+  (* A skip that stands is an exact kill, which the hash did not judge. *)
+  let exact =
+    count (function Verdicts.Killed_elsewhere _ -> true | _ -> false)
   in
   let judged =
-    List.length
-      (pick (fun r ->
-           match r.verdict with
-           | Killed _ | Killed_elsewhere _ | Unknown _ | Survived _
-           | Not_evaluated | Not_sampled ->
-               Some ()
-           | Outside_tests | Unreached -> None))
+    killed - exact + List.length survivors + List.length not_evaluated
+    + List.length unknown + List.length untested + not_sampled
   in
   (* The samples of the files that tested their suite. *)
   let sample =
-    let sampled = judged - not_sampled in
     match
       List.sort_uniq compare
         (List.filter_map
@@ -429,8 +428,8 @@ let merge ~crash_kills ~source files merged =
     with
     | [] | [ None ] -> None
     | [ Some (percent, seed) ] ->
-        Some (Sections.Uniform { percent; seed; judged; sampled })
-    | _ :: _ :: _ -> Some (Sections.Mixed { judged; sampled })
+        Some (Sections.Uniform { percent; seed; judged; exact })
+    | _ :: _ :: _ -> Some (Sections.Mixed { judged; exact })
   in
   (* Only dune runs an inline-test runner, and it runs every suite. *)
   let invocation =
@@ -811,6 +810,12 @@ let json ~crash_kills files merged (m : Sections.mutation) =
   let not_evaluated = count "not_evaluated" in
   let not_sampled = count "not_sampled" in
   let unknown = count "unknown" - crash_killed in
+  (* A sample with no scored mutant has no estimate. *)
+  let estimated field measure =
+    match Sections.mutation_estimate m with
+    | Some e when Option.is_none (field e) -> "null"
+    | Some _ | None -> strf "%.2f" (measure m)
+  in
   (* The keys of a sample, after the measures. *)
   let sampled =
     (if Option.is_some m.sample || not_sampled > 0 then
@@ -847,17 +852,17 @@ let json ~crash_kills files merged (m : Sections.mutation) =
     "{ \"version\": 1,\n\
     \  \"summary\": { \"reached\": %d, \"killed\": %d, \"survived\": %d,\n\
     \    \"not_evaluated\": %d, \"unknown\": %d, \"outside_tests\": %d,\n\
-    \    \"unreached\": %d, \"refused\": %d, \"score\": %.2f,\n\
-    \    \"reach_percent\": %.2f, \"total_percent\": %.2f%s },\n\
+    \    \"unreached\": %d, \"refused\": %d, \"score\": %s,\n\
+    \    \"reach_percent\": %.2f, \"total_percent\": %s%s },\n\
     \  \"executables\": [%s ],\n\
     \  \"mutants\": [%s ],\n\
     \  \"unstable\": [%s ] }\n"
     (killed + survived + not_evaluated + unknown + not_sampled)
     killed survived not_evaluated unknown (count "outside_tests")
     (count "unreached") (List.length m.refused)
-    (Sections.mutation_score m)
+    (estimated (fun e -> e.score) Sections.mutation_score)
     (Sections.mutation_reach m)
-    (Sections.mutation_total m)
+    (estimated (fun e -> e.total) Sections.mutation_total)
     sampled
     (String.concat "," (List.map executable files))
     (String.concat "," (List.map mutant records))
@@ -916,8 +921,9 @@ of killed mutants among those scored, never reached and evaluated outside
 tests. When the suites tested a sample (--sample), the score and the total are
 estimates with a 95% interval. Runs no tests and drives no build. Exits 1 when
 an executable could not mutation-test its suite. Without a gate, exits 1 also
-when any mutant survived every executable that reached it. With a gate, exits 1
-when a gate fails, and not for a survivor alone.
+when any mutant survived every executable that reached it, or when a mutant is
+not sampled. With a gate, exits 1 when a gate fails, and not for a survivor
+alone.
 
 OPTIONS:
   --min=PCT
@@ -1139,7 +1145,17 @@ let sampled_survivors o files =
    the outcome line out, so the gate gives it. *)
 let gate o (m : Sections.mutation) =
   if not (Sections.gated o.gates) then
-    if m.survivors = [] && m.refused = [] then 0 else 1
+    if m.not_sampled > 0 then begin
+      Os.say
+        (strf
+           "%s not sampled, so no gate tells that each mutant was killed: give \
+            --min or --min-total to gate a sample"
+           (if m.not_sampled = 1 then "1 mutant is"
+            else strf "%d mutants are" m.not_sampled));
+      1
+    end
+    else if m.survivors = [] && m.refused = [] then 0
+    else 1
   else (
     if o.format <> `Report then
       Os.say

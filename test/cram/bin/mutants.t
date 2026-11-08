@@ -2002,8 +2002,9 @@ The command line
   tests. When the suites tested a sample (--sample), the score and the total are
   estimates with a 95% interval. Runs no tests and drives no build. Exits 1 when
   an executable could not mutation-test its suite. Without a gate, exits 1 also
-  when any mutant survived every executable that reached it. With a gate, exits 1
-  when a gate fails, and not for a survivor alone.
+  when any mutant survived every executable that reached it, or when a mutant is
+  not sampled. With a gate, exits 1 when a gate fails, and not for a survivor
+  alone.
   
   OPTIONS:
     --min=PCT

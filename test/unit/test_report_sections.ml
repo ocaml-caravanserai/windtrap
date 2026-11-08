@@ -2682,8 +2682,6 @@ let mutation_entries () =
           Sections.survivors = [ add_survivor ];
           killed = 0;
           not_tested = 2;
-          not_sampled = 0;
-          sample = None;
         } );
   ]
 
@@ -3026,21 +3024,21 @@ let zero_measures () =
 
 (* The sample *)
 
-(* [killed] kills and [survived] survivors of a sample, among [judged]
-   mutants of which [sampled] are in the sample. *)
+(* [killed] kills, of which [exact] are exact, and [survived] survivors of a
+   sample, among [judged] mutants of which [sampled] are in the sample. *)
 let sampled ?(mixed = false) ?(percent = 50.) ?(survived = 0) ?(unreached = 0)
-    ~killed ~judged ~sampled () =
+    ?(unknown = []) ?(exact = 0) ~killed ~judged ~sampled () =
   {
     (report
        ~survivors:(List.init survived (fun _ -> add_survivor))
        ~unreached:(List.init unreached (fun i -> ("lib/calc.ml", i + 1)))
-       ~killed Sections.Suite)
+       ~unknown ~killed Sections.Suite)
     with
     not_sampled = judged - sampled;
     sample =
       Some
-        (if mixed then Sections.Mixed { judged; sampled }
-         else Sections.Uniform { percent; seed = 42L; judged; sampled });
+        (if mixed then Sections.Mixed { judged; exact }
+         else Sections.Uniform { percent; seed = 42L; judged; exact });
   }
 
 let pct x = strf "%.1f" (100. *. x)
@@ -3092,6 +3090,25 @@ let sample_bounds () =
        (sampled ~mixed:true ~killed:1 ~judged:2 ~sampled:1 ()));
   is_none (Sections.mutation_bounds (sampled ~killed:0 ~judged:0 ~sampled:0 ()))
 
+(* 50 exact kills beside 5 kills of a sample of 25 of 50 mutants: the
+   population of the sample is 50, and the score is (50 + 0.2 * 50) / 100. *)
+let exact_kills () =
+  let e =
+    require_some
+      (Sections.mutation_estimate
+         (sampled ~survived:20 ~exact:50 ~killed:55 ~judged:50 ~sampled:25 ()))
+  in
+  equal
+    (triple (triple int int int) (option (float 1e-9)) (option (float 1e-9)))
+    ((5, 25, 50), Some 60., Some 60.)
+    ((e.sampled_killed, e.sampled_scored, e.exact), e.score, e.total);
+  let low, high = Sections.wilson ~killed:5 ~scored:25 ~population:50. in
+  let (score_low, score_high), _ = require_some e.bounds in
+  equal
+    (pair (float 1e-9) (float 1e-9))
+    (50. +. (50. *. low), 50. +. (50. *. high))
+    (score_low, score_high)
+
 let plan_gates min min_total = last_line (at_rest ?min ?min_total plan)
 
 let sample_rows =
@@ -3136,6 +3153,25 @@ let sample_rows =
       "mutants: 3 reached by this suite, 1 never reached, 3 not sampled, no \
        scored mutant, minimum 0% of the lower bound: ok, reach 75.0% (3/4), \
        total: no scored mutant, minimum 1% of the lower bound: FAILED" );
+    ( "exact kills join the estimate as they are",
+      (fun () ->
+        last_line
+          (at_rest ~min:65.
+             (sampled ~survived:20 ~exact:50 ~killed:55 ~judged:50 ~sampled:25
+                ()))),
+      "mutants: 20 survived of 100 reached by this suite, 55 killed, 25 not \
+       sampled, score 60.0% (5/25 and 50 killed elsewhere, 55.6% to 66.6%), \
+       minimum 65% of the lower bound: FAILED, reach 100.0% (100/100), total \
+       60.0% (55.6% to 66.6%)" );
+    ( "a mutant that --crash-kills counts is a kill of the sample",
+      (fun () ->
+        last_line
+          (at_rest
+             (sampled ~unknown:[ counted; hung ] ~survived:1 ~killed:1 ~judged:6
+                ~sampled:4 ()))),
+      "mutants: 1 survived of 6 reached by this suite, 2 killed (1 by \
+       --crash-kills), 1 unknown, 2 not sampled, score 66.7% (2/3, 32.1% to \
+       89.4%), reach 100.0% (6/6), total 66.7% (32.1% to 89.4%)" );
     ( "a sample that judged no mutant gives the measures of no sample",
       (fun () ->
         last_line
@@ -3451,6 +3487,7 @@ let mutation_group =
            (Gen.float_range 0. 1000.))
         wilson_holds_the_fraction;
       test "the bounds of a sample, of the score and of the total" sample_bounds;
+      test "an exact kill joins the estimate as it is" exact_kills;
       cases "the outcome line under a sample"
         ~id:(fun (name, _, _) -> name)
         sample_rows
