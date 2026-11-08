@@ -121,3 +121,12 @@ let con_short a b = a && note "r" b
    alone. *)
 let none_order x = Some (note "e" x)
 let tail_order h t = note "h" h :: note "t" t
+
+(* [keep] gives the update without one field, or [r] when the field is the
+   only one. Armed, the update does not evaluate the value of that field. *)
+type spot = { col : int; row : int; layer : int }
+
+let corner = { col = 1; row = 2; layer = 3 }
+let keep_one p n = { p with col = n }
+let keep_two p a b = { p with col = a; row = b }
+let keep_order p a b = { (note "p" p) with col = note "c" a; row = note "w" b }

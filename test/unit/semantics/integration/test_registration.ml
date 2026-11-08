@@ -47,12 +47,14 @@ let pp_ids ppf mutants =
   in
   Format.pp_print_list ~pp_sep:Format.pp_print_space id ppf mutants
 
-(* [armed ~file ~rewrite ~before f] is [f ()] with the one mutant of [file]
-   that has this rewrite and this original text armed. Finding it by its text
-   keeps the rendered texts under test. *)
-let armed ~file ~rewrite ~before f =
+(* [armed ~file ~rewrite ~before ?after f] is [f ()] with the one mutant of
+   [file] that has this rewrite and these texts armed. Finding it by its
+   texts keeps the rendered texts under test. *)
+let armed ~file ~rewrite ~before ?after f =
   let named (m : Mutate.mutant) =
-    String.equal m.id.rewrite rewrite && String.equal m.before before
+    String.equal m.id.rewrite rewrite
+    && String.equal m.before before
+    && Option.fold ~none:true ~some:(String.equal m.after) after
   in
   let m =
     require_match ~msg:"one mutant has this rewrite and this text" ~pp:pp_ids
@@ -65,6 +67,7 @@ let armed ~file ~rewrite ~before f =
 let ints = List.map Int.to_string
 let bools = List.map Bool.to_string
 let floats = List.map Float.to_string
+let spot (s : Oracle.spot) = ints [ s.col; s.row; s.layer ]
 
 (* [traced f] is the operands [f] evaluated, in order. *)
 let traced f =
@@ -128,6 +131,15 @@ let originals =
     ( "the operands of tail_order",
       "t,h",
       fun () -> traced (fun () -> Oracle.tail_order 1 [ 2 ]) );
+    ( "keep_one corner 5",
+      "5,2,3",
+      fun () -> String.concat "," (spot (Oracle.keep_one Oracle.corner 5)) );
+    ( "keep_two corner 5 6",
+      "5,6,3",
+      fun () -> String.concat "," (spot (Oracle.keep_two Oracle.corner 5 6)) );
+    ( "the operands of keep_order",
+      "p,w,c",
+      fun () -> traced (fun () -> Oracle.keep_order Oracle.corner 5 6) );
     ( "the operands of cmp_order",
       "r,l",
       fun () -> traced (fun () -> Oracle.cmp_order 1 2) );
@@ -361,6 +373,34 @@ let armings =
     };
   ]
 
+(* The two [keep] sites of one update have one [before] text, so a row of
+   [keep] names its site by its [after] text too. *)
+let kept =
+  let row before after observe mutated = (before, after, observe, mutated) in
+  [
+    row "{ p with col = n }" "p"
+      (fun () -> spot (Oracle.keep_one Oracle.corner 5))
+      [ "1"; "2"; "3" ];
+    row "{ p with col = a; row = b }" "{ p with row = b }"
+      (fun () -> spot (Oracle.keep_two Oracle.corner 5 6))
+      [ "1"; "6"; "3" ];
+    row "{ p with col = a; row = b }" "{ p with col = a }"
+      (fun () -> spot (Oracle.keep_two Oracle.corner 5 6))
+      [ "5"; "2"; "3" ];
+    (* Armed, the update does not evaluate the value of the dropped
+       field. *)
+    row "{ (note \"p\" p) with col = (note \"c\" a); row = (note \"w\" b) }"
+      "{ (note \"p\" p) with row = (note \"w\" b) }"
+      (fun () -> [ traced (fun () -> Oracle.keep_order Oracle.corner 5 6) ])
+      [ "p,w" ];
+  ]
+
+let kept_name (before, after, _, _) = strf "%s, armed keep to %s" before after
+
+let kept_row (before, after, observe, mutated) =
+  equal (list string) mutated
+    (armed ~file:"oracle.ml" ~rewrite:"keep" ~before ~after observe)
+
 let arming_name a = strf "%s: %s, armed %s" a.file a.before a.rewrite
 
 let armed_row a =
@@ -372,6 +412,8 @@ let armed_mutants =
     [
       cases "an armed mutant computes the rewrite its site names"
         ~id:arming_name armings armed_row;
+      cases "an armed keep mutant computes the update its site names"
+        ~id:kept_name kept kept_row;
     ]
 
 (* Every mutant *)

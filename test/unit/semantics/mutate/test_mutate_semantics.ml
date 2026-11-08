@@ -103,7 +103,7 @@ let family (m : Mutate.mutant) =
   | "lt" | "le" | "gt" | "ge" | "eq" | "neq" -> "cmp"
   | "and" | "or" -> "con"
   | "add" | "sub" | "fadd" | "fsub" -> "ari"
-  | ("del" | "int" | "bool" | "none" | "tail") as rewrite -> rewrite
+  | ("del" | "int" | "bool" | "none" | "tail" | "keep") as rewrite -> rewrite
   | other -> "unknown " ^ other
 
 let families mutants = List.sort_uniq String.compare (List.map family mutants)
@@ -141,9 +141,20 @@ let registration =
 let catalogue =
   group "The catalogue"
     [
-      test "the nine families are catalogued" (fun () ->
+      test "the ten families are catalogued" (fun () ->
           equal (list string)
-            [ "ari"; "bool"; "cmp"; "con"; "del"; "int"; "neg"; "none"; "tail" ]
+            [
+              "ari";
+              "bool";
+              "cmp";
+              "con";
+              "del";
+              "int";
+              "keep";
+              "neg";
+              "none";
+              "tail";
+            ]
             (families (fixture_catalogue ())));
       test "an identifier names one site" (fun () ->
           let id (m : Mutate.mutant) = Mutate.id_to_string m.id in
@@ -216,7 +227,7 @@ let observable_families () =
       (fixture_catalogue ())
   in
   equal (list string)
-    [ "ari"; "bool"; "cmp"; "con"; "del"; "int"; "neg"; "none"; "tail" ]
+    [ "ari"; "bool"; "cmp"; "con"; "del"; "int"; "keep"; "neg"; "none"; "tail" ]
     (families (List.filter changes mutants));
   equal ~msg:"after disarming"
     (list (pair string string))

@@ -232,6 +232,36 @@ let ret_some a = match Some (note "e" a) with Some v -> v | None -> "none"
 let ret_cons a b = String.concat "," (note "h" a :: note "t" [ b ])
 let ret_list a b = String.concat "," [ note "h" a; note "t" b ]
 
+(* {1 [keep]: a guard adds no evaluation}
+
+   [keep] gives a copy of [{ r with f = v; ... }] without one field, in the
+   other branch of an [if] that holds the original. Disarmed, [r] and each
+   value thus run once and in the order of the twin. The compiler evaluates
+   [r] first, then the values in the reverse order of the declaration of
+   their fields, whatever the order of the source. The update of an inline
+   record keeps its constructor. Each type is local to its function, as in
+   [cmp_sibling], because the coercion in test_mutate_semantics.ml would
+   strengthen a top-level type to the twin's own. *)
+
+let keep_order a b =
+  let module T = struct
+    type t = { first : string; second : string; third : string }
+  end in
+  let base = { T.first = "1"; second = "2"; third = "3" } in
+  let t = { (note "r" base) with third = note "c" a; first = note "a" b } in
+  String.concat "," [ t.first; t.second; t.third ]
+
+let keep_inline a b =
+  let module T = struct
+    type t = Box of { width : string; height : string; depth : string } | Dot
+  end in
+  match T.Box { width = "w"; height = "h"; depth = "d" } with
+  | Box r -> (
+      match T.Box { r with height = note "h" a; width = note "w" b } with
+      | Box r -> String.concat "," [ r.width; r.height; r.depth ]
+      | Dot -> "dot")
+  | Dot -> "dot"
+
 (* {1 [del] in a unit position}
 
    [del] also drops the then-branch of an [if] with no [else], a loop body,
@@ -318,19 +348,28 @@ let lazy_witness () =
    No guard weakens a value spine, the spine a binding generalizes over:
    every site of the four operators is an application or a conditional,
    which is never a syntactic value. The guards that [bool] puts on this
-   [true], [none] on [Some []] and [tail] on [[ [] ]] are each an [if]
-   whose two arms are syntactic values, and the type-checker counts such
-   an [if] as one whatever its condition. This binding is where that
-   would break first: a guard on its spine that is no syntactic value
-   leaves the ['a] of [bool * ('a -> 'a) * ...], which no relaxation
-   generalizes, weak. The binding sits in a functor, whose body runs when
-   it is applied, so the three rewrites mutate it; at the top level it
-   would run at load and carry no site. Nothing here applies it; the check
+   [true], [none] on [Some []], [tail] on [[ [] ]] and [keep] on the field
+   of [resized] are each an [if] whose arms are syntactic values, and the
+   type-checker counts such an [if] as one whatever its condition. These
+   bindings are where that would break first: a guard on a spine that is
+   no syntactic value leaves the ['a] of [bool * ('a -> 'a) * ...] and of
+   the invariant ['a bag], which no relaxation generalizes, weak. The
+   bindings sit in functors, whose bodies run when they are applied, so
+   the four rewrites mutate them; at the top level they would run at load
+   and carry no site. Nothing here applies them; the check
    is the module coercion in test_mutate_semantics.ml, which compares this
    copy's inferred signature against the twin's and fails to compile the
    day the two disagree. *)
 module Generalizes (_ : sig end) = struct
   let pair = (true, (fun x -> x), Some [], [ [] ])
+end
+
+(* A generative functor, so that the coercion does not strengthen [bag] to
+   the twin's own. *)
+module Generalizes_update () = struct
+  type 'a bag = { items : 'a list; push : 'a -> unit; size : int }
+
+  let resized = { { items = []; push = ignore; size = 0 } with size = 1 }
 end
 
 (* {1 Tail position, measured}
@@ -495,6 +534,8 @@ let witnesses : (string * (unit -> string)) list =
     ("none on Some", fun () -> show (ret_some "a"));
     ("tail on ::", fun () -> show (ret_cons "a" "b"));
     ("tail on a list literal", fun () -> show (ret_list "a" "b"));
+    ("keep on a record update", fun () -> show (keep_order "x" "y"));
+    ("keep on an inline record", fun () -> show (keep_inline "x" "y"));
     ("del in a then-branch", fun () -> show (del_then true));
     ("del in a then-branch not taken", fun () -> show (del_then false));
     ("del in a then-branch sequence", fun () -> show (del_then_seq true));
