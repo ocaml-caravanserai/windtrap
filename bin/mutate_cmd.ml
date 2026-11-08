@@ -753,7 +753,8 @@ let json files merged (m : Sections.mutation) =
     "{ \"version\": 1,\n\
     \  \"summary\": { \"reached\": %d, \"killed\": %d, \"survived\": %d,\n\
     \    \"not_evaluated\": %d, \"unknown\": %d, \"outside_tests\": %d,\n\
-    \    \"unreached\": %d, \"refused\": %d, \"score\": %.2f },\n\
+    \    \"unreached\": %d, \"refused\": %d, \"score\": %.2f,\n\
+    \    \"reach_percent\": %.2f, \"total_percent\": %.2f },\n\
     \  \"executables\": [%s ],\n\
     \  \"mutants\": [%s ],\n\
     \  \"unstable\": [%s ] }\n"
@@ -761,6 +762,8 @@ let json files merged (m : Sections.mutation) =
     killed survived not_evaluated unknown (count "outside_tests")
     (count "unreached") (List.length m.refused)
     (Sections.mutation_score m)
+    (Sections.mutation_reach m)
+    (Sections.mutation_total m)
     (String.concat "," (List.map executable files))
     (String.concat "," (List.map mutant records))
     (String.concat "," (List.map change (unstable files)))
@@ -782,13 +785,26 @@ project root; PATH arguments (.mutants files, or directories searched
 recursively) replace that default.
 
 The score is the percentage of killed mutants among those killed, survived and
-not evaluated. Runs no tests and drives no build. Exits 1 when an executable
-could not mutation-test its suite. Exits 1 also when any mutant survived every
-executable that reached it, or under --min when the score is below PCT.
+not evaluated. The reach is the percentage of reached mutants among those
+reached, never reached and evaluated outside tests. The total is the percentage
+of killed mutants among those scored, never reached and evaluated outside
+tests. Runs no tests and drives no build. Exits 1 when an executable could not
+mutation-test its suite. Without a gate, exits 1 also when any mutant survived
+every executable that reached it. With a gate, exits 1 when a gate fails, and
+not for a survivor alone.
 
 OPTIONS:
   --min=PCT
-      Exit 1 when the score is below PCT, and not for a survivor alone.
+      Gate: exit 1 when the score is below PCT.
+
+  --min-reach=PCT
+      Gate: exit 1 when the reach is below PCT.
+
+  --min-total=PCT
+      Gate: exit 1 when the total is below PCT.
+
+  --max-survivors=N
+      Gate: exit 1 when more than N mutants survived.
 
   --json
       Machine-readable report on standard output.
@@ -811,7 +827,7 @@ ENVIRONMENT (no flag):
       Any value: never style output (--color auto).|}
 
 type options = {
-  min : float option;
+  gates : Sections.gates;
   json : bool;
   color : Os.color_mode option; (* [--color], which hides [WINDTRAP_COLOR] *)
   lines : Lines.t option; (* [--lines] and [--diff], added up *)
@@ -835,14 +851,32 @@ let options args =
   in
   let rec parse o = function
     | [] -> Ok { o with paths = List.rev o.paths }
-    | "--min" :: value :: args -> (
+    | (("--min" | "--min-reach" | "--min-total") as flag) :: value :: args -> (
         match float_of_string_opt value with
         | Some min when 0. <= min && min <= 100. ->
-            parse { o with min = Some min } args
+            let g = o.gates and min = Some min in
+            let gates =
+              match flag with
+              | "--min" -> { g with min }
+              | "--min-reach" -> { g with min_reach = min }
+              | _ -> { g with min_total = min }
+            in
+            parse { o with gates } args
+        | Some _ | None ->
+            usage_error
+              (strf "invalid value '%s' for %s: expected a percentage (0-100)"
+                 value flag))
+    | "--max-survivors" :: value :: args -> (
+        match int_of_string_opt value with
+        | Some max when String.for_all (fun c -> '0' <= c && c <= '9') value ->
+            parse
+              { o with gates = { o.gates with max_survivors = Some max } }
+              args
         | Some _ | None ->
             usage_error
               (strf
-                 "invalid value '%s' for --min: expected a percentage (0-100)"
+                 "invalid value '%s' for --max-survivors: expected a \
+                  non-negative integer"
                  value))
     | "--json" :: args -> parse { o with json = true } args
     | "--lines" :: value :: args -> (
@@ -857,7 +891,10 @@ let options args =
         | text -> parse (add_lines o (Lines.of_diff text)) args
         | exception Sys_error reason ->
             usage_error (strf "cannot read --diff %s: %s" file reason))
-    | [ (("--min" | "--lines" | "--diff" | "--color") as flag) ] ->
+    | [
+        (( "--min" | "--min-reach" | "--min-total" | "--max-survivors"
+         | "--lines" | "--diff" | "--color" ) as flag);
+      ] ->
         usage_error (strf "option '%s' requires an argument" flag)
     | ("-h" | "--help" | "-help") :: _ ->
         print_endline help;
@@ -875,14 +912,28 @@ let options args =
     match String.index_opt arg '=' with
     | Some i
       when List.mem (String.sub arg 0 i)
-             [ "--min"; "--color"; "--lines"; "--diff" ] ->
+             [
+               "--min";
+               "--min-reach";
+               "--min-total";
+               "--max-survivors";
+               "--color";
+               "--lines";
+               "--diff";
+             ] ->
         [
           String.sub arg 0 i; String.sub arg (i + 1) (String.length arg - i - 1);
         ]
     | Some _ | None -> [ arg ]
   in
   parse
-    { min = None; json = false; color = None; lines = None; paths = [] }
+    {
+      gates = Sections.no_gates;
+      json = false;
+      color = None;
+      lines = None;
+      paths = [];
+    }
     (List.concat_map split args)
 
 (* [WINDTRAP_COLOR] is read when [--color] is absent, refused on the runner's
@@ -904,14 +955,13 @@ let ansi o =
 (* A refused file fails the merge, with a gate or without. A document leaves
    the outcome line out, so the gate gives it. *)
 let gate o (m : Sections.mutation) =
-  match o.min with
-  | None -> if m.survivors = [] && m.refused = [] then 0 else 1
-  | Some min ->
-      if o.json then
-        Os.say
-          (Sections.render ~ansi:false
-             (Sections.mutation_line ~min:(Some min) m));
-      if Sections.mutation_gate_met ~min m then 0 else 1
+  if not (Sections.gated o.gates) then
+    if m.survivors = [] && m.refused = [] then 0 else 1
+  else (
+    if o.json then
+      Os.say
+        (Sections.render ~ansi:false (Sections.mutation_line ~gates:o.gates m));
+    if Sections.mutation_gates_met o.gates m then 0 else 1)
 
 (* Standard output can refuse the text, for example on a full disk. The
    channel is closed, so that the flush at exit does not raise again. *)
@@ -947,7 +997,7 @@ let run args =
          else
            Pp.str "%a"
              (fun out -> Sections.print ~out ~ansi)
-             (Sections.mutation_report ~invocation ~min:o.min mutation))
+             (Sections.mutation_report ~invocation ~gates:o.gates mutation))
     in
     Ok (gate o mutation)
   in

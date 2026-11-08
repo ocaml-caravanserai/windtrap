@@ -576,20 +576,50 @@ val mutation_score : mutation -> float
     reached and a mutant that no worker tested do not count. It is {!percent} of
     [m.killed] in their number, and thus [100.] when [m] has none. *)
 
-val mutation_gate_met : min:float -> mutation -> bool
-(** [mutation_gate_met ~min m] is [true] iff {!mutation_score} of [m] is at
-    least [min] and [m.refused] is empty. A merge without the verdicts of a
-    refused suite fails every gate. *)
+val mutation_reach : mutation -> float
+(** [mutation_reach m] is the percentage of reached mutants among the reached
+    mutants, the mutants that no test reached and the mutants evaluated outside
+    tests of [m], unrounded. The reached count is the one of {!type-mutation}.
+    It is {!percent}, and thus [100.] when [m] has none of them. *)
 
-val mutation_line : min:float option -> mutation -> span list
-(** [mutation_line ~min m] is the outcome line of a mutation report. It gives
+val mutation_total : mutation -> float
+(** [mutation_total m] is the percentage of killed mutants among the scored
+    mutants, the mutants that no test reached and the mutants evaluated outside
+    tests of [m], unrounded. It is {!percent}, and thus [100.] when [m] has none
+    of them. *)
+
+type gates = {
+  min : float option;  (** The minimum of {!mutation_score}. *)
+  min_reach : float option;  (** The minimum of {!mutation_reach}. *)
+  min_total : float option;  (** The minimum of {!mutation_total}. *)
+  max_survivors : int option;  (** The maximum number of survivors. *)
+}
+(** The type for the gates of a mutation report. *)
+
+val no_gates : gates
+(** [no_gates] has no gate. *)
+
+val gated : gates -> bool
+(** [gated g] is [true] iff [g] has a gate. *)
+
+val mutation_gates_met : gates -> mutation -> bool
+(** [mutation_gates_met g m] is [true] iff [m] meets each gate of [g] and
+    [m.refused] is empty, or [g] has no gate. A measure meets its minimum when
+    it is at least the minimum. A merge without the verdicts of a refused suite
+    fails every gate. *)
+
+val mutation_line : gates:gates -> mutation -> span list
+(** [mutation_line ~gates m] is the outcome line of a mutation report. It gives
     the reached count and each other count of [m] that is not zero. Then it
-    gives {!mutation_score} with one decimal, followed by the killed and the
-    scored counts, as in [score 60.0% (3/5)], when [m] has a scored mutant.
-    Under a gate [min] it always gives the score, or [no scored mutant] when [m]
-    has none. Then it gives [min] as {!Pp.decimal} prints it, and [ok] or
-    [FAILED] as {!mutation_gate_met} tells. The score is styled as failing only
-    when it is below [min]. *)
+    gives {!mutation_score}, {!mutation_reach} and {!mutation_total}, each with
+    one decimal, followed by its two counts, as in [score 60.0% (3/5)]. It gives
+    a measure only when its denominator is not zero. Under a gate on a measure
+    it always gives the measure, and the score of no scored mutant is
+    [no scored mutant]. After the measure comes its minimum as {!Pp.decimal}
+    prints it, and [ok] or [FAILED]. Under [max_survivors] the line ends with
+    the maximum, as in [maximum 2 survivors: ok]. A gate is [FAILED] when [m]
+    does not meet it or [m.refused] is not empty. A measure is styled as failing
+    only when it is below its minimum. *)
 
 val survivor_block :
   ?runs:int ->
@@ -651,8 +681,8 @@ val mutation_closing : config:Run.config -> mutation -> section list
     - the outcome line, {!mutation_line} with no gate, always last. *)
 
 val mutation_report :
-  invocation:Run.invocation -> min:float option -> mutation -> section list
-(** [mutation_report ~invocation ~min m] is [m] as a report at rest. It holds
+  invocation:Run.invocation -> gates:gates -> mutation -> section list
+(** [mutation_report ~invocation ~gates m] is [m] as a report at rest. It holds
     one {!survivor_block} per survivor, between an opening rule that carries
     their number and a closing rule. The executables of all blocks form one
     column, which is absent when no reaching test names an executable. The
@@ -662,5 +692,5 @@ val mutation_report :
     outside tests, the [reproduce:] command and the outcome line follow, as
     {!mutation_closing} builds them for a run that selects every test. The
     outcome line counts the suites of [m.refused] after the executables, and it
-    is {!mutation_line} under the gate [min]. A verdict file does not record
+    is {!mutation_line} under [gates]. A verdict file does not record
     [--mutate-workers], so no command here has it. *)

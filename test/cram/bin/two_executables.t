@@ -53,7 +53,7 @@ neither reached:
   ──────────────────────────────────────────────────────────
   
   reproduce: dune exec --instrument-with ppx_windtrap.mutate test/pins_add.exe -- --arm test/cram/bin/calc.ml:14:17:sub
-  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 2 executables, score 66.7% (2/3)
+  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 2 executables, score 66.7% (2/3), reach 75.0% (3/4), total 50.0% (2/4)
   [1]
 
 The document gives the same answer: each mutant with its verdict, and the
@@ -64,7 +64,8 @@ survivor with the tests that ran it in each executable:
   { "version": 1,
     "summary": { "reached": 3, "killed": 2, "survived": 1,
       "not_evaluated": 0, "unknown": 0, "outside_tests": 0,
-      "unreached": 1, "refused": 0, "score": 66.67 },
+      "unreached": 1, "refused": 0, "score": 66.67,
+      "reach_percent": 75.00, "total_percent": 50.00 },
     "executables": [
       { "name": "pins_add.exe", "path": "default/test/pins_add.exe", "suite": "pins_add", "refused": null },
       { "name": "pins_sub.exe", "path": "default/test/pins_sub.exe", "suite": "pins_sub", "refused": null } ],
@@ -104,11 +105,11 @@ not fail the command:
 
   $ run windtrap mutants --min 60 > /dev/null
   $ tail -n 1 "$bin/out"
-  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 2 executables, score 66.7% (2/3), minimum 60%: ok
+  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 2 executables, score 66.7% (2/3), minimum 60%: ok, reach 75.0% (3/4), total 50.0% (2/4)
   $ run windtrap mutants --min 70 > /dev/null
   [1]
   $ tail -n 1 "$bin/out"
-  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 2 executables, score 66.7% (2/3), minimum 70%: FAILED
+  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 2 executables, score 66.7% (2/3), minimum 70%: FAILED, reach 75.0% (3/4), total 50.0% (2/4)
   $ cp merged "$bin/out"
 
 The command's identifier, pasted into that executable, arms the survivor:
@@ -129,7 +130,7 @@ tests of pins_sub.exe, so the report lists no unstable verdict:
   $ grep -e SURVIVED -e 'unstable' -e '^killed elsewhere' -e '^mutants:' -e '^--- stderr' skipped
     SURVIVED  test/cram/bin/calc.ml:14:17:sub  a + b → a - b
   killed elsewhere: 1 mutant, not tested, from the verdict file of default/test/pins_add.exe (1)
-  mutants: 1 survived of 3 reached by this suite, 1 killed, 1 never reached, 1 not tested, score 50.0% (1/2)
+  mutants: 1 survived of 3 reached by this suite, 1 killed, 1 never reached, 1 not tested, score 50.0% (1/2), reach 75.0% (3/4), total 33.3% (1/3)
 
 The merge gives the report of the runs without the option:
 
@@ -146,7 +147,7 @@ pins_add.exe again:
   $ run windtrap mutants > /dev/null
   [1]
   $ tail -n 1 "$bin/out"
-  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 1 executable, score 66.7% (2/3)
+  mutants: 1 survived of 3 reached, 2 killed, 1 never reached, 1 executable, score 66.7% (2/3), reach 75.0% (3/4), total 50.0% (2/4)
   $ masked
   windtrap: .../windtrap-HASH-HASH.mutants: not written by the executable now at _build/default/test/pins_add.exe (rebuilt since); excluding it
   windtrap: re-run every suite with its mutants, then merge again; delete the files whose executable or suite no longer exists
@@ -163,7 +164,7 @@ verdict:
     SURVIVED  test/cram/bin/calc.ml:12:14:sub  a + b → a - b
     SURVIVED  test/cram/bin/calc.ml:14:17:sub  a + b → a - b
   killed elsewhere: 0 mutants, not tested, from no other verdict file
-  mutants: 2 survived of 3 reached by this suite, 1 killed, 1 never reached, score 33.3% (1/3)
+  mutants: 2 survived of 3 reached by this suite, 1 killed, 1 never reached, score 33.3% (1/3), reach 75.0% (3/4), total 25.0% (1/4)
   $ masked
   windtrap: warning: --skip-killed ignores .../windtrap-HASH-HASH.mutants: not written by the executable now at _build/default/test/pins_add.exe
   $ cd / && rm -rf "$root"

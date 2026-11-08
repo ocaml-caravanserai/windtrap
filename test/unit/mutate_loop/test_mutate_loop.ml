@@ -474,7 +474,7 @@ let green_rows =
 
 let green_outcome =
   "mutants: 1 survived of 2 reached by this suite, 1 killed, 2 never reached, \
-   score 50.0% (1/2)"
+   score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
 
 let narrowing =
   "its selection narrowed the suite, so it saved no verdict: run it whole"
@@ -587,7 +587,7 @@ let outside_tests () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 2 reached by this suite, 1 killed, 2 evaluated \
-     outside tests, score 50.0% (1/2)"
+     outside tests, score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -607,7 +607,7 @@ let tagged () =
   equal string "calc: 5 passed in <time>." (summary r.out);
   equal string
     "mutants: 1 survived of 2 reached by the 5 selected tests, 1 killed, 2 \
-     never reached, score 50.0% (1/2)"
+     never reached, score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
     (outcome r.out);
   equal (list string)
     [
@@ -696,7 +696,7 @@ let own_at_exit () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 3 reached by this suite, 2 killed, 1 never \
-     reached, score 66.7% (2/3)"
+     reached, score 66.7% (2/3), reach 75.0% (3/4), total 50.0% (2/4)"
     (outcome r.out);
   let pids = pids (read log) in
   equal int (List.length pids) (List.length (List.sort_uniq Int.compare pids));
@@ -729,7 +729,7 @@ let inline_loop () =
   contains ~sub:"inline_armed: 1 passed" r.out;
   equal string
     "mutants: 1 reached by this suite, 1 killed, 3 never reached, score 100.0% \
-     (1/1)"
+     (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
     (outcome r.out);
   equal (list string) [ "inline_armed.ml" ] left
 
@@ -740,7 +740,7 @@ let children =
           let b = Lazy.force baseline_loop in
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome b.ran.out);
           equal text "6" b.baseline);
       test
@@ -776,7 +776,7 @@ let crashed () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 3 reached by this suite, 1 killed, 1 unknown, 1 \
-     never reached, score 50.0% (1/2)"
+     never reached, score 50.0% (1/2), reach 75.0% (3/4), total 33.3% (1/3)"
     (outcome r.out);
   contains
     ~sub:
@@ -801,7 +801,7 @@ let cold_cache () =
   equal string "exited 0" r.status;
   equal string
     "mutants: 2 reached by this suite, 2 killed, 2 never reached, score 100.0% \
-     (2/2)"
+     (2/2), reach 50.0% (2/4), total 50.0% (2/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -826,7 +826,7 @@ let not_evaluated () =
   equal (list string) [] (survivors r.out);
   equal string
     "mutants: 2 reached by this suite, 1 killed, 1 not evaluated, 2 never \
-     reached, score 50.0% (1/2)"
+     reached, score 50.0% (1/2), reach 50.0% (2/4), total 25.0% (1/4)"
     (outcome r.out);
   contains ~sub:(strf "arm: %s --arm %s\n" suite_exe (site 18)) r.out
 
@@ -835,7 +835,7 @@ let capped () =
   equal (list string) [ site 18; site 21 ] (survivors r.out);
   equal string
     "mutants: 2 survived of 3 reached by this suite, 1 killed, 1 never \
-     reached, score 33.3% (1/3)"
+     reached, score 33.3% (1/3), reach 75.0% (3/4), total 25.0% (1/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -900,7 +900,7 @@ let verdicts =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out));
       test "a mutant its child did not evaluate is no survivor" not_evaluated;
       test "the verdict file records it as not evaluated" (fun () ->
@@ -932,7 +932,8 @@ let verdicts =
           equal text "" r.err;
           equal text
             "calc: 6 passed in <time>.\n\
-             mutants: 4 reached by this suite, 4 killed, score 100.0% (4/4)\n"
+             mutants: 4 reached by this suite, 4 killed, score 100.0% (4/4), \
+             reach 100.0% (4/4), total 100.0% (4/4)\n"
             (masked r.out));
     ]
 
@@ -988,7 +989,7 @@ let unevaluated_failure () =
   equal text "" r.err;
   equal string
     "mutants: 1 reached by this suite, 1 not evaluated, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   contains
     ~sub:
@@ -1011,7 +1012,7 @@ let before_evaluation =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 survived of 1 reached by this suite, 3 never reached, \
-             score 0.0% (0/1)"
+             score 0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
             (outcome r.out);
           equal
             (option (list string))
@@ -1026,7 +1027,7 @@ let before_evaluation =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 reached by this suite, 1 not evaluated, 3 never \
-             reached, score 0.0% (0/1)"
+             reached, score 0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
             (outcome r.out);
           contains
             ~sub:
@@ -1060,7 +1061,7 @@ let before_evaluation =
           equal string "exited 0" r.status;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out));
       test "an armed run counts an evaluation in a forked process" (fun () ->
           let r = spawn ~env:[ suite "forked" ] [ "--arm"; site 18 ] in
@@ -1153,7 +1154,7 @@ let no_xfail_witness () =
     (witnesses r.out);
   equal string
     "mutants: 2 survived of 2 reached by this suite, 2 never reached, score \
-     0.0% (0/2)"
+     0.0% (0/2), reach 50.0% (2/4), total 0.0% (0/4)"
     (outcome r.out)
 
 let known_armed line = spawn ~env:[ suite "known" ] [ "--arm"; site line ]
@@ -1192,10 +1193,10 @@ let budget (k, over) =
   equal string
     (if over = 0 then
        "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-        0.0% (0/1)"
+        0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
      else
        "mutants: 1 reached by this suite, 1 killed, 3 never reached, score \
-        100.0% (1/1)")
+        100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)")
     (outcome r.out)
 
 (* The runaway fixture's mutant spins; the hit budget stops it within
@@ -1236,7 +1237,9 @@ let deadline_kill () =
   let b = Lazy.force blocked in
   equal string "exited 0" b.run.status;
   equal text "" b.run.err;
-  equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+  equal string
+    "mutants: 1 reached by this suite, 1 unknown, 3 never reached, reach 25.0% \
+     (1/4), total 0.0% (0/3)"
     (outcome b.run.out);
   equal
     (option (list string))
@@ -1295,7 +1298,9 @@ let memory_limit () =
   let r = hog_run [ "--mutate-memory=64" ] in
   equal string "exited 0" r.status;
   equal text "" r.err;
-  equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+  equal string
+    "mutants: 1 reached by this suite, 1 unknown, 3 never reached, reach 25.0% \
+     (1/4), total 0.0% (0/3)"
     (outcome r.out);
   equal
     (option (list string))
@@ -1336,7 +1341,7 @@ let slow () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -1438,7 +1443,7 @@ let narrowed () =
   equal string "exited 0" (ended r.Child.status);
   equal string
     "mutants: 1 reached by the 3 selected tests, 1 killed, 3 never reached, \
-     score 100.0% (1/1)"
+     score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
     (outcome r.Child.out);
   equal (option string) None (reproduce r.Child.out);
   equal text not_saved r.Child.err;
@@ -1527,7 +1532,7 @@ let unwritable () =
   equal string "exited 0" r.status;
   equal string
     "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   starts_with ~prefix:"windtrap: could not write the verdict file: " r.err;
   equal int 1 (List.length (lines (String.trim r.err)))
@@ -1554,16 +1559,18 @@ let line_scope () =
   equal
     (list (pair string (option (list string))))
     [
-      ( "mutants: 1 survived of 1 reached by this suite, score 0.0% (0/1)",
+      ( "mutants: 1 survived of 1 reached by this suite, score 0.0% (0/1), \
+         reach 100.0% (1/1), total 0.0% (0/1)",
         Some
           [
             "subject.ml:18 survived by widen \u{203a} widen is nonzero, widen \
              \u{203a} widen is not 99";
           ] );
-      ( "mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1)",
+      ( "mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach \
+         100.0% (1/1), total 100.0% (1/1)",
         Some [ "subject.ml:15 killed" ] );
       ( "mutants: 1 survived of 2 reached by this suite, 1 killed, score 50.0% \
-         (1/2)",
+         (1/2), reach 100.0% (2/2), total 50.0% (1/2)",
         Some (List.filteri (fun i _ -> i < 2) green_rows) );
     ]
     [
@@ -1806,7 +1813,7 @@ let refusals =
           equal text "" r.err;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out));
       test
         "a process that spawned a domain before its run is tested, in workers \
@@ -1816,7 +1823,7 @@ let refusals =
           equal text "" r.err;
           equal string
             "mutants: 1 reached by this suite, 1 killed, 3 never reached, \
-             score 100.0% (1/1)"
+             score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
             (outcome r.out);
           equal (option bool) (Some false)
             (Option.map (fun (f : file) -> Option.is_some f.refused) r.file));
@@ -1828,7 +1835,7 @@ let workers = "--mutate-workers"
 
 let one_killed =
   "mutants: 1 reached by this suite, 1 killed, 3 never reached, score 100.0% \
-   (1/1)"
+   (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
 
 let killed_by_stateful () =
   let r = spawn ~env:[ suite "stateful_domains" ] [ mutate ] in
@@ -1877,7 +1884,7 @@ let pool_alone () =
   equal (pair string text) ("exited 0", "") (r.status, r.err);
   equal ~msg:r.out string
     "mutants: 3 survived of 3 reached by this suite, 1 never reached, score \
-     0.0% (0/3)"
+     0.0% (0/3), reach 75.0% (3/4), total 0.0% (0/4)"
     (outcome r.out);
   equal (option string)
     (Some (strf "%s --arm %s --mutate-workers" suite_exe (site 15)))
@@ -1913,7 +1920,9 @@ let stateful_domains =
       test
         "without --mutate-workers, no test reaches a site that only a worker \
          of the pool evaluates" (fun () ->
-          equal string "mutants: 0 reached by this suite, 4 never reached"
+          equal string
+            "mutants: 0 reached by this suite, 4 never reached, reach 0.0% \
+             (0/4), total 0.0% (0/4)"
             (outcome (on_workers [ mutate ]).out));
       test "with --mutate-workers, the pool kills the mutant of such a site"
         (fun () ->
@@ -2262,7 +2271,7 @@ let held_order () =
     (witnesses r.out);
   equal string
     "mutants: 2 survived of 2 reached by this suite, 2 never reached, score \
-     0.0% (0/2)"
+     0.0% (0/2), reach 50.0% (2/4), total 0.0% (0/4)"
     (outcome r.out);
   equal (option string)
     (Some (strf "%s --arm %s" suite_exe (site 15)))
@@ -2396,7 +2405,7 @@ let interrupted_by ?planted signal =
 
 let interrupted_outcome =
   "mutants: 1 survived of 3 reached by this suite, 1 never reached, 2 not \
-   tested, score 0.0% (0/1)"
+   tested, score 0.0% (0/1), reach 75.0% (3/4), total 0.0% (0/2)"
 
 let stopped () =
   let r, grandchildren, left = interrupted_by Sys.sigint in
@@ -2439,7 +2448,9 @@ let probe_interrupted () =
   let r = finish run in
   equal string "killed by SIGINT" r.status;
   equal text "windtrap: interrupted during the determinism probe\n" r.err;
-  equal string "mutants: 1 reached by this suite, 3 never reached, 1 not tested"
+  equal string
+    "mutants: 1 reached by this suite, 3 never reached, 1 not tested, reach \
+     25.0% (1/4), total 0.0% (0/3)"
     (outcome r.out);
   equal (list string) [] (entries tmpdir)
 
@@ -2457,7 +2468,7 @@ let after_last_child () =
   equal text "" r.err;
   equal string
     "mutants: 1 survived of 1 reached by this suite, 3 never reached, score \
-     0.0% (0/1)"
+     0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
     (outcome r.out);
   equal
     (option (list string))
@@ -2657,7 +2668,7 @@ let skipped_rows exe =
 
 let skipped_outcome =
   "mutants: 1 survived of 2 reached by this suite, 2 never reached, 1 not \
-   tested, score 0.0% (0/1)"
+   tested, score 0.0% (0/1), reach 50.0% (2/4), total 0.0% (0/3)"
 
 let old_name = "windtrap-old.mutants"
 
@@ -2719,7 +2730,7 @@ let survivor_killed_elsewhere () =
   equal (option string) None (reproduce r.out);
   equal string
     "mutants: 2 reached by this suite, 1 killed, 2 never reached, 1 not \
-     tested, score 100.0% (1/1)"
+     tested, score 100.0% (1/1), reach 50.0% (2/4), total 33.3% (1/3)"
     (outcome r.out);
   equal
     (option (list string))
@@ -2860,7 +2871,9 @@ let smaller_executable first =
        "killed elsewhere: 2 mutants, not tested, from the verdict files of \
         default/a.exe (1), default/b.exe (1)")
     (elsewhere_line r.out);
-  equal string "mutants: 2 reached by this suite, 2 never reached, 2 not tested"
+  equal string
+    "mutants: 2 reached by this suite, 2 never reached, 2 not tested, reach \
+     50.0% (2/4), total 0.0% (0/2)"
     (outcome r.out)
 
 let ignored_files () =
@@ -2942,7 +2955,9 @@ let line_scope_of_the_skip () =
   equal
     (option (list string))
     (Some [ "subject.ml:15 killed elsewhere by default/other.exe" ]) (rows r);
-  equal string "mutants: 1 reached by this suite, 1 not tested" (outcome r.out);
+  equal string
+    "mutants: 1 reached by this suite, 1 not tested, reach 100.0% (1/1)"
+    (outcome r.out);
   equal (option string)
     (Some (one_skip "default/other.exe"))
     (elsewhere_line r.out)
@@ -2965,7 +2980,8 @@ let narrowed_skip () =
     (Some (one_skip "default/other.exe"))
     (elsewhere_line r.out);
   equal string
-    "mutants: 1 reached by the 3 selected tests, 3 never reached, 1 not tested"
+    "mutants: 1 reached by the 3 selected tests, 3 never reached, 1 not \
+     tested, reach 25.0% (1/4), total 0.0% (0/3)"
     (outcome r.out)
 
 (* [interrupted]'s child of [widen] hangs until the signal. *)
@@ -2992,7 +3008,9 @@ let interrupted_skip () =
   equal (option string)
     (Some (one_skip "default/other.exe"))
     (elsewhere_line r.out);
-  equal string "mutants: 3 reached by this suite, 1 never reached, 3 not tested"
+  equal string
+    "mutants: 3 reached by this suite, 1 never reached, 3 not tested, reach \
+     75.0% (3/4), total 0.0% (0/1)"
     (outcome r.out);
   is_false (Sys.file_exists (own p));
   equal (list string) [ "gone" ] (List.map fate (pids (read pidfile)))
@@ -3518,21 +3536,23 @@ let intermittent ?(keep = false) ?(env = []) args =
 
 let survived_outcome =
   "mutants: 1 survived of 1 reached by this suite, 3 never reached, score 0.0% \
-   (0/1)"
+   (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
 
 let killed_outcome =
   "mutants: 1 reached by this suite, 1 killed, 3 never reached, score 100.0% \
-   (1/1)"
+   (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
 
 let not_evaluated_outcome =
   "mutants: 1 reached by this suite, 1 not evaluated, 3 never reached, score \
-   0.0% (0/1)"
+   0.0% (0/1), reach 25.0% (1/4), total 0.0% (0/4)"
 
 let unknown_outcome =
-  "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
+  "mutants: 1 reached by this suite, 1 unknown, 3 never reached, reach 25.0% \
+   (1/4), total 0.0% (0/3)"
 
 let not_tested_outcome =
-  "mutants: 1 reached by this suite, 3 never reached, 1 not tested"
+  "mutants: 1 reached by this suite, 3 never reached, 1 not tested, reach \
+   25.0% (1/4), total 0.0% (0/3)"
 
 (* The rows of [intermittent], with [verdict] on line 18. *)
 let intermittent_rows verdict =
@@ -3856,7 +3876,9 @@ let interrupted_before_a_retry () =
   equal string "killed by SIGINT" r.status;
   equal text (strf "windtrap: interrupted while testing %s\n" (site 18)) r.err;
   equal (list string) [] (survivors out);
-  equal string "mutants: 2 reached by this suite, 2 never reached, 2 not tested"
+  equal string
+    "mutants: 2 reached by this suite, 2 never reached, 2 not tested, reach \
+     50.0% (2/4), total 0.0% (0/2)"
     (outcome out);
   equal (option (list string)) None (rows r);
   equal (list string) [] (entries tmpdir)
@@ -3900,7 +3922,7 @@ let retries_in_order () =
   is_true (String.ends_with ~suffix:"  (2 runs)" (title_of 18 r.out));
   equal string
     "mutants: 2 survived of 2 reached by this suite, 2 never reached, score \
-     0.0% (0/2)"
+     0.0% (0/2), reach 50.0% (2/4), total 0.0% (0/4)"
     (outcome r.out)
 
 (* Under -j 4 and --mutate-workers, the job with a pool test runs alone in
@@ -3915,7 +3937,7 @@ let pool_alone_in_a_retry () =
   ended_well r;
   equal ~msg:r.out string
     "mutants: 3 survived of 3 reached by this suite, 1 never reached, score \
-     0.0% (0/3)"
+     0.0% (0/3), reach 75.0% (3/4), total 0.0% (0/4)"
     (outcome r.out);
   let pool, spans = notes path in
   is_true ~msg:"the pool test ran under its mutant" (pool <> []);
@@ -4087,11 +4109,13 @@ let one_check_clean () =
   equal int 7 k.b_runs;
   equal string
     "mutants: 2 reached by this suite, 2 killed, 2 never reached, score 100.0% \
-     (2/2)"
+     (2/2), reach 50.0% (2/4), total 50.0% (2/4)"
     (outcome k.r.out);
   equal (option (list string)) (two_rows "killed") (rows k.r)
 
-let two_unknown = "mutants: 2 reached by this suite, 2 unknown, 2 never reached"
+let two_unknown =
+  "mutants: 2 reached by this suite, 2 unknown, 2 never reached, reach 50.0% \
+   (2/4), total 0.0% (0/2)"
 
 let one_check_flaky () =
   let k = kill_run ~env:[ kill_sub; fail_at "3,4,5" ] [ retry_once ] in
@@ -4249,7 +4273,8 @@ let interrupted_check () =
   equal string not_tested_outcome (outcome r.out)
 
 let two_not_tested =
-  "mutants: 2 reached by this suite, 2 never reached, 2 not tested"
+  "mutants: 2 reached by this suite, 2 never reached, 2 not tested, reach \
+   50.0% (2/4), total 0.0% (0/2)"
 
 (* The check of the two kills waits at the gate. The message names the
    first mutant that waits for it. *)
