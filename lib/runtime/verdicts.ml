@@ -483,20 +483,17 @@ let load path =
     | word -> Instr.parse_fail "expected the sample line, found %S" word);
     match Instr.read_word c "sample" with
     | "none" -> None
-    | word ->
+    | word -> (
         let percent =
           match float_of_string_opt word with
           | Some p when p > 0. && p < 100. -> p
           | Some _ | None -> Instr.parse_fail "invalid sample percent %S" word
         in
         let token = Instr.read_word c "sample seed" in
-        let hex = function '0' .. '9' | 'a' .. 'f' -> true | _ -> false in
-        if
-          String.length token = 19
-          && String.starts_with ~prefix:"s1:" token
-          && String.for_all hex (String.sub token 3 16)
-        then Some (percent, Int64.of_string ("0x" ^ String.sub token 3 16))
-        else Instr.parse_fail "invalid sample seed %S" token
+        match Scanf.sscanf_opt token "s1:%Lx%!" Fun.id with
+        | Some seed when String.equal (seed_token seed) token ->
+            Some (percent, seed)
+        | Some _ | None -> Instr.parse_fail "invalid sample seed %S" token)
   in
   let read_record ~sampled c =
     let file = Instr.read_name c "file name" in

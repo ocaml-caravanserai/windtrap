@@ -5785,23 +5785,25 @@ let sample_mirror_alone () =
    with the same sample, here with line 15 planted as survived. *)
 let sample_save () =
   let on_18 = "--lines=test/unit/mutate_loop/subject.ml:18" in
-  remove (verdicts_path ());
-  whole (rerun [ mutate ]);
-  let r = rerun [ mutate; "--sample=75" ] in
-  equal string "exited 0" r.status;
-  equal (option (list string)) (Some only_18) (rows r);
+  let rows_of args =
+    let r = rerun (mutate :: args) in
+    equal string "exited 0" r.status;
+    rows r
+  in
   let planted args =
     remove (verdicts_path ());
     ignore (rerun (mutate :: args));
     rewrite (at_line 15 (survived_by "sub to zero"))
   in
+  remove (verdicts_path ());
+  whole (rerun [ mutate ]);
+  equal (option (list string)) (Some only_18) (rows_of [ "--sample=75" ]);
   planted [];
-  let r = rerun [ mutate; "--sample=75"; on_18 ] in
-  equal string "exited 0" r.status;
-  equal (option (list string)) (Some [ List.nth green_rows 1 ]) (rows r);
+  equal
+    (option (list string))
+    (Some [ List.nth green_rows 1 ])
+    (rows_of [ "--sample=75"; on_18 ]);
   planted [ "--sample=75" ];
-  let r = rerun [ mutate; "--sample=75"; on_18 ] in
-  equal string "exited 0" r.status;
   equal
     (option (list string))
     (Some
@@ -5811,11 +5813,12 @@ let sample_save () =
          "subject.ml:21 unreached";
          "subject.ml:27 unreached";
        ])
-    (rows r);
+    (rows_of [ "--sample=75"; on_18 ]);
   planted [ "--sample=75" ];
-  let r = rerun [ mutate; on_18 ] in
-  equal string "exited 0" r.status;
-  equal (option (list string)) (Some [ List.nth green_rows 1 ]) (rows r)
+  equal
+    (option (list string))
+    (Some [ List.nth green_rows 1 ])
+    (rows_of [ on_18 ])
 
 (* A sampled run reuses only in its sample. A full run after it tests again
    what the sampled run did not test. *)

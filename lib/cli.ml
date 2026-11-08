@@ -174,8 +174,7 @@ let rewrite_names value =
 (* A sample of 100% is no sample. *)
 let sample_percent value =
   match float_of_string_opt value with
-  | Some p when Float.is_finite p && p > 0. && p <= 100. ->
-      Ok (if p >= 100. then None else Some p)
+  | Some p when p > 0. && p <= 100. -> Ok (if p = 100. then None else Some p)
   | Some _ | None -> Error "a percentage above 0 and at most 100"
 
 let replay_token value = Result.map (fun _ -> value) (Choice.of_token value)

@@ -1475,8 +1475,9 @@ let unknown_format (_, text) =
          | Error (Verdicts.Unknown_format { path; _ }) -> Some path | _ -> None)
        loaded)
 
-let record_prefix =
-  "windtrap-mutants-v16\ntested\nsample none\n0\n1\n8 lib/a.ml "
+(* The header of a tested file with no identity and no sample. *)
+let tested = "windtrap-mutants-v16\ntested\nsample none\n"
+let record_prefix = tested ^ "0\n1\n8 lib/a.ml "
 
 (* The fields after the previous outcome of a valid record. *)
 let tail = " 0 1 " ^ zeros ^ " none fresh"
@@ -1492,8 +1493,7 @@ let effort_prefix =
   record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 1 1 1 t none "
 
 (* A file with the test count and digest lines [lines], and no record. *)
-let with_digests lines =
-  "windtrap-mutants-v16\ntested\nsample none\n" ^ lines ^ "0\n"
+let with_digests lines = tested ^ lines ^ "0\n"
 
 (* A file with the sample line [line] and no record. *)
 let with_sample line = "windtrap-mutants-v16\ntested\n" ^ line ^ "\n0\n0\n"
@@ -1520,31 +1520,15 @@ let corrupt_files =
       ^ "\n0\n1\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  not_sampled none 0 1 "
       ^ zeros ^ " none reused\n" );
     ("the magic line alone", "windtrap-mutants-v16");
-    ( "a negative record count",
-      "windtrap-mutants-v16\ntested\nsample none\n0\n-1\n" );
-    ( "a record count past the input",
-      "windtrap-mutants-v16\ntested\nsample none\n0\n99999999\n" );
+    ("a negative record count", tested ^ "0\n-1\n");
+    ("a record count past the input", tested ^ "0\n99999999\n");
     ( "fewer records than the count",
-      "windtrap-mutants-v16\n\
-       tested\n\
-       sample none\n\
-       0\n\
-       2\n\
-       8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none" ^ tail ^ "\n" );
+      tested ^ "0\n2\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none" ^ tail
+      ^ "\n" );
     ( "an empty file name",
-      "windtrap-mutants-v16\n\
-       tested\n\
-       sample none\n\
-       0\n\
-       1\n\
-       0  1 2 1 5 3 add 0 0 1 b 1 a 0  unreached\n" );
+      tested ^ "0\n1\n0  1 2 1 5 3 add 0 0 1 b 1 a 0  unreached\n" );
     ( "a file name past the input",
-      "windtrap-mutants-v16\n\
-       tested\n\
-       sample none\n\
-       0\n\
-       1\n\
-       80 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached\n" );
+      tested ^ "0\n1\n80 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached\n" );
     ("line 0", record_prefix ^ "0 2 1 5 3 add 1 b 1 a 0  unreached\n");
     ("a negative line", record_prefix ^ "-3 2 1 5 3 add 1 b 1 a 0  unreached\n");
     ("a negative column", record_prefix ^ "1 -2 3 add 1 b 1 a 0  unreached\n");
@@ -1616,20 +1600,10 @@ let corrupt_files =
     ( "a flaky kill with no failure",
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  unknown flaky_kill 1 1 t\n" );
     ( "two records of one identifier",
-      "windtrap-mutants-v16\n\
-       tested\n\
-       sample none\n\
-       0\n\
-       2\n\
-       8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none" ^ tail
+      tested ^ "0\n2\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  unreached none" ^ tail
       ^ "\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed 0 none" ^ tail ^ "\n" );
     ( "a malformed record after a valid one",
-      "windtrap-mutants-v16\n\
-       tested\n\
-       sample none\n\
-       0\n\
-       2\n\
-       8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed 0 none" ^ tail
+      tested ^ "0\n2\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  killed 0 none" ^ tail
       ^ "\n8 lib/a.ml 0 2 1 5 3 add 1 b 1 a 0  unreached none" ^ tail ^ "\n" );
     ( "no previous outcome",
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0\n" );
@@ -1650,11 +1624,10 @@ let corrupt_files =
       "windtrap-mutants-v16\nsuite 1 s\nsuite 1 t\ntested\n0\n" );
     ( "a suite before the identity",
       "windtrap-mutants-v16\nsuite 1 s\nexe " ^ digest ^ " 1 a\ntested\n0\n" );
-    ( "bytes after the last record",
-      "windtrap-mutants-v16\ntested\nsample none\n0\n0\nextra\n" );
+    ("bytes after the last record", tested ^ "0\n0\nextra\n");
     ("a negative test count", with_digests "-1\n");
     ("a test count past the input", with_digests "99999999\n");
-    ("no test count", "windtrap-mutants-v16\ntested\nsample none\n");
+    ("no test count", tested);
     ("a short test digest", with_digests "1\n1 1 t abc\n");
     ( "an uppercase test digest",
       with_digests ("1\n1 1 t " ^ String.make 32 'A' ^ "\n") );
