@@ -882,6 +882,297 @@ branch in tail position:
        else [])]
     else [[y]]
 
+A record update has a keep site at each field, when it has at most eight
+fields. The guard holds the original first, and a copy of the update
+without the field:
+
+  $ mut --impl ./fixture_keep.ml | ../elide.exe
+  mutation sites of "./fixture_keep.ml" in Windtrap_mut_________fixture_keep___ml:
+    0: 7:25-7:31 "keep" "{ p with x = dx }" -> "p"
+    1: 8:29-8:35 "keep" "{ p with x = dx; y = dy }" -> "{ p with y = dy }"
+    2: 8:37-8:43 "keep" "{ p with x = dx; y = dy }" -> "{ p with x = dx }"
+    3: 22:25-22:30 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with b = v; c = v; d = v; e = v; f = v; g = v; h = v }"
+    4: 22:32-22:37 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with a = v; c = v; d = v; e = v; f = v; g = v; h = v }"
+    5: 22:39-22:44 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with a = v; b = v; d = v; e = v; f = v; g = v; h = v }"
+    6: 22:46-22:51 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with a = v; b = v; c = v; e = v; f = v; g = v; h = v }"
+    7: 22:53-22:58 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with a = v; b = v; c = v; d = v; f = v; g = v; h = v }"
+    8: 22:60-22:65 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with a = v; b = v; c = v; d = v; e = v; g = v; h = v }"
+    9: 22:67-22:72 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with a = v; b = v; c = v; d = v; e = v; f = v; h = v }"
+    10: 22:74-22:79 "keep" "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v }" -> "{ w with a = v; b = v; c = v; d = v; e = v; f = v; g = v }"
+    11: 33:33-33:40 "keep" "{ r with M.u = n; v = n; w = n }" -> "{ r with M.v = n; w = n }"
+    12: 33:42-33:47 "keep" "{ r with M.u = n; v = n; w = n }" -> "{ r with M.u = n; w = n }"
+    13: 33:49-33:54 "keep" "{ r with M.u = n; v = n; w = n }" -> "{ r with M.u = n; v = n }"
+    14: 34:42-34:49 "keep" "{ r with M.u = n; M.v = n }" -> "{ r with M.v = n }"
+    15: 34:51-34:58 "keep" "{ r with M.u = n; M.v = n }" -> "{ r with M.u = n }"
+    16: 35:41-35:48 "keep" "{ r with M.u = n }" -> "r"
+    17: 41:37-41:46 "keep" "Box { r with width = n; height = n }" -> "Box { r with height = n }"
+    18: 41:48-41:58 "keep" "Box { r with width = n; height = n }" -> "Box { r with width = n }"
+    19: 43:52-43:61 "keep" "Box { r with width = n }" -> "Box r"
+    20: 49:26-49:56 "keep" "{ q with inner = { (q.inner) with y = n }; outer = n }" -> "{ q with outer = n }"
+    21: 49:58-49:67 "keep" "{ q with inner = { (q.inner) with y = n }; outer = n }" -> "{ q with inner = { (q.inner) with y = n } }"
+    22: 49:49-49:54 "keep" "{ (q.inner) with y = n }" -> "q.inner"
+    23: 50:40-50:45 "keep" "{ (origin ()) with y = n }" -> "origin ()"
+    24: 51:25-51:45 "keep" "{ p with x = (print_int n; n); y = n }" -> "{ p with y = n }"
+    25: 51:47-51:52 "keep" "{ p with x = (print_int n; n); y = n }" -> "{ p with x = (print_int n; n) }"
+    26: 51:30-51:41 "del" "print_int n" -> "()"
+    27: 52:26-52:27 "keep" "{ p with x }" -> "p"
+    28: 56:30-56:35 "keep" "{ p with x = n; y = n }" -> "{ p with y = n }", dismissed "reason"
+    29: 56:37-56:42 "keep" "{ p with x = n; y = n }" -> "{ p with x = n }", dismissed "reason"
+  type point = {
+    x: int ;
+    y: int }
+  let move p dx =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 0)
+    then { p with x = dx }
+    else ((p)[@ocaml.warning "-18-40-41-42"])
+  let place p dx dy =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 1)
+    then
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 2)
+       then { p with x = dx; y = dy }
+       else (({ p with x = dx })[@ocaml.warning "-18-40-41-42"]))
+    else (({ p with y = dy })[@ocaml.warning "-18-40-41-42"])
+  type wide =
+    {
+    a: int ;
+    b: int ;
+    c: int ;
+    d: int ;
+    e: int ;
+    f: int ;
+    g: int ;
+    h: int ;
+    i: int }
+  let eight w v =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 3)
+    then
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 4)
+       then
+         (if
+            Stdlib.not
+              (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 5)
+          then
+            (if
+               Stdlib.not
+                 (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 6)
+             then
+               (if
+                  Stdlib.not
+                    (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___
+                       7)
+                then
+                  (if
+                     Stdlib.not
+                       (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___
+                          8)
+                   then
+                     (if
+                        Stdlib.not
+                          (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___
+                             9)
+                      then
+                        (if
+                           Stdlib.not
+                             (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___
+                                10)
+                         then
+                           {
+                             w with
+                             a = v;
+                             b = v;
+                             c = v;
+                             d = v;
+                             e = v;
+                             f = v;
+                             g = v;
+                             h = v
+                           }
+                         else
+                           (({
+                               w with
+                               a = v;
+                               b = v;
+                               c = v;
+                               d = v;
+                               e = v;
+                               f = v;
+                               g = v
+                             })
+                           [@ocaml.warning "-18-40-41-42"]))
+                      else
+                        (({
+                            w with
+                            a = v;
+                            b = v;
+                            c = v;
+                            d = v;
+                            e = v;
+                            f = v;
+                            h = v
+                          })
+                        [@ocaml.warning "-18-40-41-42"]))
+                   else
+                     (({ w with a = v; b = v; c = v; d = v; e = v; g = v; h = v
+                       })
+                     [@ocaml.warning "-18-40-41-42"]))
+                else
+                  (({ w with a = v; b = v; c = v; d = v; f = v; g = v; h = v })
+                  [@ocaml.warning "-18-40-41-42"]))
+             else (({ w with a = v; b = v; c = v; e = v; f = v; g = v; h = v })
+               [@ocaml.warning "-18-40-41-42"]))
+          else (({ w with a = v; b = v; d = v; e = v; f = v; g = v; h = v })
+            [@ocaml.warning "-18-40-41-42"]))
+       else (({ w with a = v; c = v; d = v; e = v; f = v; g = v; h = v })
+         [@ocaml.warning "-18-40-41-42"]))
+    else (({ w with b = v; c = v; d = v; e = v; f = v; g = v; h = v })
+      [@ocaml.warning "-18-40-41-42"])
+  let nine w v =
+    { w with a = v; b = v; c = v; d = v; e = v; f = v; g = v; h = v; i = v }
+  module M = struct type t = {
+                      u: int ;
+                      v: int ;
+                      w: int } end
+  let moved (r : M.t) n =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 11)
+    then
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 12)
+       then
+         (if
+            Stdlib.not
+              (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 13)
+          then { r with M.u = n; v = n; w = n }
+          else (({ r with M.u = n; v = n })[@ocaml.warning "-18-40-41-42"]))
+       else (({ r with M.u = n; w = n })[@ocaml.warning "-18-40-41-42"]))
+    else (({ r with M.v = n; w = n })[@ocaml.warning "-18-40-41-42"])
+  let both_qualified (r : M.t) n =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 14)
+    then
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 15)
+       then { r with M.u = n; M.v = n }
+       else (({ r with M.u = n })[@ocaml.warning "-18-40-41-42"]))
+    else (({ r with M.v = n })[@ocaml.warning "-18-40-41-42"])
+  let one_qualified (r : M.t) n =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 16)
+    then { r with M.u = n }
+    else ((r)[@ocaml.warning "-18-40-41-42"])
+  type shape =
+    | Box of {
+    width: int ;
+    height: int } 
+    | Dot 
+  let widen s n =
+    match s with
+    | Box r ->
+        if
+          Stdlib.not
+            (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 17)
+        then
+          (if
+             Stdlib.not
+               (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 18)
+           then Box { r with width = n; height = n }
+           else ((Box { r with width = n })[@ocaml.warning "-18-40-41-42"]))
+        else ((Box { r with height = n })[@ocaml.warning "-18-40-41-42"])
+    | Dot -> Dot
+  let narrow s n =
+    match s with
+    | Box r ->
+        if
+          Stdlib.not
+            (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 19)
+        then Box { r with width = n }
+        else ((Box r)[@ocaml.warning "-18-40-41-42"])
+    | Dot -> Dot
+  type pair = {
+    inner: point ;
+    outer: int }
+  let nested q n =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 20)
+    then
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 21)
+       then
+         {
+           q with
+           inner =
+             ((if
+                 Stdlib.not
+                   (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___
+                      22)
+               then { (q.inner) with y = n }
+               else ((q.inner)[@ocaml.warning "-18-40-41-42"])));
+           outer = n
+         }
+       else (({ q with inner = { (q.inner) with y = n } })
+         [@ocaml.warning "-18-40-41-42"]))
+    else (({ q with outer = n })[@ocaml.warning "-18-40-41-42"])
+  let fresh origin n =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 23)
+    then { (origin ()) with y = n }
+    else ((origin ())[@ocaml.warning "-18-40-41-42"])
+  let noisy p n =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 24)
+    then
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 25)
+       then
+         {
+           p with
+           x =
+             (((if
+                  Windtrap_mut_________fixture_keep___ml.___windtrap_armed___
+                    26
+                then ((())[@ocaml.warning "-41-42"])
+                else (print_int n; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
+               n));
+           y = n
+         }
+       else (({ p with x = ((print_int n; n)) })
+         [@ocaml.warning "-18-40-41-42"]))
+    else (({ p with y = n })[@ocaml.warning "-18-40-41-42"])
+  let punned p x =
+    if
+      Stdlib.not
+        (Windtrap_mut_________fixture_keep___ml.___windtrap_armed___ 27)
+    then { p with x }
+    else ((p)[@ocaml.warning "-18-40-41-42"])
+  let dismissed p n = (({ p with x = n; y = n })[@mutate off "reason"])
+  let logged p n = Logs.debug (fun m -> m "%d" { p with x = n }.x)
+  let zero = { x = 0; y = 0 }
+  let base = { zero with x = 1 }
+  type node = {
+    id: int ;
+    next: node option }
+  let looped t = let rec n = { t with next = (Some n) } in n
+
   $ mut --impl ./fixture_assert.ml | ../elide.exe
   mutation sites of "./fixture_assert.ml" in Windtrap_mut_________fixture_assert___ml, with type 'a operands:
     0: 7:2-7:7 "sub" "a + b" -> "a - b"

@@ -239,6 +239,7 @@ type guard =
   | Nothing (* [none] on [Some e] *)
   | Tail of expression (* [tail] on [h :: t], with [t] *)
   | Delete (* [del], whose guard [dropped] builds *)
+  | Keep (* [keep], whose guard [kept] builds *)
 
 and operator_guard =
   | Negate (* [cmp] on an equality *)
@@ -658,6 +659,87 @@ let tail ~loc ~module_name ~index e value t =
     if Stdlib.not [%e armed ~loc ~module_name index] then [%e value]
     else [%e copy]]
 
+(* A record update [{ r with f = v; ... }], as [C] of its constructor when it
+   is the argument of [C]. A guard inside [C] would give an inline record a
+   value that is no record update. *)
+type update = {
+  constructor : longident loc option;
+  record : expression;
+  fields : (longident loc * expression) list;
+  extended : expression; (* [r] *)
+}
+
+let update e =
+  match e.pexp_desc with
+  | Pexp_record (fields, Some extended) ->
+      Some { constructor = None; record = e; fields; extended }
+  | Pexp_construct
+      ( constructor,
+        Some ({ pexp_desc = Pexp_record (fields, Some extended); _ } as record)
+      ) ->
+      Some { constructor = Some constructor; record; fields; extended }
+  | _ -> None
+
+(* The copy of a guard is code size, so a larger update has no site. *)
+let max_kept_fields = 8
+
+(* [without fields i] is [fields] without its field [i]. The path of a
+   qualified field qualifies the others, so a path that only the dropped
+   field has moves to the first field that stays. *)
+let without fields i =
+  let qualifier { txt; _ } =
+    match txt with Ldot (path, _) -> Some path | Lident _ | Lapply _ -> None
+  in
+  let kept = List.filteri (fun j _ -> j <> i) fields in
+  match (qualifier (fst (List.nth fields i)), kept) with
+  | Some path, (({ txt = Lident name; _ } as label), value) :: rest
+    when List.for_all (fun (label, _) -> Option.is_none (qualifier label)) kept
+    ->
+      ({ label with txt = Ldot (path, name) }, value) :: rest
+  | _ -> kept
+
+(* The armed arm of the field [i] of [e]: [e] without that field, or [r] when
+   it is the only field. The arm is a copy of the source, as the copy of
+   [tail] is, and carries the attributes of [e]. The type-checker reads it
+   after the original, so it disambiguates its fields by the type of the
+   original. This can give warnings 18, 40, 41 and 42, which the source does
+   not give, and the arm disables them. *)
+let kept_arm e i =
+  let copy = ghost#expression e in
+  let loc = copy.pexp_loc in
+  let { constructor; record; fields; extended } = Option.get (update copy) in
+  let record =
+    match without fields i with
+    | [] ->
+        {
+          extended with
+          pexp_attributes = extended.pexp_attributes @ record.pexp_attributes;
+        }
+    | kept -> { record with pexp_desc = Pexp_record (kept, Some extended) }
+  in
+  let arm =
+    match constructor with
+    | None -> record
+    | Some constructor ->
+        { copy with pexp_desc = Pexp_construct (constructor, Some record) }
+  in
+  let warnings =
+    attribute ~loc
+      ~name:{ txt = "ocaml.warning"; loc }
+      ~payload:(PStr [ pstr_eval ~loc (estring ~loc "-18-40-41-42") [] ])
+  in
+  { arm with pexp_attributes = arm.pexp_attributes @ [ warnings ] }
+
+(* The guard of the [keep] sites of one update: one [if] for each site, with
+   the original first, as in [none] and [tail]. *)
+let keep ~loc ~module_name value arms =
+  List.fold_right
+    (fun (index, arm) disarmed ->
+      [%expr
+        if Stdlib.not [%e armed ~loc ~module_name index] then [%e disarmed]
+        else [%e arm]])
+    arms value
+
 (* Traversal *)
 
 (* [lazy] of a trivial syntactic value compiles as already forced, and a
@@ -776,16 +858,21 @@ class instrumenter ~keeps ~module_name =
       | Operator (app, Replace _) -> is_zero app.right
       | Operator (app, Branch) -> is_pure app.left && same app.left app.right
       | Neg | Operator (_, (Negate | Swap)) -> branches
-      | Literal _ | Nothing | Tail _ | Delete -> false
+      | Literal _ | Nothing | Tail _ | Delete | Keep -> false
 
     (* [site e mutant ~dismissed] records the site of [e] and is its index.
        It is [None], with nothing recorded, for generated code and for a site
        whose identifier another one has, as a deriver's copy does. *)
-    method private site e (mutant : mutant) ~dismissed =
-      let start = e.pexp_loc.loc_start and stop = e.pexp_loc.loc_end in
+    method private site e mutant ~dismissed =
+      self#site_at e.pexp_loc ~before:(render e) mutant ~dismissed
+
+    (* [site_at loc ~before mutant ~dismissed] is [site] for a site at [loc]
+       whose text is [before]. *)
+    method private site_at loc ~before (mutant : mutant) ~dismissed =
+      let start = loc.loc_start and stop = loc.loc_end in
       let line = start.pos_lnum and col = start.pos_cnum - start.pos_bol in
       let key = (line, col, mutant.rewrite) in
-      if e.pexp_loc.loc_ghost || Hashtbl.mem seen key then None
+      if loc.loc_ghost || Hashtbl.mem seen key then None
       else begin
         let index = Hashtbl.length seen in
         Hashtbl.add seen key ();
@@ -796,7 +883,7 @@ class instrumenter ~keeps ~module_name =
             end_line = stop.pos_lnum;
             end_col = stop.pos_cnum - stop.pos_bol;
             rewrite = mutant.rewrite;
-            before = render e;
+            before;
             after = mutant.after;
             dismissed;
           }
@@ -903,6 +990,7 @@ class instrumenter ~keeps ~module_name =
             | Some _ as mutant -> mutant
             | None -> self#value e)
       in
+      let update = if Option.is_some mutant then None else self#update e in
       parent <- Some (e, context);
       (match e.pexp_desc with
       | Pexp_function _ | Pexp_lazy _ ->
@@ -910,7 +998,11 @@ class instrumenter ~keeps ~module_name =
           recursive <- false
       | Pexp_poly _ | Pexp_object _ | Pexp_newtype _ -> at_load <- false
       | _ -> ());
-      let rewritten = self#rewrite ?chained ?branches context e mutant in
+      let rewritten =
+        match update with
+        | Some update -> self#kept e update
+        | None -> self#rewrite ?chained ?branches context e mutant
+      in
       let p, l, r = outer in
       parent <- p;
       at_load <- l;
@@ -949,7 +1041,7 @@ class instrumenter ~keeps ~module_name =
     method private guard ~chain e mutant index =
       let loc = { e.pexp_loc with loc_ghost = true } in
       match mutant.guard with
-      | Delete -> e (* [dropped] guards a statement *)
+      | Delete | Keep -> e (* [dropped] and [kept] guard these *)
       | Literal replacement -> (
           match index with
           | None -> e
@@ -1007,6 +1099,78 @@ class instrumenter ~keeps ~module_name =
               | Replace replacement ->
                   binary ~loc ~module_name ~index ~pin:false e app left right
                     ~armed_arm:(fun l r -> apply ~loc replacement [ l; r ])))
+
+    (* The update of [e] when it has [keep] sites: not in code that runs when
+       the module is initialized, nor in the right-hand side of a [let rec],
+       and with at most [max_kept_fields] fields. *)
+    method private update e =
+      if at_load || recursive then None
+      else
+        match update e with
+        | Some { fields; _ } as update
+          when List.length fields <= max_kept_fields ->
+            update
+        | Some _ | None -> None
+
+    (* [kept e update] rewrites the record update [e] and guards it with a
+       [keep] site for each field. The site of a field starts at its label
+       and ends with its value, and its text is that of [e]. In a log
+       message the sites carry no mutant. *)
+    method private kept e update =
+      let off =
+        match off_reason e.pexp_attributes with
+        | Some _ as off -> off
+        | None -> off_reason update.record.pexp_attributes
+      in
+      let before = render e in
+      let site ~dismissed i (label, value) =
+        let loc =
+          {
+            label.loc with
+            loc_end = value.pexp_loc.loc_end;
+            loc_ghost = e.pexp_loc.loc_ghost;
+          }
+        in
+        let arm = kept_arm e i in
+        let mutant = { guard = Keep; rewrite = "keep"; after = render arm } in
+        if Option.is_none dismissed && self#arid ~branches:false mutant then
+          None
+        else
+          Option.map
+            (fun index -> (index, arm))
+            (self#site_at loc ~before mutant ~dismissed)
+      in
+      match off with
+      | Some _ as dismissed ->
+          List.iteri
+            (fun i field -> ignore (site ~dismissed i field))
+            update.fields;
+          e
+      | None ->
+          let arms =
+            List.filter_map Fun.id
+              (List.mapi (site ~dismissed:None) update.fields)
+          in
+          let extended = self#expression update.extended in
+          let fields =
+            List.map
+              (fun (label, value) -> (label, self#expression value))
+              update.fields
+          in
+          let record =
+            {
+              update.record with
+              pexp_desc = Pexp_record (fields, Some extended);
+            }
+          in
+          let value =
+            match update.constructor with
+            | None -> record
+            | Some constructor ->
+                { e with pexp_desc = Pexp_construct (constructor, Some record) }
+          in
+          let loc = { e.pexp_loc with loc_ghost = true } in
+          keep ~loc ~module_name value arms
 
     (* [chain e] rewrites the head and the tail of [h :: t]. A tail that is
        [(::)] too, as in [a :: b :: t] and in a list literal, continues the

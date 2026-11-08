@@ -4,6 +4,7 @@
   arid
   attributes
   forced
+  kept
   logs
   no_guard
   oracle
@@ -25,11 +26,15 @@
  (preprocess
   (pps ppx_windtrap.mutate)))
 
-; A [None] of another type in scope, under fatal warnings and -principal.
+; A [None] of another type in scope, and the record updates of kept.ml,
+; under fatal warnings and -principal.
+
+(rule
+ (copy kept.ml kept_principal.ml))
 
 (library
  (name windtrap_mutate_principal)
- (modules levels opened_levels)
+ (modules kept_principal levels opened_levels)
  (flags
   (:standard -principal -w +a-70 -warn-error +a))
  (preprocess
