@@ -280,21 +280,24 @@ two flags.
 An unknown name or an empty list is a usage error. The message gives
 the names of the rewrites. A repeated name counts one time.
 
-The two flags together are a usage error, from the command line or
-from a mirror. If a flag occurs two times, the last value applies. If neither
+The two flags together are a usage error, from the command line or from
+a mirror. If a flag occurs two times, the last value applies. If neither
 the command line nor a mirror gives `--mutate`, a flag on the command
-line is a usage error. A mirror alone has no effect on a suite that
-does not mutate. But an invalid value, or the two mirrors together, is
-a usage error on each suite.
+line is a usage error. A mirror alone has no effect on a suite that does
+not mutate. But an invalid value, or the two mirrors together, is a
+usage error on each suite.
 
 A filter that keeps no site of the scope is not an error. The scope is
 the prefixes of `--mutate` and the lines of `--lines` or `--diff`. When
 the suite passes, the run gives a message on standard error, runs the
-suite without mutation, exits 0 and saves no verdict file. A red suite
-is refused, as always. Under `--lines` or
-`--diff`, lines with no site of the selected rewrites follow the same
-rule, as lines with no site do. A scope that has no site before the
-filter is refused, as with no filter.
+suite without mutation, exits 0 and saves no verdict file. From the
+command line, a red suite is refused, as always. Under
+`WINDTRAP_MUTATE`, the suite runs as usual (see [Mutation testing a
+project](#mutation-testing-a-project)).
+
+Lines with no site, or with no site of the selected rewrites, follow the
+same rule. A prefix with no site, or lines that name no instrumented
+file, are refused, as with no filter.
 
 ## What a mutation run runs
 
@@ -378,10 +381,10 @@ it, and no mutant's run does. A line that only such tests run is never
 reached, and an `--arm` run of its mutant ends on `mutant not reached`.
 
 The mutation run exits 0 whatever it finds. It exits 1, with a sentence
-on standard error, when a pass fails or no mutant is left to test. A
-rewrite filter (`--rewrites` or `--skip-rewrites`) that keeps no site of
-a scope that has sites is no such failure (see
-[Testing the mutants of some rewrites](#testing-the-mutants-of-some-rewrites)).
+on standard error, when a pass fails or no mutant is left to test. Lines
+(`--lines` or `--diff`) with no site, and a rewrite filter that keeps no
+site of a scope that has sites, are no such failure (see [Testing the
+mutants of some rewrites](#testing-the-mutants-of-some-rewrites)).
 
 ## Running a survivor again
 
