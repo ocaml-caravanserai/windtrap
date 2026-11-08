@@ -5518,7 +5518,7 @@ let filter_refusals () =
     ( "exited 1",
       "windtrap: --mutate=test/unit/mutate_loop/ --rewrites=del,not leaves no \
        mutant in this executable's catalogue: no instrumented file matches the \
-       prefix (is the library under test instrumented with \
+       scope (is the library under test instrumented with \
        ppx_windtrap.mutate?), or the matched files have no mutation sites of \
        the selected rewrites\n" )
     (none.status, none.err);

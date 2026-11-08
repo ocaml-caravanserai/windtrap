@@ -111,7 +111,8 @@ let refusal ~scope = function
            ~lines:(fun l -> "--lines=" ^ l)
            ~only:(fun r -> "--rewrites=" ^ r)
            ~skip:(fun r -> "--skip-rewrites=" ^ r))
-        (if scope.lines = None then "prefix" else "scope")
+        (if scope.lines = None && scope.rewrites = Every_rewrite then "prefix"
+         else "scope")
         ((if scope.lines = None then "files have" else "lines hold")
         ^ " no mutation sites"
         ^
