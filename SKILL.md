@@ -480,6 +480,11 @@ above 0, the run also runs the tests of each kill again with no mutant,
 up to 3 times. A kill whose test also fails there is unknown, with the
 reason, and a kill in a retry then leaves the survivor.
 
+`--mutate-memory MB` (`WINDTRAP_MUTATE_MEMORY=MB`, default 1024) is the
+memory limit of each worker of a mutant, on Linux. A mutant can make
+its test take memory with no limit. The loop then kills its worker,
+and the mutant is unknown. Raise the limit if the probe passes it.
+
 A run and `windtrap mutants` list under `unstable` each mutant whose
 verdict changed since the last run of its suite, on the same source. A
 change to a test, or a test that depends on the clock or on the order

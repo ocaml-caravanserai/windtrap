@@ -1283,6 +1283,20 @@ let memory =
               is_true (0 < m.Os.resident_kb);
               is_true (m.Os.resident_kb <= m.Os.peak_kb)
           | None -> is_false (Sys.file_exists "/proc/self/status"));
+      test "memory_of_pid reads a process that runs, and not one that ended"
+        (fun () ->
+          let ended =
+            match Unix.fork () with
+            | 0 -> Unix._exit 0
+            | pid ->
+                ignore (Unix.waitpid [] pid);
+                pid
+          in
+          equal (option int) None
+            (Option.map (fun m -> m.Os.resident_kb) (Os.memory_of_pid ended));
+          match Os.memory_of_pid (Unix.getpid ()) with
+          | Some m -> is_true (0 < m.Os.resident_kb)
+          | None -> is_false (Sys.file_exists "/proc/self/status"));
     ]
 
 let () =

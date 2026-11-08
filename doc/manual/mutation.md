@@ -283,7 +283,8 @@ given, a mutation run draws its property cases from one fixed seed,
 binary.
 
 A mutant whose run ends before its tests do, because the process
-crashed or exited or passed a deadline taken from the dry run, is
+crashed or exited, or passed a deadline taken from the dry run or a
+memory limit, is
 unknown, and so is no survivor. The report lists it under `unknown`
 with the reason and an `arm:` command, which runs the suite with it
 armed and shows what happens. A mutant whose run does not evaluate
@@ -293,13 +294,21 @@ either, listed under `not evaluated` with its `arm:` command.
 
 A mutant can also make its run take memory with no limit, for example
 when it removes the step of a loop that builds a list. On Linux, the
-loop reads the resident memory of each worker. A worker above the
-limit ends with its process group, as at its deadline, and the mutant
-is unknown: `its run passed its memory limit of 1024 MB`.
+loop reads the resident memory of each worker, at most 4 times each
+second. If a worker is above the limit, the loop kills it with its
+process group, as at its deadline, and the mutant is unknown:
+`its run passed its memory limit of 1024 MB`. The loop does not kill a
+worker that sent a report that the loop did not read yet, or a worker
+that finishes its job. Its deadline bounds such a worker.
+
 `--mutate-memory MB` (mirror `WINDTRAP_MUTATE_MEMORY`) sets the limit,
-and the default is 1024. The limit is for the worker process only, not
-for a process that a test starts. The dry run has no limit. On a
-system without `/proc`, the loop has no limit.
+from 1 to 1048576, and the default is 1024. The flag without `--mutate`
+is a usage error, and its mirror alone has no effect. The limit is for
+the worker process only, not for a process that a test starts. The dry
+run has no limit, and the `arm:` command of a mutant runs it with no
+limit. If the probe passes the limit, the loop refuses the run and tells
+you to raise the limit. On a system without `/proc`, the loop has no
+limit.
 
 Until a mutant's run evaluates the site, the run executes the code
 without the mutant. Thus a test that fails before the first evaluation
@@ -417,8 +426,8 @@ check does this run up to 3 times:
 - If the killing test fails in a run, the check fails and stops.
 - If the killing test does not fail in the 3 runs, the kill stays.
 
-A run that ends before the killing test ends, at its deadline or with
-its worker, does not give a failure of the test. A failure of the test
+A run that ends before the killing test ends, at its deadline, at its
+memory limit or with its worker, does not give a failure of the test. A failure of the test
 counts also when the run then ends early, for example in a fixture
 release that hangs. A kill that names no test gets no check,
 for example a kill by a fixture release. An `--arm` run does no check.

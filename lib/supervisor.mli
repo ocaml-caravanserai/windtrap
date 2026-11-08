@@ -146,6 +146,9 @@ type ended =
           ["was killed by SIGSEGV"] or
           ["ended when code under test called exit"]. *)
   | Expired  (** It passed its deadline. *)
+  | Outgrown of int
+      (** Its worker passed the memory limit of this many MB
+          ([Run.config.mutate_memory]). *)
 
 type ran = {
   results : Run.result list;  (** The rows of the cases that ended, in order. *)
@@ -194,11 +197,13 @@ val fresh :
     under [bail] after the first counted failure in or after the test that first
     evaluated the armed site. A worker that retires leaves the rest of the job
     to a fresh worker, which arms the mutant again. Coverage counted by a worker
-    is dropped, since a mutant changed what the program does. A worker whose
-    resident memory ({!Os.memory_of_pid}) is above [config.mutate_memory] MB
-    ends its job with its process group, as
-    [Lost "passed its memory limit of N MB"]. A worker whose memory cannot be
-    read has no limit.
+    is dropped, since a mutant changed what the program does.
+
+    At most each 0.25 s, the parent reads the resident memory of each worker
+    ({!Os.memory_of_pid}). It kills a worker above [config.mutate_memory] MB
+    with its process group, and the job ends as [Outgrown]. It does not kill a
+    worker that has a report to read, a worker that finishes its job, or a
+    worker whose memory cannot be read.
 
     While it runs, the parent handles [SIGINT], [SIGTERM], [SIGHUP] and
     [SIGPIPE], and tells [on_signal] of each as it arrives, in the handler,

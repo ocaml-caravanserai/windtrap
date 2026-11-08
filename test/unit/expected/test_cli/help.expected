@@ -101,7 +101,7 @@ OPTIONS:
       0).
 
   --mutate-memory=MB (env WINDTRAP_MUTATE_MEMORY)
-      Stop the worker of a mutant whose resident memory is above MB megabytes,
+      Kill the worker of a mutant whose resident memory is above MB megabytes,
       and give the mutant as unknown (with --mutate, Linux only, default 1024).
 
   --mutate-workers (env WINDTRAP_MUTATE_WORKERS)

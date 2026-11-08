@@ -108,8 +108,9 @@ type error =
   | Requires_any of string * string list
       (** The command line gave the flag, which acts only with one of the
           others, and no layer gave any of them:
-          [("--mutate-workers", ["--mutate"; "--arm"])] or
-          [("--mutate-retry", ["--mutate"])]. *)
+          [("--mutate-workers", ["--mutate"; "--arm"])],
+          [("--mutate-retry", ["--mutate"])] or
+          [("--mutate-memory", ["--mutate"])]. *)
 
 val error_message : error -> string
 (** [error_message error] is one sentence on [error] for a user, which names the

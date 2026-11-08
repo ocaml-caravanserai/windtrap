@@ -1195,14 +1195,48 @@ let deadline_kill () =
        ])
     (rows b.run)
 
-let memory_limit () =
+let hog_run args =
   if not (Sys.file_exists "/proc/self/status") then
     skip ~reason:"the limit reads /proc/<pid>/status" ();
   remove (verdicts_path ());
+  finish_within ~what:"the hog's run"
+    (start ~env:[ suite "hog" ] (mutate :: args))
+
+(* Under the default limit, the 96 MB of the armed run stay, and only the
+   deadline ends it. *)
+let memory_default () =
+  let r = hog_run [] in
+  equal string "exited 0" r.status;
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 unknown: its run passed its deadline of <time>";
+         "subject.ml:18 unreached";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r)
+
+(* Each worker takes more than 1 MB, so the unarmed worker of the probe
+   passes the limit too. *)
+let memory_probe () =
+  if not (Sys.file_exists "/proc/self/status") then
+    skip ~reason:"the limit reads /proc/<pid>/status" ();
   let r =
-    finish_within ~what:"the hog's memory limit"
-      (start ~env:[ suite "hog" ] [ mutate; "--mutate-memory=64" ])
+    finish_within ~what:"the lasting run"
+      (start ~env:[ suite "lasting" ] [ mutate; "--mutate-memory=1" ])
   in
+  equal string "exited 1" r.status;
+  contains
+    ~sub:
+      "the determinism probe's worker passed the memory limit of 1 MB, which \
+       the dry run does not have. Raise the limit with --mutate-memory or \
+       WINDTRAP_MUTATE_MEMORY"
+    r.err
+
+let memory_limit () =
+  let r = hog_run [ "--mutate-memory=64" ] in
   equal string "exited 0" r.status;
   equal text "" r.err;
   equal string "mutants: 1 reached by this suite, 1 unknown, 3 never reached"
@@ -1285,6 +1319,10 @@ let limits =
         deadline_kill;
       test "a mutant whose worker passes its memory limit is unknown"
         memory_limit;
+      test "under the default memory limit, the deadline ends a run of 96 MB"
+        memory_default;
+      test "a probe whose worker passes the memory limit refuses the run"
+        memory_probe;
       test "a child's deadline is at least one second" (fun () ->
           let b = Lazy.force blocked in
           equal string "exited 0" b.run.status;

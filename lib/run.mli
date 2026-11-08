@@ -169,8 +169,9 @@ type config = {
           [0] runs each job once. *)
   mutate_memory : int;
       (** [--mutate-memory]: under {!Loop}, the limit of the resident memory of
-          each worker of a mutant, in MB. A worker past it ends its job, as its
-          deadline does ({!Supervisor.fresh}). Default [1024]. *)
+          each worker of a mutant, in MB, from 1 to 1048576. On Linux, the loop
+          kills a worker above the limit ({!Supervisor.fresh}). Default [1024].
+      *)
   github : bool;
       (** Whether the report is written for GitHub Actions, with its group and
           its annotations (see {!Report}). *)

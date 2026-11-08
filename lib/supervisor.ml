@@ -1168,7 +1168,7 @@ type job = {
   alone : bool;
 }
 
-type ended = Ran | Lost of string | Expired
+type ended = Ran | Lost of string | Expired | Outgrown of int
 
 type ran = {
   results : Run.result list;
@@ -1331,23 +1331,25 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
     | Unwitnessed -> st.witnessed <- false
     | Report (Event _ | Judge _) | Counts _ | Pool _ -> ()
   in
-  let expired st =
+  let cut st ended =
     kill st.w;
     ignore (reap st.w);
-    settle st Expired
+    settle st ended
   in
+  (* The memory of the workers is read at most once each [memory_step]
+     seconds. A worker with a report to read, or one that finishes its job,
+     is not stopped: its reports are read, and its deadline bounds it. *)
+  let memory_step = 0.25 and memory_read = ref (Os.counter ()) in
   let limit_kb = config.mutate_memory * 1024 in
   let outgrown st =
+    (not (st.finishing && st.pending = []))
+    && (match Unix.select [ st.w.reports ] [] [] 0. with
+      | [], _, _ -> true
+      | _ :: _, _, _ | (exception Unix.Unix_error _) -> false)
+    &&
     match Os.memory_of_pid st.w.pid with
     | Some m -> m.resident_kb > limit_kb
     | None -> false
-  in
-  let stopped_at_limit st =
-    kill st.w;
-    ignore (reap st.w);
-    settle st
-      (Lost
-         (Printf.sprintf "passed its memory limit of %d MB" config.mutate_memory))
   in
   let rec deliver () =
     if !delivered < n then
@@ -1396,12 +1398,15 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
           | ready, _, _ -> ready
           | exception Unix.Unix_error (Unix.EINTR, _, _) -> []
         in
+        let memory = Os.count_s !memory_read >= memory_step in
+        if memory then memory_read := Os.counter ();
         List.iter
           (fun st ->
             if Option.is_none !signal then
-              if remaining st <= 0. then expired st
-              else if outgrown st then stopped_at_limit st
+              if remaining st <= 0. then cut st Expired
               else if List.mem st.w.reports ready then handle st
+              else if memory && outgrown st then
+                cut st (Outgrown config.mutate_memory)
               else if ready = [] then
                 match reap ~flags:[ Unix.WNOHANG ] st.w with
                 | Some _ -> dead st

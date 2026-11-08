@@ -109,6 +109,14 @@ let positive_int value =
    survivor for hours. *)
 let max_retry = 100
 
+(* 2^20 MB, so that the limit in kB stays far below max_int. *)
+let max_memory = 1_048_576
+
+let memory value =
+  match int_of_string_opt value with
+  | Some n when n > 0 && n <= max_memory -> Ok n
+  | _ -> Error (Printf.sprintf "a positive integer up to %d" max_memory)
+
 let retry value =
   match int_of_string_opt value with
   | Some n when 0 <= n && n <= max_retry -> Ok n
@@ -316,10 +324,10 @@ let entries =
        If N is above 0, also check each kill with no mutant (with --mutate, \
        default 0).";
     row "--mutate-memory"
-      (value "MB" positive_int
+      (value "MB" memory
          (field (fun c mutate_memory -> { c with mutate_memory })))
       ~mirror:(mirrored "WINDTRAP_MUTATE_MEMORY")
-      "Stop the worker of a mutant whose resident memory is above MB \
+      "Kill the worker of a mutant whose resident memory is above MB \
        megabytes, and give the mutant as unknown (with --mutate, Linux only, \
        default 1024).";
     row "--mutate-workers"

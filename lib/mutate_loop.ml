@@ -300,6 +300,13 @@ let probe ~dry_run (ran : Supervisor.ran) =
       Error
         (strf "the determinism probe's run %s, where the dry run's did not. %s"
            how not_a_number)
+  | Outgrown mb ->
+      Error
+        (strf
+           "the determinism probe's worker passed the memory limit of %d MB, \
+            which the dry run does not have. Raise the limit with \
+            --mutate-memory or WINDTRAP_MUTATE_MEMORY"
+           mb)
   | Ran
     when List.length ran.results = executed
          && ran_skipped = skipped && failed = [] ->
@@ -389,6 +396,8 @@ let verdict ~deadline paths (ran : Supervisor.ran) =
   | Supervisor.Expired ->
       Verdicts.Unknown ("its run passed its deadline of " ^ seconds deadline)
   | Lost how -> Verdicts.Unknown ("its run " ^ how)
+  | Outgrown mb ->
+      Verdicts.Unknown (strf "its run passed its memory limit of %d MB" mb)
   | Ran -> (
       if killed_by ran then Verdicts.Killed
       else
