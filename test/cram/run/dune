@@ -81,6 +81,16 @@
   (<> %{os_type} Win32))
  (deps mutant_main.exe))
 
+; rewrites.t runs the mutation loop over the same suite, under the rewrite
+; filter.
+
+(cram
+ (package ppx_windtrap)
+ (applies_to rewrites)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps mutant_main.exe))
+
 ; nodune.t reads OCAMLPATH as POSIX spells it and runs the mutation loop.
 ; Under --instrument-with, dune 3.23.1 and 3.24 close (package windtrap)
 ; over ppx_windtrap, whose runtime depends on windtrap, and report a
