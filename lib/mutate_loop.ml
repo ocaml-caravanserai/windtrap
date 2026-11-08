@@ -24,30 +24,42 @@ let in_scope ~(scope : Run.scope) (id : Mutate.id) =
   || List.exists
        (fun prefix -> String.starts_with ~prefix id.file)
        scope.prefixes)
+  && (match scope.lines with
+    | None -> true
+    | Some lines -> Lines.mem lines ~file:id.file ~line:id.line)
   &&
-  match scope.lines with
-  | None -> true
-  | Some lines -> Lines.mem lines ~file:id.file ~line:id.line
+  match scope.rewrites with
+  | Every_rewrite -> true
+  | Only_rewrites names -> List.mem id.rewrite names
+  | Skip_rewrites names -> not (List.mem id.rewrite names)
 
-(* The scope as the reader gave it: the prefixes, then the lines. *)
-let spelled ~prefixes ~lines (scope : Run.scope) =
+(* The scope as the reader gave it: the prefixes, the lines, then the
+   rewrites. *)
+let spelled ~prefixes ~lines ~only ~skip (scope : Run.scope) =
   String.concat " "
     ((match scope.prefixes with [] -> [] | ps -> [ prefixes ps ])
+    @ (match scope.lines with
+      | None -> []
+      | Some l -> [ lines (Lines.to_string l) ])
     @
-    match scope.lines with
-    | None -> []
-    | Some l -> [ lines (Lines.to_string l) ])
+    match scope.rewrites with
+    | Every_rewrite -> []
+    | Only_rewrites names -> [ only (String.concat "," names) ]
+    | Skip_rewrites names -> [ skip (String.concat "," names) ])
 
 type no_mutant =
   | Uninstrumented
   | Out_of_scope
-  | No_site_on_lines (* the lines name no line, or none with a site *)
+  | No_site_on_lines
+    (* the lines name no line, or none with a site that the filter keeps *)
+  | No_site_of_rewrites (* the scope has sites, and the filter keeps none *)
   | All_dismissed
 
-(* Lines that name no line, or only lines of instrumented files with no site
-   on them, describe the change, not a mistake: a change to comments or
-   documentation leaves nothing to mutate. Lines that name no instrumented
-   file stay [Out_of_scope], as a typo would. *)
+(* Lines that name no line, or only lines of instrumented files where the
+   rewrite filter keeps no site, describe the change, not a mistake: a change
+   to comments or documentation leaves nothing to mutate. A filter that keeps
+   no site of the scope is a choice of the reader too. Lines that name no
+   instrumented file stay [Out_of_scope], as a typo would. *)
 let population ~scope =
   let catalogue = Mutate.catalogue () in
   let scoped =
@@ -63,22 +75,37 @@ let population ~scope =
     List.exists
       (fun (m : Mutate.mutant) ->
         List.mem m.id.file files
-        && in_scope ~scope:{ scope with lines = None } m.id)
+        && in_scope
+             ~scope:{ scope with lines = None; rewrites = Every_rewrite }
+             m.id)
       catalogue
   in
+  let unfiltered = { scope with rewrites = Every_rewrite } in
   match (catalogue, scoped, undismissed) with
-  | [], _, _ when { scope with skip_killed = false } = Run.every_mutant ->
+  | [], _, _ when { unfiltered with skip_killed = false } = Run.every_mutant ->
       Error Uninstrumented
   | _ :: _, [], _
     when Option.fold ~none:false ~some:names_a_file scope.Run.lines ->
       Error No_site_on_lines
+  | _ :: _, [], _
+    when scope.rewrites <> Every_rewrite
+         && List.exists
+              (fun (m : Mutate.mutant) -> in_scope ~scope:unfiltered m.id)
+              catalogue ->
+      Error No_site_of_rewrites
   | _, [], _ -> Error Out_of_scope
   | _, _, [] -> Error All_dismissed
   | _, _, population -> Ok population
 
-let no_site_on_lines =
-  "the selected lines hold no mutation site, so nothing on them is \
-   mutation-tested"
+let no_site_on_lines ~(scope : Run.scope) =
+  strf
+    "the selected lines hold no mutation site%s, so nothing on them is \
+     mutation-tested"
+    (if scope.rewrites = Every_rewrite then "" else " of the selected rewrites")
+
+let no_site_of_rewrites =
+  "the scope holds no mutation site of the selected rewrites, so the suite \
+   runs without mutation"
 
 (* A prefix that leaves nothing is one sentence whatever the catalogue holds:
    the prefix is what the reader typed, and a build that is instrumented and
@@ -95,10 +122,13 @@ let refusal ~scope = function
          ppx_windtrap.mutate?), or the matched %s no mutation sites"
         (spelled scope
            ~prefixes:(fun ps -> "--mutate=" ^ String.concat "," ps)
-           ~lines:(fun l -> "--lines=" ^ l))
+           ~lines:(fun l -> "--lines=" ^ l)
+           ~only:(fun r -> "--rewrites=" ^ r)
+           ~skip:(fun r -> "--skip-rewrites=" ^ r))
         (if scope.lines = None then "prefix" else "scope")
         (if scope.lines = None then "files have" else "lines hold")
-  | No_site_on_lines -> no_site_on_lines
+  | No_site_on_lines -> no_site_on_lines ~scope
+  | No_site_of_rewrites -> no_site_of_rewrites
   | All_dismissed ->
       "every mutant this run could test is dismissed by [@mutate off]; there \
        is nothing to test"
@@ -111,8 +141,15 @@ let unmutated ~scope reason =
         strf "no mutant of this executable's catalogue is %s"
           (spelled scope
              ~prefixes:(fun ps -> "under " ^ String.concat "," ps)
-             ~lines:(fun l -> "on " ^ l))
-    | No_site_on_lines -> no_site_on_lines
+             ~lines:(fun l -> "on " ^ l)
+             ~only:(fun r ->
+               (if String.contains r ',' then "of a rewrite in "
+                else "of the rewrite ")
+               ^ r)
+             ~skip:(fun r -> "of a rewrite other than " ^ r))
+    | No_site_on_lines -> no_site_on_lines ~scope
+    | No_site_of_rewrites ->
+        "the scope holds no mutation site of the selected rewrites"
     | All_dismissed ->
         "every mutant of this executable is dismissed by [@mutate off]"
   in
@@ -1225,7 +1262,10 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
         else
           match population with
           | Error No_site_on_lines ->
-              Os.say no_site_on_lines;
+              Os.say (no_site_on_lines ~scope);
+              Ok outcome
+          | Error No_site_of_rewrites ->
+              Os.say no_site_of_rewrites;
               Ok outcome
           | Error reason -> refuse (refusal ~scope reason)
           | Ok population -> (

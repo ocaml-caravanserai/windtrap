@@ -13,15 +13,22 @@ let ( let* ) = Result.bind
 
 type invocation = [ `Exe of string | `Mirrors ]
 
+type rewrite_filter =
+  | Every_rewrite
+  | Only_rewrites of string list
+  | Skip_rewrites of string list
+
 type scope = {
   prefixes : string list;
   lines : Lines.t option;
+  rewrites : rewrite_filter;
   skip_killed : bool;
 }
 
 type mutation = No_mutation | Loop of scope | Armed of string
 
-let every_mutant = { prefixes = []; lines = None; skip_killed = false }
+let every_mutant =
+  { prefixes = []; lines = None; rewrites = Every_rewrite; skip_killed = false }
 
 type broadcast = { selection : bool; mutate : bool }
 type case_file = { file : string; choices : int64 array }

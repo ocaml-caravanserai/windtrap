@@ -33,6 +33,15 @@ type invocation = [ `Exe of string | `Mirrors ]
       [--corrected] run, the inline runner's included, and of a run without
       [argv.(0)]. *)
 
+(** The type for the rewrites that a mutation loop tests. A name is one of
+    [Windtrap_runtime.Mutate.rewrites]. *)
+type rewrite_filter =
+  | Every_rewrite  (** Each rewrite. *)
+  | Only_rewrites of string list
+      (** [--rewrites=NAME,…]: only the mutants of these rewrites. *)
+  | Skip_rewrites of string list
+      (** [--skip-rewrites=NAME,…]: the mutants of all rewrites but these. *)
+
 type scope = {
   prefixes : string list;
       (** [--mutate=PREFIX,…]: a mutant is in scope when its recorded source
@@ -42,17 +51,21 @@ type scope = {
       (** [--lines] and [--diff]: a mutant is in scope when it lies on one of
           these lines, by its recorded file and line. [None] keeps every line.
       *)
+  rewrites : rewrite_filter;
+      (** [--rewrites] and [--skip-rewrites]: a mutant is in scope when the
+          filter keeps the rewrite of its identifier. *)
   skip_killed : bool;
       (** [--skip-killed]: the loop starts no worker for a reached mutant that
           the verdict file of another suite killed, and records it as
           [Windtrap_runtime.Verdicts.Killed_elsewhere]. The mutant stays in
           scope. *)
 }
-(** The type for the mutants that a mutation loop tests: those that [prefixes]
-    and [lines] keep, less those that [skip_killed] skips. *)
+(** The type for the mutants that a mutation loop tests: those that [prefixes],
+    [lines] and [rewrites] keep, less those that [skip_killed] skips. *)
 
 val every_mutant : scope
-(** [every_mutant] keeps every mutant: no prefix, no line set and no skip. *)
+(** [every_mutant] keeps every mutant: no prefix, no line set, each rewrite and
+    no skip. *)
 
 (** The type for what a run does with the mutants of an executable built for
     mutation testing. *)
