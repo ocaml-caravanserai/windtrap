@@ -460,8 +460,9 @@ mutants. Set PCT a little under the measured score, as for coverage
 `--min`. `--min-reach PCT` gates on the reach, the percentage of
 reached mutants. `--min-total PCT` gates on the total, the percentage
 of killed mutants among all mutants that count. `--max-survivors N`
-gates on the number of survivors. `--json` gives each verdict to other
-tools.
+gates on the number of survivors. `--crash-kills` counts a mutant whose
+run passed its deadline, crashed or passed its memory limit as killed,
+as PIT does. `--json` gives each verdict to other tools.
 
 `--skip-killed` (`WINDTRAP_SKIP_KILLED=1`) skips a mutant that another
 suite already killed. It reads only the verdict files on disk, so run

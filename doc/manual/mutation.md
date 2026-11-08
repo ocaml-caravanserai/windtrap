@@ -863,6 +863,34 @@ not run then. A closed pipe ends the command by SIGPIPE, unless the
 parent ignores that signal. The mutation run of a suite gives the three
 measures too, and has no gate.
 
+### Counting a crash as a kill
+
+By default, an unknown mutant does not count in the score. PIT counts a
+timeout and a memory error as detected. To count the same mutants as
+killed, give `--crash-kills` to `windtrap mutants`. The option counts an
+unknown mutant as killed when its run passed its deadline, crashed, or
+passed its memory limit. A flaky kill stays unknown, because its
+killing test also fails with no mutant. An unknown mutant with another
+reason stays unknown too.
+
+The score, the total and each gate then count these mutants with the
+killed mutants. The reach does not change, because it counts a killed
+and an unknown mutant the same. The killed term of the outcome line
+gives their number. The unknown section keeps each mutant and marks it
+`(counted as killed)`:
+
+```
+$ dune exec windtrap -- mutants --crash-kills | tail -n 1
+mutants: 3 survived of 11 reached, 8 killed (2 by --crash-kills), 1 never reached, 1 executable, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
+```
+
+A suite that was not mutation-tested counts in no measure under the
+option either, and each gate fails. The option does not change the
+verdict files. A suite run takes `--crash-kills` with `--mutate`, and
+its mirror is `WINDTRAP_CRASH_KILLS=1`. The option changes the outcome
+line and the unknown section of the run. The flag without `--mutate` is
+a usage error, and its mirror alone has no effect.
+
 ## Exporting the verdicts
 
 For other tools, `--json` prints the merge as one JSON document on
@@ -874,9 +902,12 @@ each run that killed it, the first test that failed. The array is empty
 when a kill names no test, as for a kill by a fixture release. It is
 also empty for a mutant killed elsewhere. An unknown mutant has its
 reason, and the kind of the reason in `reason_kind`: `deadline`,
-`crashed`, `memory`, `flaky_kill` or `other`. A test names its verdict
-file by its index in `executables`, because two files can have the
-same name. Under `--lines` or `--diff`, the verdict counts, the three
+`crashed`, `memory`, `flaky_kill` or `other`. Its `counted_as_killed`
+is `true` when `--crash-kills` counts it as killed, and `false` if not.
+Under the option, the `killed` and `unknown` counts of `summary` count
+such a mutant as killed. Its `verdict` stays `unknown`. A test names its
+verdict file by its index in `executables`, because two files can have
+the same name. Under `--lines` or `--diff`, the verdict counts, the three
 measures and `mutants` hold only the mutants on the lines. But
 `executables` still lists every verdict file, and `refused` still
 counts every refused file. Under a gate, the outcome line goes to
@@ -1135,13 +1166,30 @@ project root; PATH arguments (.mutants files, or directories searched
 recursively) replace that default.
 
 The score is the percentage of killed mutants among those killed, survived and
-not evaluated. Runs no tests and drives no build. Exits 1 when an executable
-could not mutation-test its suite. Exits 1 also when any mutant survived every
-executable that reached it, or under --min when the score is below PCT.
+not evaluated. The reach is the percentage of reached mutants among those
+reached, never reached and evaluated outside tests. The total is the percentage
+of killed mutants among those scored, never reached and evaluated outside
+tests. Runs no tests and drives no build. Exits 1 when an executable could not
+mutation-test its suite. Without a gate, exits 1 also when any mutant survived
+every executable that reached it. With a gate, exits 1 when a gate fails, and
+not for a survivor alone.
 
 OPTIONS:
   --min=PCT
-      Exit 1 when the score is below PCT, and not for a survivor alone.
+      Gate: exit 1 when the score is below PCT.
+
+  --min-reach=PCT
+      Gate: exit 1 when the reach is below PCT.
+
+  --min-total=PCT
+      Gate: exit 1 when the total is below PCT.
+
+  --max-survivors=N
+      Gate: exit 1 when more than N mutants survived.
+
+  --crash-kills
+      Count a mutant whose run passed its deadline, crashed or passed its
+      memory limit as killed, in the score, the total and each gate.
 
   --json
       Machine-readable report on standard output.
