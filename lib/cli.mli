@@ -180,6 +180,9 @@ val settings : parsed -> (Run.config, error) result
     - [crash_kills] is [true] when a layer gives [--crash-kills] and a layer
       gives [--mutate]. [--crash-kills] from the command line without [--mutate]
       is [Error (Requires_any _)]. From its mirror alone it is ignored.
+    - [incremental] is [true] when a layer gives [--incremental] and a layer
+      gives [--mutate]. [--incremental] from the command line without [--mutate]
+      is [Error (Requires_any _)]. From its mirror alone it is ignored.
     - A relative path of [--junit], [--json] or [-o] is made absolute, against
       the working directory when the command line gives it and against
       {!Os.project_root} when its mirror does. It is kept as given when that
@@ -197,6 +200,14 @@ val settings : parsed -> (Run.config, error) result
     It never raises. It reads the environment and the working directory. The
     seed that {!parse} drew is the result's when no layer gives one and no
     mutation is asked for. *)
+
+val release : string option
+(** [release] is the version of the release that this build comes from, as
+    [--version] prints it. It is [None] for a build of a tree that [dune subst]
+    did not substitute, such as a checkout. *)
+
+val version : string
+(** [version] is {!release}, or [dev] when it is [None]. *)
 
 val mutation_seed : Seed.seed
 (** [mutation_seed] is the root seed of a mutation run that no layer gives one,

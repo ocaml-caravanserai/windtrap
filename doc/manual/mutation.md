@@ -380,10 +380,13 @@ ended early or did not evaluate the site, with the reason:
 
 The live line names a mutant in a retry as it did in the first pass.
 The verdict file does not keep the number of runs. Thus
-`windtrap mutants` and its `--json` do not show it. The `reproduce:`
-and `arm:` commands do not have `--mutate-retry`, because an `--arm` run
-runs the suite one time. Thus an `--arm` run can kill a survivor of 3
-runs.
+`windtrap mutants` and its `--json` do not show it. The verdict file
+keeps the `N` of the run that gave each verdict, which `--incremental`
+compares (see
+[Reusing the verdicts of the last run](#reusing-the-verdicts-of-the-last-run)).
+The `reproduce:` and `arm:` commands do not have `--mutate-retry`,
+because an `--arm` run runs the suite one time. Thus an `--arm` run can
+kill a survivor of 3 runs.
 
 A retry makes a false survivor less probable. It does not make a
 verdict deterministic. For example, a mutant that 1 run in 10 kills
@@ -736,6 +739,133 @@ the other, use `dune runtest -j 1`. A suite tests a mutant again when
 the rewriter read different source files of the mutant for the two
 suites. The digests then differ.
 
+## Reusing the verdicts of the last run
+
+A mutation run runs the job of each reached mutant, but a change usually
+affects few mutants. `--incremental` (mirror `WINDTRAP_INCREMENTAL`) uses
+the verdicts of the last run of the same suite again, for each mutant
+whose evidence did not change. The run then does not run the job of that
+mutant. The dry run and the determinism probe always run. If neither the
+command line nor a mirror gives `--mutate`, the flag on the command line
+is a usage error. The mirror alone has no effect on a suite that does
+not mutate.
+
+```
+$ WINDTRAP_MUTATE=1 WINDTRAP_INCREMENTAL=1 dune runtest --force --instrument-with ppx_windtrap.mutate
+```
+
+The last run is the verdict file of the suite (see
+[Where the verdicts are](#where-the-verdicts-are)). The file can come
+from another build of the executable, because nearly every change builds
+the executable again. It must come from the same suite. A refused file
+gives no verdict to use again. A file that does not load, for example a
+file of an earlier format, gives a warning, and the run replaces it. On
+a CI machine, keep `_build/_mutants` from one run to the next, for
+example in a cache.
+
+The run uses a verdict again only for the same mutant. The rewriter read
+the same source file, with the same digest. The mutant has the same
+renderings and extent. The run that tested the mutant and this run must
+have the same seed, `--prop-count`, `--replay`, `--case` and
+`--timeout`. They must also have the same `--mutate-memory`,
+`--mutate-workers` and windtrap version. Then the rule of the last
+verdict applies:
+
+| Last verdict | The run uses it again when |
+| --- | --- |
+| Killed | The kill names its killing test. In this dry run, that test reaches the mutant. The tests before it in the job of this run are the tests before it in the job of the run that tested the mutant, in the same order. The source files of these tests did not change. Under `--mutate-retry N` with `N` above 0, the run that tested the mutant also had `N` above 0. Only such a run does the check of the kill. A kill in the `k`-th retry is used again only when `N` is `k` or more. |
+| Survived | In this dry run, the same tests reach the mutant. The source files of these tests did not change. The `N` of `--mutate-retry` is not more than the `N` of the run that tested the mutant. |
+| Not evaluated, unknown, killed elsewhere | Never. |
+
+A kill by a fixture release or by an `at_exit` function names no test.
+Thus the run never uses it again. The order of the reaching tests comes
+from the dry run. Under `-j` above 1, this order can change from one run
+to the next, and then the run uses a kill again less frequently.
+
+The source file of a test is the file of its location, which the report
+shows after the test, as in `test_calc.ml:31`. The run reads this file on
+disk, under the project root. A change to the limit or to the retries
+that a test declares also stops the use of the verdict again. A test
+with no location, for example in an executable built without `-g`,
+stops the use of each verdict that names it. A test whose file the run
+cannot read does the same.
+
+A verdict that the run uses again keeps the `N` of `--mutate-retry` of
+the run that tested the mutant. Thus a later run can use it again under
+the same rules. Under `--incremental`, the report gives the number of
+verdicts that the run used again, also when it is 0. The line is above
+the `reproduce:` line, or above the outcome line when there is no
+`reproduce:` line:
+
+```
+reused: 41 verdicts from the last run
+```
+
+The block of a survivor that the run used again has `(reused)` after its
+title. For the same verdicts, the blocks print in the order of a run
+that tests each mutant.
+
+One type of survivor is an exception. A kill in a retry can give a
+survivor when its check does not trust the kill. This survivor prints
+when its check ends, after the last pass. When the run uses it again, it
+prints with the survivors of the last pass. Thus, except for this
+survivor, the `reproduce:` line arms the same survivor.
+
+A verdict that the run used again is not a change for the unstable
+section.
+
+When a signal stops the run before the probe ends, the run uses no
+verdict again. A later signal stops the use of the verdicts that come
+after the stopped job, as it stops the jobs. But when the run ends with
+each verdict known, it uses again the verdicts that remain.
+
+The verdict file and `windtrap mutants` mark each verdict that the run
+used again. The report of `windtrap mutants` gives
+`reused: 41 verdicts from earlier runs`. Its `--json` gives
+`"reused": true` to each such mutant. When the merge combines records
+of one mutant, the mutant has the mark only when each record of the
+highest verdict has it. Thus a fresh kill in another file removes the
+mark.
+
+Under `--lines`, `--diff` or `--mutate=PREFIX`, the run uses again only
+the verdicts in its scope. The records outside the scope follow the rule
+of a scoped run (see [Unstable verdicts](#unstable-verdicts)). Thus after
+a new build, a run under `--diff` keeps only the records of the diff, and
+the next full run can use again only these records. Under
+`--skip-killed`, the run first skips the mutants that another suite
+killed. A mutant that the last run skipped gets a job, unless the run
+skips it again. A run whose selection narrows the suite uses verdicts
+again too, and it saves no verdict. When no file of this build exists,
+such a run writes a refused file, so the next run uses no verdict again.
+
+Do a full run without `--incremental` from time to time, for example
+each night. The rule is a heuristic, as the history file of PIT is. The
+run examines only the source file of the mutant and the source files of
+the tests. It does not find a change to:
+
+- A module of the tests in another file, for example a helper module. A
+  function that declares tests in another file gives them its own file as
+  location.
+- The file that groups the tests or runs the suite, for example their
+  order.
+- Another module of the library under test, for example a module that
+  the mutated function calls.
+- A file that a test reads, for example a baseline file or a fixture.
+- The environment, a library that the project uses, or the compiler.
+
+The rule also cannot see a direct run of a stale executable with
+`--lines` or `--diff`, after a change to a test file. Such a run records
+the new test digests for the old verdicts outside the scope.
+
+Thus a verdict that the run uses again can be incorrect. A full run
+tests each mutant again, and its unstable section lists each verdict
+that changed. The run reads the test files on disk, so run the suite
+through dune, which builds the executable from these files.
+
+```
+$ WINDTRAP_MUTATE=1 dune runtest --force --instrument-with ppx_windtrap.mutate
+```
+
 ## Unstable verdicts
 
 A mutation run compares the verdict of each mutant with the verdict of
@@ -759,6 +889,8 @@ These verdicts do not appear in the section:
 - A mutant that no test reached, or that ran outside every test.
 - A mutant that the suite skipped under `--skip-killed`. No test of the
   suite ran it.
+- A verdict that the run used again under `--incremental`. No test of
+  the suite ran the mutant.
 
 After such a verdict, the next run compares with the verdict before it.
 For example, a mutant that survived, then was skipped, and then was
@@ -908,7 +1040,10 @@ kind of the reason in `reason_kind`: `deadline`, `crashed`, `memory`,
 `flaky_kill` or `other`. Its `counted_as_killed` is `true` when
 `--crash-kills` counts it as killed, and `false` if not. Under the
 option, `killed` in `summary` counts such a mutant, and `unknown` does
-not count it. The `verdict` of such a mutant stays `unknown`. A test
+not count it. The `verdict` of such a mutant stays `unknown`. A mutant
+whose verdict a run used again under `--incremental` has
+`"reused": true` after its verdict, and the other mutants do not have
+the key. A test
 names its verdict file by its index in `executables`, because two files
 can have the same name. Under `--lines` or `--diff`, the verdict counts,
 the three measures and `mutants` hold only the mutants on the lines. But
@@ -1180,7 +1315,12 @@ suite. A verdict file records its executable, a digest of its bytes and
 its suite. Each record keeps the digest of the source file of its mutant,
 as the rewriter read it, which `--skip-killed` compares. Each record also
 keeps the previous verdict of its mutant
-(see [Unstable verdicts](#unstable-verdicts)).
+(see [Unstable verdicts](#unstable-verdicts)). Each record also keeps
+the `N` of `--mutate-retry` and the settings of the run that gave its
+verdict, and a mark when a run used it again. The file keeps a digest of
+each test: of its source file, its limit and its retries. A kill also
+keeps a digest of the tests of its job up to the killing test
+(see [Reusing the verdicts of the last run](#reusing-the-verdicts-of-the-last-run)).
 `windtrap mutants` merges the files of all suites, and counts the files
 of one executable as one executable. It leaves out a file whose
 executable was deleted or rebuilt since, with a warning, as

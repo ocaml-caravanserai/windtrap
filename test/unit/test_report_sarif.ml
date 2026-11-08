@@ -24,7 +24,7 @@ let mutant ?source ?(line = 1) ?(col = 14) ?(end_line = line) ?(end_col = 19)
 let witness ?exe test = { Sections.test; loc = None; exe }
 
 let survivor ?(m = mutant ()) witnesses =
-  Sarif.Survived { Sections.mutant = m; witnesses }
+  Sarif.Survived { Sections.mutant = m; witnesses; reused = false }
 
 let unknown ?(m = mutant ()) reason =
   Sarif.Unknown

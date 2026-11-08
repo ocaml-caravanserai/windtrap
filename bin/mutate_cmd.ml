@@ -113,7 +113,7 @@ let remedy excluded =
 let fresh files =
   let load path =
     match Verdicts.load path with
-    | Ok { Verdicts.verdicts; identity; suite; refused } ->
+    | Ok { Verdicts.verdicts; identity; suite; refused; test_digests = _ } ->
         Ok
           {
             path;
@@ -298,7 +298,11 @@ let merge ~crash_kills ~source files merged =
       in
       { Sections.test; loc = None; exe = Some exe }
     in
-    { mutant = mutant r; witnesses = List.map witness witnesses }
+    {
+      mutant = mutant r;
+      witnesses = List.map witness witnesses;
+      reused = r.reused;
+    }
   in
   (* The first executable, in the order of [files], that did not evaluate
      the mutant is the one its command runs. A merge is [Not_evaluated] only
@@ -739,11 +743,12 @@ let json ~crash_kills files merged (m : Sections.mutation) =
       \      \"file\": %s, \"line\": %d, \"col\": %d, \"rewrite\": %s,\n\
       \      \"end_line\": %d, \"end_col\": %d,\n\
       \      \"before\": %s, \"after\": %s,\n\
-      \      \"verdict\": %s%s }"
+      \      \"verdict\": %s%s%s }"
       (string (Mutate.id_to_string r.id))
       (string r.id.file) r.id.line r.id.col (string r.id.rewrite) r.end_line
       r.end_col (string r.before) (string r.after)
       (string (verdict_name r.verdict))
+      (if r.reused then ", \"reused\": true" else "")
       (details r)
   in
   let records = Verdicts.records merged in
@@ -1024,6 +1029,18 @@ let ansi o =
           (Os.resolve_color color ~tty:(Os.is_tty_stdout ())
              ~inside_dune:(Os.inside_dune ()) ~term_dumb:(Os.term_dumb ()))
 
+(* The line of the reused verdicts, when there are some. *)
+let reused_lines merged =
+  match
+    List.length
+      (List.filter
+         (fun (r : Verdicts.record) -> r.reused)
+         (Verdicts.records merged))
+  with
+  | 0 -> []
+  | 1 -> [ "reused: 1 verdict from earlier runs" ]
+  | n -> [ strf "reused: %d verdicts from earlier runs" n ]
+
 (* A refused file fails the merge, with a gate or without. A document leaves
    the outcome line out, so the gate gives it. *)
 let gate o (m : Sections.mutation) =
@@ -1073,7 +1090,8 @@ let run args =
         | `Report ->
             Pp.str "%a"
               (fun out -> Sections.print ~out ~ansi)
-              (Sections.mutation_report ~invocation ~gates:o.gates mutation))
+              (Sections.mutation_report ~lines:(reused_lines merged) ~invocation
+                 ~gates:o.gates mutation))
     in
     Ok (gate o mutation)
   in

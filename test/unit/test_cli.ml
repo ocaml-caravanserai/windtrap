@@ -91,6 +91,7 @@ let flags (p : Cli.parsed) =
         some "--mutate-retry" "mutate_retry" string_of_int c.mutate_retry;
         some "--mutate-memory" "mutate_memory" string_of_int c.mutate_memory;
         bool "crash_kills" c.crash_kills;
+        bool "incremental" c.incremental;
         bool "help" p.help;
         bool "version" p.version;
       ]
@@ -163,6 +164,7 @@ let changes (c : Run.config) =
         field "mutate_retry" string_of_int (fun c -> c.Run.mutate_retry);
         field "mutate_memory" string_of_int (fun c -> c.Run.mutate_memory);
         field "crash_kills" bool (fun c -> c.Run.crash_kills);
+        field "incremental" bool (fun c -> c.Run.incremental);
         field "github" bool (fun c -> c.Run.github);
         field "invocation" invocation_name (fun c -> c.Run.invocation);
         field "broadcast selection" bool (fun c ->
@@ -321,6 +323,9 @@ let mirrors =
           ( "WINDTRAP_CRASH_KILLS",
             "maybe",
             {|invalid WINDTRAP_CRASH_KILLS "maybe"|} );
+          ( "WINDTRAP_INCREMENTAL",
+            "maybe",
+            {|invalid WINDTRAP_INCREMENTAL "maybe"|} );
         ];
       test "a boolean mirror refuses another word in Os.bool_expected's words"
         boolean_wording;
@@ -591,6 +596,8 @@ let parsing =
           ([ "--mutate-memory=1048576" ], "mutate_memory 1048576");
           ([ "--crash-kills" ], "crash_kills");
           ([ "--crash-kills=1" ], {|invalid --crash-kills "1"|});
+          ([ "--incremental" ], "incremental");
+          ([ "--incremental=1" ], {|invalid --incremental "1"|});
           ([ "-h" ], "help");
           ([ "--help" ], "help");
           ([ "-V" ], "version");
@@ -1025,6 +1032,29 @@ let resolution =
             "--crash-kills requires --mutate" );
           ([ ("WINDTRAP_CRASH_KILLS", "1") ], [], "defaults");
           ( [ ("WINDTRAP_CRASH_KILLS", "1") ],
+            [ "--arm"; "lib/a.ml:9:12:add" ],
+            "mutation armed lib/a.ml:9:12:add" );
+        ];
+      resolve_rows
+        "--incremental or its mirror sets incremental under --mutate, and on \
+         the command line it needs --mutate"
+        [
+          ([], [ "--mutate"; "--incremental" ], "mutation loop [], incremental");
+          ( [ ("WINDTRAP_INCREMENTAL", "1") ],
+            [ "--mutate" ],
+            "mutation loop [], incremental" );
+          ( [ ("WINDTRAP_INCREMENTAL", "0") ],
+            [ "--mutate=lib/" ],
+            "mutation loop [lib/]" );
+          ( [ ("WINDTRAP_MUTATE", "1") ],
+            [ "--incremental" ],
+            "mutation loop [], incremental, broadcast mutate" );
+          ([], [ "--incremental" ], "--incremental requires --mutate");
+          ( [],
+            [ "--arm"; "lib/a.ml:9:12:add"; "--incremental" ],
+            "--incremental requires --mutate" );
+          ([ ("WINDTRAP_INCREMENTAL", "1") ], [], "defaults");
+          ( [ ("WINDTRAP_INCREMENTAL", "1") ],
             [ "--arm"; "lib/a.ml:9:12:add" ],
             "mutation armed lib/a.ml:9:12:add" );
         ];

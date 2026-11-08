@@ -364,6 +364,17 @@ let slow =
         is_true (Subject.sub 10 4 < 100));
   ]
 
+(* The two tests of [strong] and [weak] whose location names a file that is
+   not on disk, so the loop knows no digest of them. *)
+let unlocated =
+  let missing = ("test/unit/mutate_loop/missing_source.ml", 1, 0, 0) in
+  [
+    test ~__POS__:missing "sub of two positives" (fun () ->
+        equal int 6 (Subject.sub 10 4));
+    test ~__POS__:missing "widen is nonzero" (fun () ->
+        is_true (Subject.widen 3 4 <> 0));
+  ]
+
 (* The probe says it started, beside the dry run's marker, before it
    blocks: a harness that signals the loop then knows the probe is the
    child that runs. *)
@@ -876,6 +887,7 @@ let () =
   | "slow" -> exit @@ run "calc" [ group "slow" slow ]
   | "late" -> exit @@ run "calc" [ group "late" late ]
   | "probe_block" -> exit @@ run "calc" [ group "probe" probe_block ]
+  | "unlocated" -> exit @@ run "calc" [ group "unlocated" unlocated ]
   | "baseline" -> exit @@ run "calc" [ group "baseline" baseline ]
   | "release" -> exit @@ run "calc" [ group "release" release ]
   | "budget" -> exit @@ run "calc" [ group "budget" budget ]

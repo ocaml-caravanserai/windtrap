@@ -2313,6 +2313,7 @@ let add_survivor =
         witness ~file:"test/test_calc.ml" "subtraction \u{203a} stays positive"
           19;
       ];
+    reused = false;
   }
 
 let ge_survivor =
@@ -2323,6 +2324,7 @@ let ge_survivor =
         witness ~file:"test/test_calc.ml" "sign of a negative" 31;
         witness ~file:"test/test_calc.ml" "sign of a positive" 30;
       ];
+    reused = false;
   }
 
 let memo_missed =
@@ -2404,6 +2406,7 @@ let eq_survivor =
         witness ~exe:"test_eval.exe" "division \u{203a} rounds toward zero" 0;
         witness ~exe:"test_printer.exe" "round trip \u{203a} arithmetic" 0;
       ];
+    reused = false;
   }
 
 let not_survivor =
@@ -2419,6 +2422,7 @@ let not_survivor =
         witness ~exe:"test_parser.exe" "errors \u{203a} unexpected end of input"
           0;
       ];
+    reused = false;
   }
 
 let merge_report =
@@ -2523,6 +2527,7 @@ let mutation_entries () =
              Sections.mutant =
                mutant ~source:"let x = 1\n" "a.ml:1:8:add" 1 "1" "2";
              witnesses = [ witness "t" 0 ];
+             reused = false;
            }) );
     ( "an executable column at least exe_width wide, empty for a test that \
        names none",
@@ -3057,6 +3062,52 @@ let runs_in_the_title () =
     [ plain; plain; plain ^ "  (2 runs)"; plain ^ "  (100 runs)" ]
     (List.map title_runs [ None; Some 1; Some 2; Some 100 ])
 
+(* A reused survivor has the mark in place of its runs. *)
+let reused_in_the_title () =
+  let title ?runs () =
+    List.nth
+      (lines
+         (printed
+            (Sections.survivor_block ?runs ~exe_width:None
+               { add_survivor with reused = true })))
+      1
+  in
+  let plain = title_runs None in
+  equal (list string)
+    [ plain ^ "  (reused)"; plain ^ "  (reused)" ]
+    [ title (); title ~runs:3 () ]
+
+(* The lines of a report at rest, with [lines] above its outcome group. *)
+let lines_at_rest () =
+  let report m =
+    lines
+      (printed
+         (Sections.mutation_report ~lines:[ "one"; "two" ] ~invocation:`Mirrors
+            ~gates:Sections.no_gates m))
+  in
+  let rec from = function
+    | "one" :: _ as rest -> List.filteri (fun i _ -> i < 3) rest
+    | _ :: rest -> from rest
+    | [] -> []
+  in
+  (match from (report loop_report) with
+  | [ "one"; "two"; reproduce ] ->
+      is_true (String.starts_with ~prefix:"reproduce: " reproduce)
+  | l -> failf "lines: %s" (String.concat " | " l));
+  (match from (report { loop_report with Sections.survivors = [] }) with
+  | [ "one"; "two"; outcome ] ->
+      is_true (String.starts_with ~prefix:"mutants: " outcome)
+  | l -> failf "lines: %s" (String.concat " | " l));
+  equal (list string)
+    (lines
+       (printed
+          (Sections.mutation_report ~invocation:`Mirrors
+             ~gates:Sections.no_gates loop_report)))
+    (lines
+       (printed
+          (Sections.mutation_report ~lines:[] ~invocation:`Mirrors
+             ~gates:Sections.no_gates loop_report)))
+
 (* The lines of the block of [add_survivor] after its reaching tests. *)
 let early_lines early =
   let block = Sections.survivor_block ~exe_width:None add_survivor in
@@ -3245,6 +3296,12 @@ let mutation_group =
       test "the reaching tests' names are padded to the widest" padded_names;
       test "the title gives the runs of a survivor when they are more than 1"
         runs_in_the_title;
+      test "the title of a reused survivor ends with (reused), not its runs"
+        reused_in_the_title;
+      test
+        "a report at rest gives its lines above reproduce:, or above the \
+         outcome line with no survivor"
+        lines_at_rest;
       test "the block ends with a line for each retry that ended early"
         early_in_the_block;
       test "the executable column appears when a reaching test names one"

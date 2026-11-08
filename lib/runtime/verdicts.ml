@@ -89,6 +89,29 @@ let outcome = function
 
 (* Collections *)
 
+type effort = { retries : int; pass : int; settings : string }
+
+let effort_covers kind ~judged ~asked =
+  String.equal judged.settings asked.settings
+  &&
+  match kind with
+  | `Killed ->
+      (asked.retries = 0 || judged.retries > 0)
+      && judged.pass - 1 <= asked.retries
+  | `Survived -> asked.retries <= judged.retries
+
+let add_name b s = Printf.bprintf b "%d %s" (String.length s) s
+
+let add_test b names =
+  Printf.bprintf b "%d" (List.length names);
+  List.iter (Printf.bprintf b " %a" add_name) names
+
+let prefix_digest paths =
+  let b = Buffer.create 256 in
+  Printf.bprintf b "%d" (List.length paths);
+  List.iter (Printf.bprintf b "\n%a" add_test) paths;
+  Digest.to_hex (Digest.string (Buffer.contents b))
+
 type record = {
   id : Mutate.id;
   end_line : int;
@@ -98,9 +121,19 @@ type record = {
   source_digest : string option;
   verdict : verdict;
   previous : outcome option;
+  effort : effort;
+  prefix : string option;
+  reused : bool;
 }
 
-let record_of_mutant (m : Mutate.mutant) verdict =
+let names_a_test = function
+  | Killed { by = _ :: _ } -> true
+  | Killed { by = [] }
+  | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated | Outside_tests
+  | Unreached ->
+      false
+
+let record_of_mutant ~effort ?prefix (m : Mutate.mutant) verdict =
   {
     id = m.id;
     end_line = m.end_line;
@@ -110,11 +143,14 @@ let record_of_mutant (m : Mutate.mutant) verdict =
     source_digest = m.source_digest;
     verdict;
     previous = None;
+    effort;
+    prefix = Option.map prefix_digest prefix;
+    reused = false;
   }
 
 let changed r =
   match (r.previous, outcome r.verdict) with
-  | Some was, Some is when was <> is -> Some (was, is)
+  | Some was, Some is when was <> is && not r.reused -> Some (was, is)
   | _ -> None
 
 module Id_map = Map.Make (struct
@@ -135,13 +171,36 @@ let empty = Id_map.empty
 let combine a b =
   let key r = (r.before, r.after, r.end_line, r.end_col, r.source_digest) in
   let kept = if compare (key a) (key b) <= 0 then a else b in
-  let rank = function `Killed -> 2 | `Not_evaluated -> 1 | `Survived -> 0 in
+  let outcome_rank = function
+    | `Killed -> 2
+    | `Not_evaluated -> 1
+    | `Survived -> 0
+  in
   let previous =
     match (a.previous, b.previous) with
     | None, p | p, None -> p
-    | Some x, Some y -> Some (if rank x >= rank y then x else y)
+    | Some x, Some y -> Some (if outcome_rank x >= outcome_rank y then x else y)
   in
-  { kept with verdict = merge_verdict a.verdict b.verdict; previous }
+  (* The effort, the prefix and the mark come from the record of the higher
+     rank. Of two records of one rank, the smaller effort and prefix, and the
+     mark only when the two have it. *)
+  let effort, prefix, reused =
+    match Int.compare (rank a.verdict) (rank b.verdict) with
+    | 0 ->
+        let effort, prefix = min (a.effort, a.prefix) (b.effort, b.prefix) in
+        (effort, prefix, a.reused && b.reused)
+    | c ->
+        let r = if c > 0 then a else b in
+        (r.effort, r.prefix, r.reused)
+  in
+  {
+    kept with
+    verdict = merge_verdict a.verdict b.verdict;
+    previous;
+    effort;
+    prefix;
+    reused;
+  }
 
 let add t r =
   let r =
@@ -152,6 +211,8 @@ let add t r =
       ->
         r
   in
+  (* Only a kill that names a test has a prefix. *)
+  let r = if names_a_test r.verdict then r else { r with prefix = None } in
   Id_map.update r.id
     (function None -> Some r | Some prior -> Some (combine prior r))
     t
@@ -186,7 +247,7 @@ let with_previous ~prior t =
 
 let format =
   {
-    Instr.magic = "windtrap-mutants-v14";
+    Instr.magic = "windtrap-mutants-v15";
     kind = "verdict";
     dir = "mutants";
     ext = "mutants";
@@ -224,17 +285,85 @@ type file = {
   identity : identity option;
   suite : string option;
   refused : string option;
+  test_digests : (reaching_test * string) list;
 }
+
+let compare_test = List.compare String.compare
+let equal_test = List.equal String.equal
+
+module Test_map = Map.Make (struct
+  type t = reaching_test
+
+  let compare = compare_test
+end)
+
+let lookup digests =
+  let map =
+    List.fold_left
+      (fun map (test, digest) -> Test_map.add test digest map)
+      Test_map.empty digests
+  in
+  fun test -> Test_map.find_opt test map
+
+let rec through test = function
+  | [] -> []
+  | path :: paths ->
+      if equal_test path test then [ path ] else path :: through test paths
+
+let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
+  let unchanged test =
+    match (recorded test, digest test) with
+    | Some was, Some is -> String.equal was is
+    | Some _, None | None, (Some _ | None) -> false
+  in
+  let same (p : record) =
+    Option.is_some m.source_digest
+    && p.source_digest = m.source_digest
+    && p.end_line = m.end_line && p.end_col = m.end_col
+    && String.equal p.before m.before
+    && String.equal p.after m.after
+  in
+  let compared (p : record) =
+    match p.verdict with
+    | Killed { by = [ test ] }
+      when List.exists (equal_test test) reaching
+           && effort_covers `Killed ~judged:p.effort ~asked:effort ->
+        let prefix = through test reaching in
+        if p.prefix = Some (prefix_digest prefix) then Some prefix else None
+    | Survived { first; others }
+      when effort_covers `Survived ~judged:p.effort ~asked:effort
+           && List.equal equal_test (first :: others)
+                (List.sort_uniq compare_test reaching) ->
+        Some reaching
+    | Killed _ | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated
+    | Outside_tests | Unreached ->
+        None
+  in
+  match (last.refused, Id_map.find_opt m.id last.verdicts) with
+  | None, Some p when same p -> (
+      match compared p with
+      | Some tests when List.for_all unchanged tests ->
+          Some
+            {
+              (record_of_mutant ~effort:p.effort m p.verdict) with
+              prefix = p.prefix;
+              reused = true;
+            }
+      | Some _ | None -> None)
+  | (Some _ | None), _ -> None
 
 (* The records after the header. Every number is in decimal, and a name is
    [<byte length> <bytes>], so it may hold any byte:
 
      [suite <name>]
      tested | refused <reason>
+     <test count>
+     <test> <digest>
      <record count>
-     <file> <line> <col> <end line> <end col> <rewrite> <before> <after> <source> <verdict> <previous>
+     <file> <line> <col> <end line> <end col> <rewrite> <before> <after> <source> <verdict> <previous> <retries> <pass> <settings> <prefix> <mark>
 
-   with one such line for each record, in [Mutate.compare_id] order.
+   with one [<test> <digest>] line for each test digest, in the order of the
+   tests, and one record line for each record, in [Mutate.compare_id] order.
    [<source>] is a name: the digest of the source file that the instrumenter
    read, or empty when the instrumenter could not read it. A test is [<k>]
    and then its [k] names. [<verdict>] is [unreached], [outside_tests],
@@ -245,13 +374,22 @@ type file = {
    <status> <how>] where each of the two is [none] or an integer,
    [memory <mb>], [flaky_kill <test> <failure>] or [other <text>], where
    [<how>], [<failure>] and [<text>] are names. [<previous>] is [none], or
-   [was] and then [killed], [survived] or [not_evaluated]. [load] reads this
-   grammar and nothing else, and refuses a rewrite outside [Mutate.rewrites],
-   which no report could render. *)
+   [was] and then [killed], [survived] or [not_evaluated]. [<retries>] and
+   [<pass>] are numbers, [<pass>] from 1 to [<retries>] + 1. [<digest>] and
+   [<settings>] are 32 lowercase hexadecimal digits, and so is [<prefix>],
+   or [none]. Only a kill that names a test has a prefix. [<mark>] is
+   [fresh], or [reused] on a survivor or on a kill that names a test. [load]
+   reads this grammar and nothing else, and refuses a rewrite outside
+   [Mutate.rewrites], which no report could render. *)
 let load path =
   let read_test c =
     List.init (Instr.read_count c "test path length") (fun _ ->
         Instr.read_name c "test name")
+  in
+  let read_digest c what =
+    match Instr.read_word c what with
+    | word when Instr.is_digest word -> word
+    | word -> Instr.parse_fail "%S is not a %s" word what
   in
   let read_int c what =
     match Instr.read_word c what with
@@ -338,7 +476,53 @@ let load path =
     in
     let verdict = read_verdict c in
     let previous = read_previous c in
-    { id; end_line; end_col; before; after; source_digest; verdict; previous }
+    let retries = Instr.read_nat c "retries" in
+    let pass = Instr.read_nat c "pass" in
+    if pass < 1 || pass - 1 > retries then
+      Instr.parse_fail "pass %d is not from 1 to %d" pass (retries + 1);
+    let settings = read_digest c "settings digest" in
+    let prefix =
+      match Instr.read_word c "prefix" with
+      | "none" -> None
+      | word when Instr.is_digest word ->
+          if not (names_a_test verdict) then
+            Instr.parse_fail "a prefix on a verdict that names no killing test";
+          Some word
+      | word -> Instr.parse_fail "%S is not a prefix" word
+    in
+    let reused =
+      match Instr.read_word c "mark" with
+      | "fresh" -> false
+      | "reused" -> (
+          match verdict with
+          | Survived _ -> true
+          | verdict when names_a_test verdict -> true
+          | _ -> Instr.parse_fail "a reused verdict that cannot be reused")
+      | word -> Instr.parse_fail "unknown mark %S" word
+    in
+    {
+      id;
+      end_line;
+      end_col;
+      before;
+      after;
+      source_digest;
+      verdict;
+      previous;
+      effort = { retries; pass; settings };
+      prefix;
+      reused;
+    }
+  in
+  let rec read_digests c acc n =
+    if n = 0 then List.rev acc
+    else
+      let test = read_test c in
+      (match acc with
+      | (prior, _) :: _ when compare_test prior test >= 0 ->
+          Instr.parse_fail "test digests out of order or repeated"
+      | _ -> ());
+      read_digests c ((test, read_digest c "test digest") :: acc) (n - 1)
   in
   let rec read_records c t n =
     if n = 0 then t
@@ -366,19 +550,32 @@ let load path =
           | "refused" -> Some (Instr.read_name c "refusal")
           | word -> Instr.parse_fail "unknown status %S" word
         in
+        let test_digests =
+          read_digests c [] (Instr.read_count c "test count")
+        in
         let verdicts =
           read_records c empty (Instr.read_count c "record count")
         in
         Instr.finish c;
-        Ok { verdicts; identity; suite; refused }
+        Ok { verdicts; identity; suite; refused; test_digests }
       with Instr.Parse_error reason -> Error (Corrupt { path; reason }))
 
-let save ?identity ?suite ?refused path t =
-  let add_name b s = Printf.bprintf b "%d %s" (String.length s) s in
-  let add_test b names =
-    Printf.bprintf b "%d" (List.length names);
-    List.iter (Printf.bprintf b " %a" add_name) names
+let save ?identity ?suite ?refused ?(test_digests = []) path t =
+  let test_digests =
+    List.sort (fun (a, _) (b, _) -> compare_test a b) test_digests
   in
+  let rec check = function
+    | (a, _) :: ((b, _) :: _ as rest) ->
+        if equal_test a b then
+          invalid_arg "Windtrap_runtime.Verdicts.save: two digests of one test";
+        check rest
+    | [ _ ] | [] -> ()
+  in
+  check test_digests;
+  if not (List.for_all (fun (_, d) -> Instr.is_digest d) test_digests) then
+    invalid_arg
+      "Windtrap_runtime.Verdicts.save: a test digest is not 32 lowercase \
+       hexadecimal digits";
   let add_int b = function
     | None -> Buffer.add_string b "none"
     | Some n -> Printf.bprintf b "%d" n
@@ -420,13 +617,20 @@ let save ?identity ?suite ?refused path t =
   (match refused with
   | None -> Buffer.add_string b "tested\n"
   | Some reason -> Printf.bprintf b "refused %a\n" add_name reason);
+  Printf.bprintf b "%d\n" (List.length test_digests);
+  List.iter
+    (fun (test, digest) -> Printf.bprintf b "%a %s\n" add_test test digest)
+    test_digests;
   Printf.bprintf b "%d\n" (Id_map.cardinal t);
   Id_map.iter
     (fun (id : Mutate.id) r ->
-      Printf.bprintf b "%a %d %d %d %d %a %a %a %a %a %a\n" add_name id.file
-        id.line id.col r.end_line r.end_col add_name id.rewrite add_name
-        r.before add_name r.after add_name
+      Printf.bprintf b "%a %d %d %d %d %a %a %a %a %a %a %d %d %s %s %s\n"
+        add_name id.file id.line id.col r.end_line r.end_col add_name id.rewrite
+        add_name r.before add_name r.after add_name
         (Option.value r.source_digest ~default:"")
-        add_verdict r.verdict add_previous r.previous)
+        add_verdict r.verdict add_previous r.previous r.effort.retries
+        r.effort.pass r.effort.settings
+        (Option.value r.prefix ~default:"none")
+        (if r.reused then "reused" else "fresh"))
     t;
   Instr.write_file path (Buffer.contents b)

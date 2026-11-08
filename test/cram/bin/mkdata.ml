@@ -21,8 +21,11 @@
      the kind other. HOW is the phrase of a crash. TEST is the killing test
      of a flaky kill.
      VERDICT@PREVIOUS gives the record the previous outcome PREVIOUS:
-     killed, survived or not_evaluated. --suite records the suite. No record
-     has a source digest.
+     killed, survived or not_evaluated. A suffix +reused, after VERDICT or
+     after VERDICT@PREVIOUS, marks the verdict as reused. --suite records the
+     suite. No record has a source digest or a prefix, and each record has
+     the effort of a run with no retry and settings of 32 zeros. The file
+     has no test digest.
 
    --exe records the identity of the executable at EXE as it is now. *)
 
@@ -106,8 +109,15 @@ let previous = function
   | "not_evaluated" -> `Not_evaluated
   | p -> die "%S: not an outcome" p
 
+let effort = { Verdicts.retries = 0; pass = 1; settings = String.make 32 '0' }
+
 let record spec =
   let mutant, v = split_last '=' spec in
+  let v, reused =
+    match String.ends_with ~suffix:"+reused" v with
+    | true -> (String.sub v 0 (String.length v - 7), true)
+    | false -> (v, false)
+  in
   let v, previous =
     match String.index_opt v '@' with
     | Some i ->
@@ -135,6 +145,9 @@ let record spec =
         source_digest = None;
         verdict = verdict v;
         previous;
+        effort;
+        prefix = None;
+        reused;
       }
   | _ -> die "%S: not FILE:LINE:COL:REWRITE:BEFORE:AFTER" mutant
 

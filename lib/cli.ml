@@ -3,6 +3,15 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
+(* [dune subst], which [dune-release distrib] runs in the clone it archives,
+   replaces the watermark with the tag's version. A tree built unsubstituted,
+   such as a checkout, still holds it and has no release. *)
+let release =
+  let watermark = "%%VERSION%%" in
+  if String.starts_with ~prefix:"%" watermark then None else Some watermark
+
+let version = Option.value release ~default:"dev"
+
 (* Parsed flags *)
 
 (* Each flag sets the configuration's field directly, over the defaults, and
@@ -317,6 +326,11 @@ let entries =
       ~mirror:(mirrored "WINDTRAP_SKIP_KILLED")
       "Skip the mutants that the verdict file of another suite killed (with \
        --mutate).";
+    row "--incremental"
+      (switch (fun c -> { c with incremental = true }))
+      ~mirror:(mirrored "WINDTRAP_INCREMENTAL")
+      "Reuse the verdicts of the last run of this suite for the mutants whose \
+       source and tests did not change (with --mutate).";
     row "--mutate-retry"
       (value "N" retry (field (fun c mutate_retry -> { c with mutate_retry })))
       ~mirror:(mirrored "WINDTRAP_MUTATE_RETRY")
@@ -616,6 +630,11 @@ let settings cli =
     else Ok ()
   in
   let* () =
+    if gave cli "--incremental" && not (gave layered "--mutate") then
+      Error (Requires_any ("--incremental", [ "--mutate" ]))
+    else Ok ()
+  in
+  let* () =
     if gave layered "--mutate" && gave layered "--arm" then
       Error (Incompatible_flags ("--mutate", "--arm"))
     else Ok ()
@@ -642,6 +661,7 @@ let settings cli =
         (if gave layered "--mutate" then c.mutate_memory
          else (Run.default_config ()).mutate_memory);
       crash_kills = c.crash_kills && gave layered "--mutate";
+      incremental = c.incremental && gave layered "--mutate";
       case_file;
       log_dir = path "--output" c.log_dir;
       junit = Option.map (path "--junit") c.junit;

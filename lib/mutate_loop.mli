@@ -60,6 +60,10 @@ val execute_and_report :
     + Under the [skip_killed] of the scope, it reads the other verdict files and
       skips each reached mutant that one of them killed ({b Killed elsewhere}
       below). A skipped mutant gets no job.
+    + Under [config.incremental], it reads the verdict file of the last run of
+      the suite and reuses the verdict of each reached mutant that the skip
+      leaves, when the evidence did not change ({b Incremental reuse} below). A
+      reused mutant gets no job.
     + It runs the jobs ([Supervisor.fresh]), each in a worker of its own, which
       ran no test before it: the determinism probe, which is the tests that the
       dry run executed, unarmed, and then one job per reached mutant that it
@@ -121,8 +125,9 @@ val execute_and_report :
     when it is above [1], and one line for each retry that did not evaluate the
     site, ended early or gave a kill that the check does not trust, with why
     ({!Report.mutation_survivor}). A retry that hangs costs its deadline. The
-    verdict file does not record the runs. The live line names a mutant of a
-    later pass as it did in the first pass.
+    verdict file records [config.mutate_retry] and the pass that gave each
+    verdict, not the early lines. The live line names a mutant of a later pass
+    as it did in the first pass.
 
     {b Flaky kills.} Under [config.mutate_retry] above [0], a kill whose job
     names a killing test waits for a check. The killing test is the first test
@@ -174,6 +179,55 @@ val execute_and_report :
     after the dry run. The time that it takes to read them does not count in the
     deadline of a job.
 
+    {b Incremental reuse.} Under [config.incremental] ([--incremental]), after
+    the dry run, the loop loads {!Windtrap_runtime.Verdicts.output_file} of its
+    executable and suite, which any build can have written. It does not use a
+    file of another suite. A file that does not load, an earlier format
+    included, gives a warning on standard error, and the loop then replaces it.
+    No file gives no warning. A reached mutant that the skip leaves keeps the
+    verdict of that file when {!Windtrap_runtime.Verdicts.reuse} accepts it:
+    - The file is not refused, and it has a record of the mutant with the source
+      digest, not [None], the renderings and the extent of this run.
+    - The record is a kill that names a test, and the killing test reaches the
+      mutant in this dry run. The tests of the job of this run, up to the
+      killing test, are those of the kill, in the same order. Or the record is a
+      survivor, and the same set of tests reaches the mutant.
+    - Each of these tests has the same digest in the file and in this run. The
+      digest of a test is the MD5 of the digest of its source file
+      ({!test_digest}), of its declared limit and of its declared retries. A
+      test with no location, or whose file the loop cannot read, has no digest.
+    - The effort of the record covers the effort of this run
+      ({!Windtrap_runtime.Verdicts.effort_covers}): the same {!settings}, and
+      enough retries. Under [config.mutate_retry] above [0], a kill is reused
+      only from a run that had retries too. A kill from the [k]-th retry is
+      reused only when [config.mutate_retry] is [k] or more.
+
+    A reused mutant gets no job, no retry and no check. Once the probe agrees,
+    the loop commits each reused kill in the first pass, and each reused
+    survivor in the last pass. The loop commits a reused verdict before the job
+    of the next mutant in catalogue order. When the last pass does not run, a
+    reused survivor comes after the retries. Thus, for the same verdicts, the
+    blocks print in the order of a run that tests each mutant. A reused survivor
+    prints its block, with [(reused)] after its title.
+
+    One type of survivor is an exception. A kill in a retry can give a survivor
+    when its check does not trust the kill. In a run that tests each mutant,
+    this survivor prints when its check ends, after the last pass. When the loop
+    reuses it, it prints in the last pass. Except for this survivor, the
+    [reproduce:] line arms the same survivor.
+
+    A probe that disagrees, or a signal before the probe ends, commits none. A
+    later signal stops the commits after the stopped job, as it stops the jobs.
+    But when the run ends with each verdict known, the loop commits the reused
+    verdicts that remain.
+
+    Above the outcome line and its [reproduce:] line, after the line of
+    [--skip-killed], one line gives the number of verdicts that the run reused,
+    as in [reused: 2 verdicts from the last run]. It prints in a finished and in
+    an interrupted report, also when the number is [0]. A narrowed run reuses
+    too, and saves no verdict. When no file of this build exists, it writes a
+    refused file, so the next run reuses no verdict.
+
     {b Tests marked xfail.} A test marked xfail ({!Test_tree.val-xfail}) reaches
     no mutant and kills none. The dry run and the probe run it, no mutant's job
     runs it, and no survivor names it.
@@ -199,14 +253,18 @@ val execute_and_report :
     [Outside_tests] record per mutant of the population evaluated outside tests,
     and one [Unreached] record per unreached one. A skipped mutant has a
     [Killed_elsewhere] record. Each record has the source digest of its mutant
-    ({!Windtrap_runtime.Verdicts.record_of_mutant}). The file is written to
-    {!Windtrap_runtime.Verdicts.output_file} of the executable and the suite, by
-    {!Windtrap_runtime.Verdicts.save}, which records the suite. Under a scope,
-    the records of the files outside it stay when the file there was written by
-    this build ({!Windtrap_runtime.Verdicts.writer_identity}) for the same suite
-    and the suite was tested, and are dropped otherwise. A file that cannot be
-    written ([Sys_error]) is one sentence on standard error above the outcome
-    line.
+    ({!Windtrap_runtime.Verdicts.record_of_mutant}), the effort of the run that
+    gave its verdict and a mark. A reused record keeps the effort of the run
+    that tested the mutant. A kill that names a test has the digest of the tests
+    of its job up to the killing test. The file has the digest of each test of
+    the suite that has one, also without [config.incremental]. The file is
+    written to {!Windtrap_runtime.Verdicts.output_file} of the executable and
+    the suite, by {!Windtrap_runtime.Verdicts.save}, which records the suite.
+    Under a scope, the records of the files outside it stay when the file there
+    was written by this build ({!Windtrap_runtime.Verdicts.writer_identity}) for
+    the same suite and the suite was tested, and are dropped otherwise. A file
+    that cannot be written ([Sys_error]) is one sentence on standard error above
+    the outcome line.
 
     Only a loop that ran whole, over the whole suite, writes its verdicts. A run
     whose selection narrows the suite says so on standard error above the
@@ -225,8 +283,9 @@ val execute_and_report :
     section ({!Report_sections.type-unstable}). A skipped mutant is not listed,
     because a skip is no outcome. A run that writes no file of its verdicts
     lists none: a narrowed run, a refused run, a run that a signal stopped
-    before its last verdict, and a run whose file cannot be written. The list
-    does not change the score or the result.
+    before its last verdict, and a run whose file cannot be written. A reused
+    verdict is not listed ({!Windtrap_runtime.Verdicts.changed}). The list does
+    not change the score or the result.
 
     {b What the environment asks.} The facade's [WINDTRAP_MUTATE] rule holds
     when [config.broadcast.mutate] does: an empty population and a selection
@@ -322,6 +381,25 @@ val execute_and_report :
     [SIGPIPE] ignored, the [Sys_error] of the failed write escapes
     {!execute_and_report} instead. *)
 
+(** {1:evidence Evidence}
+
+    The values that the loop records for each verdict and compares under
+    [config.incremental], exposed for a test. *)
+
+val settings : Run.config -> string
+(** [settings config] is the lowercase hexadecimal MD5 of one injective spelling
+    of the settings of [config] that change what a test does in a job: the
+    windtrap version ({!Cli.version}), [seed], [prop_count], [replay], the
+    choices of [case_file], [mutate_workers], [timeout], [default_timeout] and
+    [mutate_memory]. Each value has a tag and a length, so no two configurations
+    that differ in one of them share a spelling. *)
+
+val test_digest : string -> string option
+(** [test_digest file] is the lowercase hexadecimal MD5 of the source file
+    [file] of a test, as its location names it. It reads the file under
+    {!Os.project_root} first ({!Os.reconstruct}) and then as given, and it reads
+    only a regular file. A file that it cannot read gives [None]. *)
+
 (** {1:effects Effects}
 
     Beyond the effects of {!Report.run} and [Supervisor.fresh], the loop reads
@@ -330,4 +408,7 @@ val execute_and_report :
     {!Os.project_root} first and then as given. Under [skip_killed], it lists
     the directory of its verdict file after the dry run, reads the other regular
     files with the extension [.mutants] in it, and reads the executable that
-    each such file names. *)
+    each such file names. After the dry run, it reads the source file of each
+    test that has a location, once for each file, under {!Os.project_root}
+    first. Under [config.incremental], it reads its verdict file after the dry
+    run. The time of these reads does not count in the deadline of a job. *)

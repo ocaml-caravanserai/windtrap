@@ -472,6 +472,12 @@ the fast suites first, in a separate `dune runtest`. Two suites that use
 the option at the same time can skip one mutant because of each other.
 Thus run them one after the other (`dune runtest -j 1`).
 
+`--incremental` (`WINDTRAP_INCREMENTAL=1`) uses the verdicts of the last
+run of the suite again for the mutants whose source and tests did not
+change. The report then gives `reused: N verdicts from the last run`. It
+does not examine helper modules or data files, so do a full run each
+night.
+
 `--mutate-workers` (`WINDTRAP_MUTATE_WORKERS=1`) lets a stateful test on
 several domains spawn its worker domains under `--mutate` and `--arm`.
 Without it, such a test runs each program on one domain, and a mutant

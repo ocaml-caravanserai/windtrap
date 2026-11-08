@@ -1868,6 +1868,67 @@ not count:
   windtrap: 1 mutant that default/test/b.exe skipped as killed by default/test/a.exe is not killed by it in the merge, so the skip does not count: run default/test/b.exe again with its mutants, then merge again
   [1]
 
+Reused verdicts
+
+A run under --incremental marks each verdict that it took from its last
+run. The block of a reused survivor has (reused), and a line above the
+reproduce: line counts the reused verdicts. A reused verdict is no change,
+so lt gives no unstable row:
+
+  $ plant "$scratch/reused" && cd "$scratch/reused"
+  $ mkdata mutants _build/_mutants/a.mutants "$add=killed:calc/adds+reused" \
+  >   "$sub=survived:calc/subtracts+reused" "$lt=killed:calc/compares@survived+reused" \
+  >   "$or=killed:util/ors"
+  $ run windtrap mutants
+  ───────────────────── survivors (1) ──────────────────────
+  File "lib/calc.ml", line 2, characters 14-19:
+    SURVIVED  lib/calc.ml:2:14:sub  a - b → a + b  (reused)
+        2 │ let sub a b = a - b
+  
+      1 test ran this line and did not fail:
+        a.mutants  calc › subtracts
+  ──────────────────────────────────────────────────────────
+  
+  reused: 3 verdicts from earlier runs
+  reproduce: WINDTRAP_MUTATE_ARM=lib/calc.ml:2:14:sub dune runtest --force --instrument-with ppx_windtrap.mutate
+  mutants: 1 survived of 4 reached, 3 killed, 1 executable, score 75.0% (3/4), reach 100.0% (4/4), total 75.0% (3/4)
+  [1]
+  $ run windtrap mutants --json | grep -E '"verdict"|"id"'
+      { "id": "lib/calc.ml:1:14:add",
+        "verdict": "killed", "reused": true,
+      { "id": "lib/calc.ml:2:14:sub",
+        "verdict": "survived", "reused": true,
+      { "id": "lib/calc.ml:3:14:lt",
+        "verdict": "killed", "reused": true,
+      { "id": "lib/util.ml:1:13:or",
+        "verdict": "killed",
+
+A reused kill in one file and a fresh kill in another give a kill with no
+mark, and no line:
+
+  $ plant "$scratch/half-reused" && cd "$scratch/half-reused"
+  $ mkdata mutants _build/_mutants/a.mutants "$add=killed:calc/adds+reused" \
+  >   "$sub=survived:calc/subtracts"
+  $ mkdata mutants _build/_mutants/b.mutants "$add=killed:cli/adds"
+  $ run windtrap mutants
+  ───────────────────── survivors (1) ──────────────────────
+  File "lib/calc.ml", line 2, characters 14-19:
+    SURVIVED  lib/calc.ml:2:14:sub  a - b → a + b
+        2 │ let sub a b = a - b
+  
+      1 test ran this line and did not fail:
+        a.mutants  calc › subtracts
+  ──────────────────────────────────────────────────────────
+  
+  reproduce: WINDTRAP_MUTATE_ARM=lib/calc.ml:2:14:sub dune runtest --force --instrument-with ppx_windtrap.mutate
+  mutants: 1 survived of 2 reached, 1 killed, 2 executables, score 50.0% (1/2), reach 100.0% (2/2), total 50.0% (1/2)
+  [1]
+  $ run windtrap mutants --json | grep -E '"verdict"|"id"'
+      { "id": "lib/calc.ml:1:14:add",
+        "verdict": "killed",
+      { "id": "lib/calc.ml:2:14:sub",
+        "verdict": "survived",
+
 Files that cannot be merged
 
 Nothing to merge is exit 1, with a hint that names the backend and the
@@ -1885,7 +1946,7 @@ A truncated file is corrupt, and nothing is reported:
   $ plant "$scratch/truncated" && cd "$scratch/truncated"
   $ mkdata mutants whole.mutants "$add=killed" "$sub=unreached" "$lt=survived:calc/compares"
   $ mkdir -p _build/_mutants
-  $ head -c $(( $(wc -c < whole.mutants) - 11 )) whole.mutants > _build/_mutants/cut.mutants
+  $ head -c $(( $(wc -c < whole.mutants) - 59 )) whole.mutants > _build/_mutants/cut.mutants
   $ run windtrap mutants
   --- stderr
   windtrap: .../cut.mutants: corrupt verdict file: truncated test name
@@ -1898,13 +1959,13 @@ is to delete it, which a coverage dump in the directory shares:
   $ printf 'windtrap-mutants-v0\n1\nsome older payload\n' > _build/_mutants/old.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v14", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v15", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
   $ rm _build/_mutants/old.mutants
   $ printf 'windtrap-coverage-v3\n0\n' > _build/_mutants/cov.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v14", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v15", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
 
 A PATH that cannot be used fails the command, and the files named beside

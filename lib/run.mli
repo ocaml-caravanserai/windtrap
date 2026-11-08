@@ -177,6 +177,10 @@ type config = {
           passed its deadline, crashed or passed its memory limit as killed
           ({!Report_sections.val-counted_as_killed}). The verdict file does not
           change. *)
+  incremental : bool;
+      (** [--incremental]: under {!Loop}, a reached mutant whose evidence did
+          not change since the last run of the suite keeps the verdict of that
+          run, and its job does not run (see [Mutate_loop]). *)
   github : bool;
       (** Whether the report is written for GitHub Actions, with its group and
           its annotations (see {!Report}). *)
