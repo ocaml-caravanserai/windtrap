@@ -138,6 +138,9 @@ type file = {
   kills : string list; (* The killing tests of each kill. *)
   previous : string list; (* The previous outcome of each record. *)
   identity : (string * string) option; (* The writer's path and digest. *)
+  marks : string list; (* The mark of each record. *)
+  efforts : string list; (* The retries and the pass of each record. *)
+  digests : (string list * string) list; (* The test digests. *)
 }
 
 let identity (i : Verdicts.identity) = (i.exe, i.digest)
@@ -157,16 +160,32 @@ let saved path =
   else
     let raw = read path in
     match Verdicts.load path with
-    | Ok { verdicts; identity = writer; suite; refused; test_digests = _ } ->
+    | Ok { verdicts; identity = writer; suite; refused; test_digests } ->
+        let records = Verdicts.records verdicts in
+        let at (r : Verdicts.record) =
+          strf "%s:%d" (local r.id.file) r.id.line
+        in
         Some
           {
             raw;
             suite;
             refused;
-            rows = List.map row (Verdicts.records verdicts);
-            kills = List.filter_map kill_row (Verdicts.records verdicts);
-            previous = List.map previous_row (Verdicts.records verdicts);
+            rows = List.map row records;
+            kills = List.filter_map kill_row records;
+            previous = List.map previous_row records;
             identity = Option.map identity writer;
+            marks =
+              List.map
+                (fun (r : Verdicts.record) ->
+                  strf "%s %s" (at r) (if r.reused then "reused" else "fresh"))
+                records;
+            efforts =
+              List.map
+                (fun (r : Verdicts.record) ->
+                  strf "%s retries %d pass %d" (at r) r.effort.retries
+                    r.effort.pass)
+                records;
+            digests = test_digests;
           }
     | Error e ->
         let reason = Format.asprintf "unreadable: %a" Verdicts.pp_error e in
@@ -179,6 +198,9 @@ let saved path =
             kills = [];
             previous = [];
             identity = None;
+            marks = [];
+            efforts = [];
+            digests = [];
           }
 
 type ran = {
@@ -3153,9 +3175,11 @@ let whole ?(outcome_line = green_outcome) (r : ran) =
   equal string outcome_line (outcome r.out)
 
 (* The verdict file at [path] with [change] applied to each record. The
-   file keeps its suite, unless [suite] replaces it, and its writer, unless
-   [digest] gives the writer another digest. *)
-let rewrite ?(path = verdicts_path ()) ?digest ?suite change =
+   file keeps its suite, unless [suite] replaces it, its writer, unless
+   [digest] gives the writer another digest, its status, unless [refused]
+   replaces it, and its test digests, with [tests] applied to the list. *)
+let rewrite ?(path = verdicts_path ()) ?digest ?suite ?refused ?(tests = Fun.id)
+    change =
   let f = require_ok ~pp:Verdicts.pp_error (Verdicts.load path) in
   let identity =
     match digest with
@@ -3165,7 +3189,8 @@ let rewrite ?(path = verdicts_path ()) ?digest ?suite change =
   in
   Verdicts.save ?identity
     ?suite:(match suite with Some _ -> suite | None -> f.suite)
-    path
+    ?refused:(match refused with Some r -> r | None -> f.refused)
+    ~test_digests:(tests f.test_digests) path
     (List.fold_left Verdicts.add Verdicts.empty
        (List.map change (Verdicts.records f.verdicts)))
 
@@ -4817,6 +4842,505 @@ let killing_tests =
           equal (list string) [ "subject.ml:18 flaky_kill" ] (reason_kinds k.r));
     ]
 
+(* Incremental reuse *)
+
+let incremental = "--incremental"
+
+let reused_line n =
+  strf "reused: %d verdict%s from the last run" n (if n = 1 then "" else "s")
+
+let reused_of out =
+  List.find_opt (String.starts_with ~prefix:"reused: ") (lines out)
+
+let marks r = Option.map (fun (f : file) -> f.marks) r.file
+let efforts r = Option.map (fun (f : file) -> f.efforts) r.file
+
+let marked m15 m18 =
+  Some
+    [
+      "subject.ml:15 " ^ m15;
+      "subject.ml:18 " ^ m18;
+      "subject.ml:21 fresh";
+      "subject.ml:27 fresh";
+    ]
+
+let fresh = marked "fresh" "fresh"
+let both_reused = marked "reused" "reused"
+
+(* The unreached mutants have the effort of the run, [rest]. *)
+let efforts_of ?(rest = "retries 0 pass 1") e15 e18 =
+  Some
+    [
+      "subject.ml:15 " ^ e15;
+      "subject.ml:18 " ^ e18;
+      "subject.ml:21 " ^ rest;
+      "subject.ml:27 " ^ rest;
+    ]
+
+let project_root = Windtrap.Private.Os.project_root ()
+
+let suite_source =
+  Filename.concat project_root "test/unit/mutate_loop/suite_main.ml"
+
+(* The digest of a test of suite_main.ml that declares no limit and no
+   retries. *)
+let entry () =
+  Digest.to_hex
+    (Digest.string
+       (strf "%s none 0" (Digest.to_hex (Digest.file suite_source))))
+
+(* A whole run with no earlier file. *)
+let first_run ?(args = []) () =
+  remove (verdicts_path ());
+  let r = rerun (mutate :: args) in
+  whole r;
+  r
+
+let second_run ?(args = []) () = rerun (mutate :: incremental :: args)
+
+(* A run whose verdicts and outcome are those of [green], with [n] reused. *)
+let as_green n (r : ran) =
+  whole r;
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option string) (Some (reused_line n)) (reused_of r.out)
+
+(* The tests of each kill and the paths of the job up to the killing test. *)
+let positives = [ "calc"; "sub of two positives" ]
+let to_zero = [ "calc"; "sub to zero" ]
+let negatives = [ "calc"; "sub of two negatives" ]
+let nonzero = [ "widen"; "widen is nonzero" ]
+let not_99 = [ "widen"; "widen is not 99" ]
+
+let kill_at line ~by ~through (r : Verdicts.record) =
+  if r.id.line <> line then r
+  else
+    {
+      r with
+      verdict = Verdicts.killed [ by ];
+      prefix = Some (Verdicts.prefix_digest through);
+    }
+
+let digest_of test digest tests =
+  List.map (fun (t, d) -> if t = test then (t, digest) else (t, d)) tests
+
+let effort_at line ~retries ~pass (r : Verdicts.record) =
+  if r.id.line <> line then r
+  else { r with effort = { r.effort with retries; pass } }
+
+let second_reuses () =
+  let r1 = first_run () in
+  equal (option string) None (reused_of r1.out);
+  equal (option (list string)) fresh (marks r1);
+  let entry = entry () in
+  equal
+    (option (list (pair (list string) string)))
+    (Some
+       (List.map
+          (fun t -> (t, entry))
+          [
+            negatives;
+            positives;
+            to_zero;
+            [ "dismissed"; "the dismissed site is run and not pinned" ];
+            nonzero;
+            not_99;
+          ]))
+    (Option.map (fun (f : file) -> f.digests) r1.file);
+  let r2 = second_run () in
+  as_green 2 r2;
+  equal (option string) (Some (reused_line 2)) (above_reproduce r2.out);
+  equal string green_outcome (outcome r2.out);
+  equal (option (list string)) both_reused (marks r2);
+  equal (option (list string)) (kills r1) (kills r2);
+  is_some
+    (index_of ~sub:(strf "%s  a + b \u{2192} a - b  (reused)" (site 18)) r2.out)
+
+let planted_survivor () =
+  ignore (first_run ());
+  rewrite (at_line 15 (Verdicts.survived [ positives; to_zero; negatives ]));
+  let r = second_run () in
+  equal
+    (option (list string))
+    (Some
+       ("subject.ml:15 survived by calc \u{203a} sub of two negatives, calc \
+         \u{203a} sub of two positives, calc \u{203a} sub to zero"
+      :: List.tl green_rows))
+    (rows r);
+  equal (option (list string)) both_reused (marks r);
+  equal (list string) [ site 15; site 18 ] (survivors r.out);
+  ignore (first_run ());
+  rewrite (at_line 15 (survived_by "sub to zero"));
+  let r = second_run () in
+  as_green 1 r;
+  equal (option (list string)) (marked "fresh" "reused") (marks r)
+
+let planted_kill () =
+  ignore (first_run ());
+  rewrite (kill_at 18 ~by:nonzero ~through:[ nonzero ]);
+  let r = second_run () in
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 killed";
+         "subject.ml:18 killed";
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows r);
+  equal (option (list string)) both_reused (marks r);
+  equal (list string) [] (survivors r.out);
+  ignore (first_run ());
+  rewrite (at_line 18 (Verdicts.killed []));
+  let r = second_run () in
+  as_green 1 r;
+  equal (option (list string)) (marked "reused" "fresh") (marks r);
+  ignore (first_run ());
+  rewrite (kill_at 18 ~by:to_zero ~through:[ to_zero ]);
+  let r = second_run () in
+  as_green 1 r;
+  equal (option (list string)) (marked "reused" "fresh") (marks r)
+
+(* The kill of line 15 names its first test, [positives]. *)
+let changed_tests () =
+  let run ?(change = Fun.id) tests =
+    ignore (first_run ());
+    rewrite ~tests change;
+    let r = second_run () in
+    whole r;
+    marks r
+  in
+  let other = String.make 32 'e' in
+  equal
+    (list (option (list string)))
+    [
+      marked "fresh" "reused";
+      marked "fresh" "reused";
+      marked "reused" "reused";
+      marked "reused" "reused";
+      marked "fresh" "reused";
+      marked "reused" "fresh";
+    ]
+    [
+      run (digest_of positives other);
+      run
+        ~change:(kill_at 15 ~by:to_zero ~through:[ positives; to_zero ])
+        (digest_of positives other);
+      run
+        ~change:(kill_at 15 ~by:to_zero ~through:[ positives; to_zero ])
+        Fun.id;
+      run (digest_of negatives other);
+      run (List.filter (fun (t, _) -> t <> positives));
+      run (List.filter (fun (t, _) -> t <> not_99));
+    ]
+
+(* The tests of [unlocated] name a file that is not on disk. *)
+let unlocated () =
+  let env = [ suite "unlocated" ] in
+  remove (verdicts_path ());
+  let r1 = rerun ~env [ mutate ] in
+  equal string "exited 0" r1.status;
+  equal
+    (option (list (pair (list string) string)))
+    (Some [])
+    (Option.map (fun (f : file) -> f.digests) r1.file);
+  let r2 = rerun ~env [ mutate; incremental ] in
+  equal string "exited 0" r2.status;
+  equal (option string) (Some (reused_line 0)) (reused_of r2.out);
+  equal (option (list string)) (rows r1) (rows r2)
+
+let other_mutant_records =
+  [
+    ( "another source digest",
+      fun (r : Verdicts.record) ->
+        { r with source_digest = Some (String.make 32 '0') } );
+    ("another rendering", fun r -> { r with after = "a * b" });
+    ("another end", fun r -> { r with end_col = r.end_col + 1 });
+  ]
+
+let other_mutant_record (_, change) =
+  ignore (first_run ());
+  rewrite change;
+  as_green 0 (second_run ());
+  ()
+
+let not_reusable =
+  [
+    ("not evaluated", Verdicts.Not_evaluated);
+    ("unknown", Verdicts.Unknown (Other "its run was killed by SIGSEGV"));
+    ("killed elsewhere", Verdicts.Killed_elsewhere { exe = "default/other.exe" });
+  ]
+
+let not_reused (_, verdict) =
+  ignore (first_run ());
+  rewrite (at_line 15 verdict);
+  let r = second_run () in
+  as_green 1 r;
+  equal (option (list string)) (marked "fresh" "reused") (marks r)
+
+let other_settings () =
+  ignore (first_run ());
+  rewrite (fun r ->
+      { r with effort = { r.effort with settings = String.make 32 '0' } });
+  as_green 0 (second_run ());
+  ignore (first_run ());
+  as_green 0 (second_run ~args:[ "--seed"; "s1:0000000000000007" ] ())
+
+let retry_once = "--mutate-retry=1"
+
+let retries () =
+  ignore (first_run ());
+  let r = second_run ~args:[ retry_once ] () in
+  as_green 0 r;
+  equal
+    (option (list string))
+    (efforts_of ~rest:"retries 1 pass 1" "retries 1 pass 1" "retries 1 pass 2")
+    (efforts r);
+  ignore (first_run ());
+  rewrite (effort_at 18 ~retries:2 ~pass:3);
+  let r = second_run ~args:[ retry_once ] () in
+  as_green 1 r;
+  equal (option (list string)) (marked "fresh" "reused") (marks r);
+  equal
+    (option (list string))
+    (efforts_of ~rest:"retries 1 pass 1" "retries 1 pass 1" "retries 2 pass 3")
+    (efforts r);
+  ignore (first_run ());
+  rewrite (effort_at 15 ~retries:1 ~pass:1);
+  let r = second_run ~args:[ "--mutate-retry=2" ] () in
+  as_green 1 r;
+  equal (option (list string)) (marked "reused" "fresh") (marks r)
+
+(* A kill of a retry needs a run with as many retries. *)
+let kill_of_a_retry () =
+  ignore (first_run ());
+  rewrite (effort_at 15 ~retries:1 ~pass:2);
+  let r = second_run () in
+  as_green 1 r;
+  equal (option (list string)) (marked "fresh" "reused") (marks r);
+  ignore (first_run ());
+  rewrite (effort_at 15 ~retries:1 ~pass:2);
+  let r = second_run ~args:[ retry_once ] () in
+  as_green 1 r;
+  equal (option (list string)) (marked "reused" "fresh") (marks r)
+
+let rising_retries () =
+  remove (verdicts_path ());
+  let run n = second_run ~args:[ strf "--mutate-retry=%d" n ] () in
+  let counts =
+    List.map
+      (fun n ->
+        let r = run n in
+        whole r;
+        (reused_of r.out, efforts r))
+      [ 0; 1; 1; 2; 0 ]
+  in
+  equal
+    (list (option string))
+    (List.map (fun n -> Some (reused_line n)) [ 0; 0; 2; 1; 2 ])
+    (List.map fst counts);
+  equal
+    (option (list string))
+    (efforts_of "retries 1 pass 1" "retries 2 pass 3")
+    (snd (List.nth counts 4))
+
+let chain () =
+  ignore (first_run ~args:[ retry_once ] ());
+  let r2 = second_run () in
+  as_green 2 r2;
+  let r3 = second_run () in
+  as_green 2 r3;
+  equal (option (list string)) both_reused (marks r3);
+  equal
+    (option (list string))
+    (efforts_of "retries 1 pass 1" "retries 1 pass 2")
+    (efforts r3)
+
+let not_unstable () =
+  ignore (first_run ());
+  rewrite (at_line 15 (Verdicts.survived [ positives; to_zero; negatives ]));
+  let r = second_run () in
+  whole
+    ~outcome_line:
+      "mutants: 2 survived of 2 reached by this suite, 2 never reached, score \
+       0.0% (0/2), reach 50.0% (2/4), total 0.0% (0/4)"
+    r;
+  equal (option (list string)) None (unstable r.out);
+  let r = rerun [ mutate ] in
+  whole r;
+  equal
+    (option (list string))
+    (listed [ (15, "survived \u{2192} killed") ])
+    (unstable r.out)
+
+let ignored_warning text =
+  strf
+    "windtrap: warning: --incremental ignores %s: %s; files written by other \
+     windtrap versions are not readable - delete the stale verdict files, then \
+     re-run the mutation tests\n"
+    (verdicts_path ()) text
+
+let last_files () =
+  remove (verdicts_path ());
+  as_green 0 (second_run ());
+  let path = verdicts_path () in
+  write path "windtrap-mutants-v14\ntested\n0\n";
+  let r = second_run () in
+  equal string "exited 0" r.status;
+  equal text
+    (ignored_warning
+       "not a windtrap verdict file (expected header \"windtrap-mutants-v15\", \
+        found \"windtrap-mutants-v14\")")
+    r.err;
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option string) (Some (reused_line 0)) (reused_of r.out);
+  write path "windtrap-mutants-v15\ntested\n0\n1\njunk\n";
+  let r = second_run () in
+  equal string "exited 0" r.status;
+  contains ~sub:"windtrap: warning: --incremental ignores " r.err;
+  contains ~sub:"corrupt verdict file" r.err;
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option string) (Some (reused_line 0)) (reused_of r.out);
+  ignore (first_run ());
+  rewrite ~refused:(Some "refused") Fun.id;
+  as_green 0 (second_run ());
+  ignore (first_run ());
+  rewrite ~suite:"another suite" Fun.id;
+  as_green 0 (second_run ())
+
+let lines_15 = "--lines=test/unit/mutate_loop/subject.ml:15"
+
+let line_scoped_reuse () =
+  ignore (first_run ());
+  let r = second_run ~args:[ lines_15 ] () in
+  equal string "exited 0" r.status;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option (list string)) (marked "reused" "fresh") (marks r);
+  ignore (first_run ());
+  rewrite ~digest:(String.make 32 '0') Fun.id;
+  let r = second_run ~args:[ lines_15 ] () in
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal (option (list string)) (Some [ "subject.ml:15 killed" ]) (rows r);
+  equal (option (list string)) (Some [ "subject.ml:15 reused" ]) (marks r)
+
+let skip_then_reuse () =
+  let p = skip_project () in
+  let env = [ ("WINDTRAP_PROJECT_ROOT", project_root) ] in
+  let r = skip_run ~env p [] in
+  equal string "exited 0" r.status;
+  plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
+  let r = skip_run ~env ~keep:true p [ skip_killed; incremental ] in
+  equal string "exited 0" r.status;
+  equal text "" r.err;
+  equal
+    (option (list string))
+    (Some (skipped_rows "default/other.exe"))
+    (rows r);
+  equal (option (list string)) (marked "fresh" "reused") (marks r);
+  let rec above = function
+    | a :: (b :: c :: _ as rest) ->
+        if String.starts_with ~prefix:"reproduce: " c then [ a; b ]
+        else above rest
+    | _ -> []
+  in
+  equal (list string)
+    [ one_skip "default/other.exe"; reused_line 1 ]
+    (above (lines r.out));
+  remove (Filename.concat p.data "windtrap-other.mutants");
+  rewrite ~path:(own p)
+    (at_line 15 (Verdicts.Killed_elsewhere { exe = "default/other.exe" }));
+  let r = skip_run ~env ~keep:true p [ skip_killed; incremental ] in
+  equal string "exited 0" r.status;
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option (list string)) (marked "fresh" "reused") (marks r)
+
+let narrowed_reuse () =
+  ignore (first_run ());
+  let path = verdicts_path () in
+  let planted = read path in
+  let r = second_run ~args:[ "-f"; "calc" ] () in
+  equal string "exited 0" r.status;
+  equal text not_saved r.err;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal text planted (read path)
+
+let two_jobs () =
+  ignore (first_run ());
+  let r = second_run ~args:[ "-j"; "2" ] () in
+  whole r;
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option string) (Some "subject.ml:18 reused")
+    (Option.bind (marks r) (fun m -> List.nth_opt m 1))
+
+let probe_stopped () =
+  remove (verdicts_path ());
+  let env = [ suite "probe_block" ] in
+  let r = rerun ~env [ mutate ] in
+  equal string "exited 0" r.status;
+  let planted = read (verdicts_path ()) in
+  let marker = Filename.concat (temp_dir ()) "marker"
+  and tmpdir = temp_dir () in
+  let run =
+    start
+      ~env:(env @ [ ("MUTATE_PROBE_MARKER", marker); ("TMPDIR", tmpdir) ])
+      [ mutate; incremental ]
+  in
+  await ~what:"the probe's start" run (marker ^ ".probe");
+  Unix.kill run.pid Sys.sigint;
+  let r = finish run in
+  equal string "killed by SIGINT" r.status;
+  equal (option string) (Some (reused_line 0)) (reused_of r.out);
+  equal text planted (read (verdicts_path ()))
+
+let incremental_reuse =
+  group "Incremental reuse"
+    [
+      test
+        "a second run reuses the kill and the survivor, with the line, the \
+         marks and the digest of each test"
+        second_reuses;
+      test
+        "a survivor is reused with the same reaching tests, and its job runs \
+         with other tests"
+        planted_survivor;
+      test
+        "a kill is reused when its test reaches, and its job runs for a kill \
+         that names no test or a test that does not reach"
+        planted_kill;
+      test
+        "a changed digest of the killing test or of a test before it stops the \
+         reuse, and a test after it does not"
+        changed_tests;
+      test "a test whose file cannot be read stops the reuse" unlocated;
+      cases "a record of another mutant is not reused" ~id:fst
+        other_mutant_records other_mutant_record;
+      cases "a verdict that is not a kill or a survivor is not reused" ~id:fst
+        not_reusable not_reused;
+      test "other settings or another seed stop the reuse" other_settings;
+      test "the retries of the record must cover the retries of the run" retries;
+      test "a kill of a retry needs a run with as many retries" kill_of_a_retry;
+      test
+        "runs with 0, 1, 1, 2 and 0 retries reuse 0, 0, 2, 1 and 2 verdicts, \
+         and keep the effort of the run that tested"
+        rising_retries;
+      test "a reused verdict is reused again, with the effort of the first run"
+        chain;
+      test
+        "a reused verdict is not unstable, and the next full run lists its \
+         change"
+        not_unstable;
+      test
+        "no file, a file of the format before, a corrupt, a refused file and a \
+         file of another suite give no reuse"
+        last_files;
+      test "a line scope reuses only on its lines" line_scoped_reuse;
+      test "the skip of --skip-killed comes before the reuse" skip_then_reuse;
+      test "a narrowed run reuses and saves nothing" narrowed_reuse;
+      test "-j 2 reuses the survivor" two_jobs;
+      test "a signal during the probe commits no reused verdict" probe_stopped;
+    ]
+
 (* Evidence *)
 
 module Loop = Windtrap.Private.Mutate_loop
@@ -4934,5 +5458,6 @@ let () =
          effects;
          memory_records;
          killing_tests;
+         incremental_reuse;
          evidence;
        ])

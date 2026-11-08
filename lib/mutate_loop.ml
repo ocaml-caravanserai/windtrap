@@ -530,9 +530,15 @@ type found = {
 }
 
 (* A survivor's block is committed when its last run is given, so a loop
-   that dies has printed what it found. *)
-let found_verdict renderer (config : Run.config) ~effort ?prefix ~locations
-    ~failed ~runs ~early found (index, mutant) verdict =
+   that dies has printed what it found. [record], when given, is the record
+   of a reused verdict. *)
+let found_verdict renderer (config : Run.config) ~effort ?prefix ?record
+    ~locations ~failed ~runs ~early found (index, mutant) verdict =
+  let record =
+    match record with
+    | Some record -> record
+    | None -> Verdicts.record_of_mutant ~effort ?prefix mutant verdict
+  in
   (match verdict with
   | Verdicts.Survived { first; others } ->
       let witness path : Report_sections.witness =
@@ -547,7 +553,7 @@ let found_verdict renderer (config : Run.config) ~effort ?prefix ~locations
         {
           mutant = shown mutant;
           witnesses = List.map witness (first :: others);
-          reused = false;
+          reused = record.reused;
         }
       in
       Report.mutation_survivor ~runs ~early renderer survivor;
@@ -570,8 +576,7 @@ let found_verdict renderer (config : Run.config) ~effort ?prefix ~locations
           } )
         :: found.unknown
   | Killed _ | Killed_elsewhere _ | Outside_tests | Unreached -> ());
-  found.records <-
-    Verdicts.record_of_mutant ~effort ?prefix mutant verdict :: found.records
+  found.records <- record :: found.records
 
 (* Signals *)
 
@@ -739,8 +744,8 @@ type check = {
    with a killing test waits for the check of its tests, which runs in up to
    [check_runs] passes after the last retry. The loop starts no pass after a
    signal. *)
-let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
-    ~dry_run ~pooled ~wall ~save reached =
+let test_mutants renderer ~meter ~suite (config : Run.config) ~effort ~reused
+    tests ~dry_run ~pooled ~wall ~save reached =
   let durations = Hashtbl.create 256 in
   List.iter
     (fun (r : Run.result) -> Hashtbl.replace durations r.path r.duration)
@@ -943,6 +948,13 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
       measured "probe";
       match probe ~dry_run ran with
       | Ok () ->
+          (* A reused verdict counts only once the probe agrees. Its index
+             orders nothing, because only a kill or a survivor is reused. *)
+          List.iter
+            (fun ((mutant : Mutate.mutant), (record : Verdicts.record)) ->
+              found_verdict renderer config ~effort ~record ~locations
+                ~failed:None ~runs:1 ~early:[] found (-1, mutant) record.verdict)
+            reused;
           if total > 0 then next := Some 0;
           testing 0
       | Error message -> raise (Refused message)
@@ -1116,6 +1128,30 @@ let elsewhere_line ~used skipped =
   in
   strf "killed elsewhere: %d mutant%s, not tested, from %s" n (plural n) files
 
+(* Incremental reuse *)
+
+(* The verdict file of the last run of [suite], of any build, as [earlier]
+   reads it. *)
+let last_run ~suite =
+  let path =
+    Verdicts.output_file ~exe:Windtrap_runtime.Instr.executable ~suite
+  in
+  if not (Sys.file_exists path) then None
+  else
+    match Verdicts.load path with
+    | Ok ({ suite = Some s; _ } as file) when String.equal s suite -> Some file
+    | Ok _ -> None
+    | Error e ->
+        Os.warn ("--incremental ignores " ^ Pp.to_string Verdicts.pp_error e);
+        None
+
+let reused_line found =
+  let n =
+    List.length
+      (List.filter (fun (r : Verdicts.record) -> r.reused) found.records)
+  in
+  strf "reused: %d verdict%s from the last run" n (if n = 1 then "" else "s")
+
 let loop renderer ~scope ~suite (config : Run.config) tests =
   let population = population ~scope in
   let all = Result.value population ~default:[] in
@@ -1194,7 +1230,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
               in
               let wall = Float.max 0.01 (Os.count_s started) in
               let test_digests = test_digests tests in
-              let skipped, to_test, lines =
+              let skipped, to_test, skip_lines =
                 if not scope.skip_killed then ([], reached, [])
                 else
                   let killers, used = killed_elsewhere ~suite reached in
@@ -1207,6 +1243,31 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                       reached
                   in
                   (skipped, to_test, [ elsewhere_line ~used skipped ])
+              in
+              let reused, to_test =
+                match if config.incremental then last_run ~suite else None with
+                | None -> ([], to_test)
+                | Some last ->
+                    let recorded = Verdicts.recorded_digest last in
+                    let digests = Hashtbl.create 64 in
+                    List.iter
+                      (fun (test, digest) ->
+                        Hashtbl.replace digests test digest)
+                      test_digests;
+                    List.partition_map
+                      (fun (((m : Mutate.mutant), site) as mutant) ->
+                        match
+                          Verdicts.reuse ~last ~recorded
+                            ~digest:(Hashtbl.find_opt digests) ~effort
+                            ~reaching:(List.rev site.tests) m
+                        with
+                        | Some r -> Either.Left (m, r)
+                        | None -> Either.Right mutant)
+                      to_test
+              in
+              let lines found =
+                skip_lines
+                @ if config.incremental then [ reused_line found ] else []
               in
               let narrowed = narrows_suite config ~focus:outcome.focus_active in
               let save records =
@@ -1224,7 +1285,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                     @ recorded ~effort Verdicts.Unreached unreached)
               in
               match
-                test_mutants renderer ~meter ~suite config ~effort tests
+                test_mutants renderer ~meter ~suite config ~effort ~reused tests
                   ~dry_run ~pooled ~wall ~save to_test
               with
               | exception Sys_error _ when !signal = Some Sys.sigpipe ->
@@ -1237,7 +1298,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   Os.die_by Sys.sigpipe
               | Interrupted (s, during), found ->
                   let id (m : Mutate.mutant) = Mutate.id_to_string m.id in
-                  Report.mutation_interrupted renderer ~lines
+                  Report.mutation_interrupted renderer ~lines:(lines found)
                     ~during:
                       (match during with
                       | `Probe -> `Probe
@@ -1258,7 +1319,8 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   | Some meter ->
                       count_found meter found;
                       measure renderer meter "report");
-                  Report.mutation_finish ?note ~lines renderer report;
+                  Report.mutation_finish ?note ~lines:(lines found) renderer
+                    report;
                   flush_descriptors ();
                   match !signal with
                   | Some s -> Os.die_by s

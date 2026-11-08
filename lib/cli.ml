@@ -324,6 +324,11 @@ let entries =
       ~mirror:(mirrored "WINDTRAP_SKIP_KILLED")
       "Skip the mutants that the verdict file of another suite killed (with \
        --mutate).";
+    row "--incremental"
+      (switch (fun c -> { c with incremental = true }))
+      ~mirror:(mirrored "WINDTRAP_INCREMENTAL")
+      "Reuse the verdicts of the last run of this suite for the mutants whose \
+       source and tests did not change (with --mutate).";
     row "--mutate-retry"
       (value "N" retry (field (fun c mutate_retry -> { c with mutate_retry })))
       ~mirror:(mirrored "WINDTRAP_MUTATE_RETRY")
@@ -623,6 +628,11 @@ let settings cli =
     else Ok ()
   in
   let* () =
+    if gave cli "--incremental" && not (gave layered "--mutate") then
+      Error (Requires_any ("--incremental", [ "--mutate" ]))
+    else Ok ()
+  in
+  let* () =
     if gave layered "--mutate" && gave layered "--arm" then
       Error (Incompatible_flags ("--mutate", "--arm"))
     else Ok ()
@@ -649,6 +659,7 @@ let settings cli =
         (if gave layered "--mutate" then c.mutate_memory
          else (Run.default_config ()).mutate_memory);
       crash_kills = c.crash_kills && gave layered "--mutate";
+      incremental = c.incremental && gave layered "--mutate";
       case_file;
       log_dir = path "--output" c.log_dir;
       junit = Option.map (path "--junit") c.junit;
