@@ -50,13 +50,16 @@ let spelled ~prefixes ~lines ~only ~skip (scope : Run.scope) =
 type no_mutant =
   | Uninstrumented
   | Out_of_scope
-  | No_site_on_lines (* the lines name no line, or none with a site *)
+  | No_site_on_lines
+    (* the lines name no line, or none with a site that the filter keeps *)
+  | No_site_of_rewrites (* the scope has sites, and the filter keeps none *)
   | All_dismissed
 
-(* Lines that name no line, or only lines of instrumented files with no site
-   that the rewrite filter keeps on them, describe the change, not a mistake:
-   a change to comments or documentation leaves nothing to mutate. Lines that
-   name no instrumented file stay [Out_of_scope], as a typo would. *)
+(* Lines that name no line, or only lines of instrumented files where the
+   rewrite filter keeps no site, describe the change, not a mistake: a change
+   to comments or documentation leaves nothing to mutate. A filter that keeps
+   no site of the scope is a choice of the reader too. Lines that name no
+   instrumented file stay [Out_of_scope], as a typo would. *)
 let population ~scope =
   let catalogue = Mutate.catalogue () in
   let scoped =
@@ -77,21 +80,35 @@ let population ~scope =
              m.id)
       catalogue
   in
+  let unfiltered = { scope with rewrites = Every_rewrite } in
   match (catalogue, scoped, undismissed) with
-  | [], _, _ when { scope with skip_killed = false } = Run.every_mutant ->
+  | [], _, _ when { unfiltered with skip_killed = false } = Run.every_mutant ->
       Error Uninstrumented
   | _ :: _, [], _
     when Option.fold ~none:false ~some:names_a_file scope.Run.lines ->
       Error No_site_on_lines
+  | _ :: _, [], _
+    when scope.rewrites <> Every_rewrite
+         && List.exists
+              (fun (m : Mutate.mutant) -> in_scope ~scope:unfiltered m.id)
+              catalogue ->
+      Error No_site_of_rewrites
   | _, [], _ -> Error Out_of_scope
   | _, _, [] -> Error All_dismissed
   | _, _, population -> Ok population
 
-let no_site_on_lines ~(scope : Run.scope) =
+let of_rewrites (scope : Run.scope) =
+  if scope.rewrites = Every_rewrite then "" else " of the selected rewrites"
+
+let no_site_on_lines ~scope =
   strf
     "the selected lines hold no mutation site%s, so nothing on them is \
      mutation-tested"
-    (if scope.rewrites = Every_rewrite then "" else " of the selected rewrites")
+    (of_rewrites scope)
+
+let no_site_of_rewrites =
+  "the scope holds no mutation site of the selected rewrites, so the suite \
+   runs without mutation"
 
 (* A prefix that leaves nothing is one sentence whatever the catalogue holds:
    the prefix is what the reader typed, and a build that is instrumented and
@@ -114,11 +131,9 @@ let refusal ~scope = function
         (if scope.lines = None && scope.rewrites = Every_rewrite then "prefix"
          else "scope")
         ((if scope.lines = None then "files have" else "lines hold")
-        ^ " no mutation sites"
-        ^
-        if scope.rewrites = Every_rewrite then ""
-        else " of the selected rewrites")
+        ^ " no mutation sites" ^ of_rewrites scope)
   | No_site_on_lines -> no_site_on_lines ~scope
+  | No_site_of_rewrites -> no_site_of_rewrites
   | All_dismissed ->
       "every mutant this run could test is dismissed by [@mutate off]; there \
        is nothing to test"
@@ -132,9 +147,14 @@ let unmutated ~scope reason =
           (spelled scope
              ~prefixes:(fun ps -> "under " ^ String.concat "," ps)
              ~lines:(fun l -> "on " ^ l)
-             ~only:(fun r -> "of rewrite " ^ r)
+             ~only:(fun r ->
+               (if String.contains r ',' then "of a rewrite in "
+                else "of the rewrite ")
+               ^ r)
              ~skip:(fun r -> "of a rewrite other than " ^ r))
     | No_site_on_lines -> no_site_on_lines ~scope
+    | No_site_of_rewrites ->
+        "the scope holds no mutation site of the selected rewrites"
     | All_dismissed ->
         "every mutant of this executable is dismissed by [@mutate off]"
   in
@@ -1248,6 +1268,9 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
           match population with
           | Error No_site_on_lines ->
               Os.say (no_site_on_lines ~scope);
+              Ok outcome
+          | Error No_site_of_rewrites ->
+              Os.say no_site_of_rewrites;
               Ok outcome
           | Error reason -> refuse (refusal ~scope reason)
           | Ok population -> (

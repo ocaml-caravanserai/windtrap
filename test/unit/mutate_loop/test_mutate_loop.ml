@@ -5500,28 +5500,26 @@ let filter_rows () =
          ([], [ "--rewrites=add,sub" ]);
        ])
 
-let mirror_alone () =
-  let r = spawn ~env:[ ("WINDTRAP_REWRITES", "add") ] [] in
-  equal (pair string text) ("exited 0", "") (r.status, r.err);
-  is_true (Option.is_none r.file);
-  is_false
-    (List.exists
-       (fun l -> String.starts_with ~prefix:"mutants:" (String.trim l))
-       (lines r.out))
-
-(* A filter that keeps no mutant is refused as a prefix that keeps none. A
-   line scope with no site that the filter keeps runs the suite without
-   mutation, as a line scope with no site does. *)
+(* A filter that keeps no site of the scope runs the suite without mutation
+   and leaves the verdict file, as a line scope with no site that it keeps
+   does. A scope that keeps no site before the filter stays a refusal, and an
+   executable with no instrumented module stays one of its own. *)
 let filter_refusals () =
-  let none = spawn [ mutate; "--rewrites=del,not" ] in
-  equal (pair string text)
-    ( "exited 1",
-      "windtrap: --mutate=test/unit/mutate_loop/ --rewrites=del,not leaves no \
-       mutant in this executable's catalogue: no instrumented file matches the \
-       scope (is the library under test instrumented with \
-       ppx_windtrap.mutate?), or the matched files have no mutation sites of \
-       the selected rewrites\n" )
-    (none.status, none.err);
+  let path = verdicts_path () in
+  ignore (first_run ());
+  let before = read path in
+  let none = rerun [ mutate; "--rewrites=del,not" ] in
+  equal (triple string text bool)
+    ( "exited 0",
+      "windtrap: the scope holds no mutation site of the selected rewrites, so \
+       the suite runs without mutation\n",
+      false )
+    ( none.status,
+      none.err,
+      List.exists
+        (fun l -> String.starts_with ~prefix:"mutants:" (String.trim l))
+        (lines none.out) );
+  equal text before (read path);
   let off_lines =
     spawn [ mutate; only_add; "--lines=test/unit/mutate_loop/subject.ml:18" ]
   in
@@ -5532,15 +5530,53 @@ let filter_refusals () =
        rewrites, so nothing on them is mutation-tested\n",
       None )
     (off_lines.status, off_lines.err, rows off_lines);
-  let broadcast =
-    spawn ~env:[ mutate_mirror; ("WINDTRAP_SKIP_REWRITES", "add,sub") ] []
-  in
+  let nowhere = spawn [ "--mutate=nowhere/"; only_add ] in
   equal (pair string text)
-    ( "exited 0",
-      "windtrap: WINDTRAP_MUTATE is set, but no mutant of this executable's \
-       catalogue is under test/unit/mutate_loop/ of a rewrite other than \
-       add,sub, so the suite runs without mutation\n" )
-    (broadcast.status, broadcast.err)
+    ( "exited 1",
+      "windtrap: --mutate=nowhere/ --rewrites=add leaves no mutant in this \
+       executable's catalogue: no instrumented file matches the scope (is the \
+       library under test instrumented with ppx_windtrap.mutate?), or the \
+       matched files have no mutation sites of the selected rewrites\n" )
+    (nowhere.status, nowhere.err);
+  let plain = spawn ~exe:plain_exe [ "--mutate"; only_add ] in
+  equal (pair string text)
+    ( "exited 1",
+      "windtrap: this executable links no instrumented module, so there is \
+       nothing to mutate: instrument the library under test with \
+       ppx_windtrap.mutate and re-run\n" )
+    (plain.status, plain.err)
+
+(* What a suite says when the filter of WINDTRAP_MUTATE leaves it no mutant. *)
+let filter_broadcast () =
+  let said env =
+    let r = spawn ~env [] in
+    equal string "exited 0" r.status;
+    r.err
+  in
+  let unmutated why =
+    "windtrap: WINDTRAP_MUTATE is set, but " ^ why
+    ^ ", so the suite runs without mutation\n"
+  in
+  equal (list text)
+    [
+      unmutated "the scope holds no mutation site of the selected rewrites";
+      unmutated
+        "no mutant of this executable's catalogue is under nowhere/ of the \
+         rewrite add";
+      unmutated
+        "no mutant of this executable's catalogue is under nowhere/ of a \
+         rewrite in add,sub";
+      unmutated
+        "no mutant of this executable's catalogue is under nowhere/ of a \
+         rewrite other than add";
+    ]
+    (List.map said
+       [
+         [ mutate_mirror; ("WINDTRAP_SKIP_REWRITES", "add,sub") ];
+         [ ("WINDTRAP_MUTATE", "nowhere/"); ("WINDTRAP_REWRITES", "add") ];
+         [ ("WINDTRAP_MUTATE", "nowhere/"); ("WINDTRAP_REWRITES", "add,sub") ];
+         [ ("WINDTRAP_MUTATE", "nowhere/"); ("WINDTRAP_SKIP_REWRITES", "add") ];
+       ])
 
 (* The record of line 18 is planted as killed, so a kept record shows. *)
 let filter_save () =
@@ -5570,18 +5606,16 @@ let filter_save () =
   equal (option (list string)) (Some add_rows) (rows r)
 
 let filter_reuse () =
-  ignore (first_run ());
-  let r = second_run ~args:[ only_add ] () in
-  equal string "exited 0" r.status;
-  equal (option string) (Some (reused_line 1)) (reused_of r.out);
-  equal (option (list string)) (Some green_rows) (rows r);
-  equal (option (list string)) (marked "reused" "fresh") (marks r);
-  ignore (first_run ());
-  let r = second_run ~args:[ skip_add ] () in
-  equal string "exited 0" r.status;
-  equal (option string) (Some (reused_line 1)) (reused_of r.out);
-  equal (option (list string)) (Some green_rows) (rows r);
-  equal (option (list string)) (marked "fresh" "reused") (marks r)
+  let reuse args expected =
+    ignore (first_run ());
+    let r = second_run ~args () in
+    equal string "exited 0" r.status;
+    equal (option string) (Some (reused_line 1)) (reused_of r.out);
+    equal (option (list string)) (Some green_rows) (rows r);
+    equal (option (list string)) expected (marks r)
+  in
+  reuse [ only_add ] (marked "reused" "fresh");
+  reuse [ skip_add ] (marked "fresh" "reused")
 
 let filter_skip () =
   let p = skip_project () in
@@ -5618,11 +5652,14 @@ let rewrite_filter =
         "--rewrites tests and records only the mutants of its rewrites, and \
          --skip-rewrites only the others, from the flag or the mirror"
         filter_rows;
-      test "a mirror of the filter without --mutate runs no mutant" mirror_alone;
       test
-        "a filter that keeps no mutant is refused, and lines with no site that \
-         it keeps run the suite without mutation"
+        "a filter that keeps no site of the scope runs the suite without \
+         mutation, and an empty scope or build stays a refusal"
         filter_refusals;
+      test
+        "under WINDTRAP_MUTATE, a filter that leaves no mutant runs the suite \
+         without mutation and says why"
+        filter_broadcast;
       test "a filtered run keeps the other records only from its own build"
         filter_save;
       test "a filtered run reuses only the mutants that the filter keeps"

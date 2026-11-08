@@ -23,8 +23,7 @@ type parsed = {
   given : string list;
   lines : Lines.t option;
   diff : string option;
-  rewrites : string list option;
-  skip_rewrites : string list option;
+  rewrites : Run.rewrite_filter;
   skip_killed : bool;
   case : string option;
   list_only : bool;
@@ -38,8 +37,7 @@ let start () =
     given = [];
     lines = None;
     diff = None;
-    rewrites = None;
-    skip_rewrites = None;
+    rewrites = Run.Every_rewrite;
     skip_killed = false;
     case = None;
     list_only = false;
@@ -165,7 +163,8 @@ let rewrite_names value =
   match Os.split_comma value with
   | names when names <> [] && List.for_all (fun n -> List.mem n rewrites) names
     ->
-      Ok names
+      let first names n = if List.mem n names then names else n :: names in
+      Ok (List.rev (List.fold_left first [] names))
   | _ ->
       Error
         ("a comma-separated list of the rewrites " ^ String.concat ", " rewrites)
@@ -335,14 +334,14 @@ let entries =
        -U0, adds or changes (with --mutate).";
     row "--rewrites"
       (value "NAME,..." rewrite_names (fun p names ->
-           { p with rewrites = Some names }))
+           { p with rewrites = Run.Only_rewrites names }))
       ~mirror:(mirrored "WINDTRAP_REWRITES")
       "Test only the mutants of these rewrites (with --mutate).";
     row "--skip-rewrites"
       (value "NAME,..." rewrite_names (fun p names ->
-           { p with skip_rewrites = Some names }))
+           { p with rewrites = Run.Skip_rewrites names }))
       ~mirror:(mirrored "WINDTRAP_SKIP_REWRITES")
-      "Test the mutants of all rewrites but these (with --mutate).";
+      "Test the mutants of all rewrites except these (with --mutate).";
     row "--skip-killed"
       (Flag (fun p -> { p with skip_killed = true }))
       ~mirror:(mirrored "WINDTRAP_SKIP_KILLED")
@@ -600,7 +599,8 @@ let mutation_seed = 0x6d7574616e747321L (* "mutants!" *)
 
 (* A line scope, a rewrite filter or a skip from the command line without
    [--mutate] would scope nothing; one from a mirror reaches every stanza, and
-   the stanzas that do not mutate ignore it. *)
+   the stanzas that do not mutate ignore it. A value that its parser refuses,
+   and the two filters together, stay errors in each stanza. *)
 let line_scope ~cli ~layered =
   let given = Option.value layered.lines ~default:Lines.empty in
   let scopes =
@@ -626,12 +626,9 @@ let line_scope ~cli ~layered =
                    })))
 
 let rewrite_filter (layered : parsed) =
-  match (layered.rewrites, layered.skip_rewrites) with
-  | Some _, Some _ ->
-      Error (Incompatible_flags ("--rewrites", "--skip-rewrites"))
-  | Some names, None -> Ok (Run.Only_rewrites names)
-  | None, Some names -> Ok (Run.Skip_rewrites names)
-  | None, None -> Ok Run.Every_rewrite
+  if gave layered "--rewrites" && gave layered "--skip-rewrites" then
+    Error (Incompatible_flags ("--rewrites", "--skip-rewrites"))
+  else Ok layered.rewrites
 
 (* Every value arrived through its flag's parser, so nothing is range-checked
    here. [broadcast] keeps what the mirrors alone asked for: a mirror reaches

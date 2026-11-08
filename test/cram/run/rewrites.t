@@ -27,12 +27,13 @@ the rewrite `sub`:
   mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach 100.0% (1/1), total 100.0% (1/1)
   [0]
 
-`--skip-rewrites=sub` keeps no mutant, and the loop refuses the run:
+`--skip-rewrites=sub` keeps no mutant. The suite runs without mutation
+and says why:
 
   $ suite ./mutant_main.exe --mutate --skip-rewrites=sub
   mutant: 1 passed in DURATION.
-  windtrap: --skip-rewrites=sub leaves no mutant in this executable's catalogue: no instrumented file matches the scope (is the library under test instrumented with ppx_windtrap.mutate?), or the matched files have no mutation sites of the selected rewrites
-  [1]
+  windtrap: the scope holds no mutation site of the selected rewrites, so the suite runs without mutation
+  [0]
 
 The mirrors do the same:
 
@@ -42,8 +43,8 @@ The mirrors do the same:
   [0]
   $ suite WINDTRAP_SKIP_REWRITES=sub ./mutant_main.exe --mutate
   mutant: 1 passed in DURATION.
-  windtrap: --skip-rewrites=sub leaves no mutant in this executable's catalogue: no instrumented file matches the scope (is the library under test instrumented with ppx_windtrap.mutate?), or the matched files have no mutation sites of the selected rewrites
-  [1]
+  windtrap: the scope holds no mutation site of the selected rewrites, so the suite runs without mutation
+  [0]
 
 A mirror alone has no effect. With WINDTRAP_MUTATE, a filter that keeps
 no mutant is no error: the suite runs without mutation and says why:
@@ -52,7 +53,7 @@ no mutant is no error: the suite runs without mutation and says why:
   mutant: 1 passed in DURATION.
   [0]
   $ suite WINDTRAP_MUTATE=1 WINDTRAP_SKIP_REWRITES=sub ./mutant_main.exe
-  windtrap: WINDTRAP_MUTATE is set, but no mutant of this executable's catalogue is of a rewrite other than sub, so the suite runs without mutation
+  windtrap: WINDTRAP_MUTATE is set, but the scope holds no mutation site of the selected rewrites, so the suite runs without mutation
   mutant: 1 passed in DURATION.
   [0]
 

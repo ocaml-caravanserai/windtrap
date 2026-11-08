@@ -86,8 +86,10 @@ let flags (p : Cli.parsed) =
         | Run.Loop { prefixes; _ } -> [ "mutate " ^ words prefixes ]
         | Run.Armed id -> [ "arm " ^ id ]
         | Run.No_mutation -> []);
-        opt "rewrites" words p.rewrites;
-        opt "skip_rewrites" words p.skip_rewrites;
+        (match p.rewrites with
+        | Run.Every_rewrite -> []
+        | Run.Only_rewrites names -> [ "rewrites " ^ words names ]
+        | Run.Skip_rewrites names -> [ "skip_rewrites " ^ words names ]);
         bool "skip_killed" p.skip_killed;
         bool "mutate_workers" c.mutate_workers;
         some "--mutate-retry" "mutate_retry" string_of_int c.mutate_retry;
@@ -636,6 +638,7 @@ let parsing =
           ([ "--rewrites=del, int" ], "rewrites [del; int]");
           ([ "--skip-rewrites"; "add,sub" ], "skip_rewrites [add; sub]");
           ([ "--skip-rewrites=tail" ], "skip_rewrites [tail]");
+          ([ "--rewrites=int,del,int, del" ], "rewrites [int; del]");
           ([ "-h" ], "help");
           ([ "--help" ], "help");
           ([ "-V" ], "version");
