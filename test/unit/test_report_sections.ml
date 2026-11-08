@@ -2660,23 +2660,29 @@ let mutation_entries () =
         } );
   ]
 
-let summary ?(survivors = []) ?(not_evaluated = []) ?(unknown = [])
+let report ?(survivors = []) ?(not_evaluated = []) ?(unknown = [])
     ?(refused = []) ?(unreached = []) ?(outside_tests = []) ?(not_tested = 0)
-    ?min ?min_reach ?min_total ?max_survivors ~killed scope =
+    ~killed scope =
+  {
+    Sections.survivors;
+    not_evaluated;
+    unknown;
+    unstable = [];
+    refused;
+    unreached;
+    outside_tests;
+    killed;
+    not_tested;
+    scope;
+  }
+
+let summary ?survivors ?not_evaluated ?unknown ?refused ?unreached
+    ?outside_tests ?not_tested ?min ?min_reach ?min_total ?max_survivors ~killed
+    scope =
   last_line
     (at_rest ?min ?min_reach ?min_total ?max_survivors
-       {
-         Sections.survivors;
-         not_evaluated;
-         unknown;
-         unstable = [];
-         refused;
-         unreached;
-         outside_tests;
-         killed;
-         not_tested;
-         scope;
-       })
+       (report ?survivors ?not_evaluated ?unknown ?refused ?unreached
+          ?outside_tests ?not_tested ~killed scope))
 
 let two_lines = [ ("lib/calc.ml", 22); ("lib/calc.ml", 31) ]
 
@@ -2812,7 +2818,91 @@ let summary_rows =
       "mutants: 27 reached, 27 unknown, 1 executable, 1 suite not \
        mutation-tested, no scored mutant, minimum 50%: FAILED, reach 100.0% \
        (27/27)" );
+    ( "each gate follows its measure, in the order of the flags",
+      (fun () ->
+        summary ~survivors:s ~unreached:two_lines ~killed:3 ~min:70.
+          ~min_reach:60. ~min_total:50. ~max_survivors:1 Sections.Suite),
+      "mutants: 1 survived of 4 reached by this suite, 3 killed, 2 never \
+       reached, score 75.0% (3/4), minimum 70%: ok, reach 66.7% (4/6), minimum \
+       60%: ok, total 50.0% (3/6), minimum 50%: ok, maximum 1 survivor: ok" );
+    ( "a measure below its minimum is FAILED",
+      (fun () ->
+        summary ~survivors:s ~unreached:two_lines ~killed:3 ~min_reach:66.7
+          ~min_total:50.1 Sections.Suite),
+      "mutants: 1 survived of 4 reached by this suite, 3 killed, 2 never \
+       reached, score 75.0% (3/4), reach 66.7% (4/6), minimum 66.7%: FAILED, \
+       total 50.0% (3/6), minimum 50.1%: FAILED" );
+    ( "more survivors than the maximum is FAILED",
+      (fun () ->
+        summary
+          ~survivors:[ add_survivor; add_survivor ]
+          ~killed:3 ~max_survivors:1 Sections.Suite),
+      "mutants: 2 survived of 5 reached by this suite, 3 killed, score 60.0% \
+       (3/5), reach 100.0% (5/5), total 60.0% (3/5), maximum 1 survivor: \
+       FAILED" );
+    ( "a maximum of no survivor",
+      (fun () -> summary ~killed:3 ~max_survivors:0 Sections.Suite),
+      "mutants: 3 reached by this suite, 3 killed, score 100.0% (3/3), reach \
+       100.0% (3/3), total 100.0% (3/3), maximum 0 survivors: ok" );
+    ( "a gate over a zero denominator gives 100%, and is met",
+      (fun () ->
+        summary ~killed:0 ~min_reach:100. ~min_total:100. Sections.Suite),
+      "mutants: 0 reached by this suite, reach 100.0% (0/0), minimum 100%: ok, \
+       total 100.0% (0/0), minimum 100%: ok" );
+    ( "a total over no scored mutant has no term without its gate",
+      (fun () -> summary ~unknown:[ hung ] ~killed:0 Sections.Suite),
+      "mutants: 1 reached by this suite, 1 unknown, reach 100.0% (1/1)" );
+    ( "a refused suite fails each gate that its measures meet",
+      (fun () ->
+        summary ~refused:[ property_refused ] ~killed:1 ~min_reach:50.
+          ~min_total:50. ~max_survivors:1 (Sections.Executables 1)),
+      "mutants: 28 reached, 1 killed, 27 unknown, 1 executable, 1 suite not \
+       mutation-tested, score 100.0% (1/1), reach 100.0% (28/28), minimum 50%: \
+       FAILED, total 100.0% (1/1), minimum 50%: FAILED, maximum 1 survivor: \
+       FAILED" );
   ]
+
+(* Each verdict as one mutant beside one killed mutant, with the score, the
+   reach and the total, each as (numerator, denominator). *)
+let measure_rows =
+  let one = report ~killed:1 Sections.Suite in
+  [
+    ("killed", { one with killed = 2 }, ((2, 2), (2, 2), (2, 2)));
+    ( "survived",
+      { one with survivors = [ add_survivor ] },
+      ((1, 2), (2, 2), (1, 2)) );
+    ( "not evaluated",
+      { one with not_evaluated = [ memo_missed ] },
+      ((1, 2), (2, 2), (1, 2)) );
+    ("unknown", { one with unknown = [ hung ] }, ((1, 1), (2, 2), (1, 1)));
+    ( "refused",
+      { one with refused = [ property_refused ] },
+      ((1, 1), (28, 28), (1, 1)) );
+    ("not tested", { one with not_tested = 1 }, ((1, 1), (2, 2), (1, 1)));
+    ( "never reached",
+      { one with unreached = [ ("lib/calc.ml", 22) ] },
+      ((1, 1), (1, 2), (1, 2)) );
+    ( "evaluated outside tests",
+      { one with outside_tests = [ ("lib/calc.ml", 3) ] },
+      ((1, 1), (1, 2), (1, 2)) );
+  ]
+
+let measures (_, m, ((sk, sd), (rk, rd), (tk, td))) =
+  let pct k d = Sections.percent ~visited:k ~total:d in
+  equal (float 1e-9) (pct sk sd) (Sections.mutation_score m);
+  equal (float 1e-9) (pct rk rd) (Sections.mutation_reach m);
+  equal (float 1e-9) (pct tk td) (Sections.mutation_total m)
+
+let zero_measures () =
+  let none = report ~killed:0 Sections.Suite in
+  equal float_exact 100. (Sections.mutation_reach none);
+  equal float_exact 100. (Sections.mutation_total none);
+  let unknown = { none with unknown = [ hung ] } in
+  equal float_exact 100. (Sections.mutation_total unknown);
+  equal bool true
+    (Sections.mutation_gates_met
+       { Sections.no_gates with min_reach = Some 100.; min_total = Some 100. }
+       none)
 
 let block witnesses =
   printed
@@ -3033,6 +3123,10 @@ let mutation_group =
         ~id:(fun (name, _, _) -> name)
         summary_rows
         (fun (_, summary, expected) -> equal string expected (summary ()));
+      cases "each verdict in the score, the reach and the total"
+        ~id:(fun (name, _, _) -> name)
+        measure_rows measures;
+      test "a measure over a zero denominator is 100%" zero_measures;
       cases "the sentence counts the reaching tests and their executables"
         ~id:fst sentence_rows sentence;
       test "the reaching tests' names are padded to the widest" padded_names;

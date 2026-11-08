@@ -704,6 +704,105 @@ flag needs its value:
   usage: windtrap mutants [OPTIONS] [PATH...]
   [2]
 
+The reach, the total and their gates
+
+The reach is the percentage of reached mutants among those reached, never
+reached and evaluated outside tests. The total is the percentage of killed
+mutants among those scored, never reached and evaluated outside tests.
+--min-reach and --min-total gate them, and --max-survivors gates the number
+of survivors. Each gate follows its measure on the outcome line, and a
+gate that is met makes a survivor pass:
+
+  $ cd "$scratch/three"
+  $ for gate in --min-reach=60 --min-reach=60.1 '--min-total 40' '--min-total 40.1' \
+  >   --max-survivors=1 '--max-survivors 0'; do
+  >   run windtrap mutants $gate > gated; echo "[$?] $(tail -n 1 gated)"
+  > done
+  [0] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), reach 60.0% (3/5), minimum 60%: ok, total 40.0% (2/5)
+  [1] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), reach 60.0% (3/5), minimum 60.1%: FAILED, total 40.0% (2/5)
+  [0] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), reach 60.0% (3/5), total 40.0% (2/5), minimum 40%: ok
+  [1] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), reach 60.0% (3/5), total 40.0% (2/5), minimum 40.1%: FAILED
+  [0] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), reach 60.0% (3/5), total 40.0% (2/5), maximum 1 survivor: ok
+  [1] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), reach 60.0% (3/5), total 40.0% (2/5), maximum 0 survivors: FAILED
+
+Two gates that fail give FAILED each, and the gates keep the order of the
+flags in the help, whatever the order on the command line:
+
+  $ run windtrap mutants --max-survivors 0 --min-total 50 --min-reach 70 --min 50 > gated; echo "[$?] $(tail -n 1 gated)"
+  [1] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), minimum 50%: ok, reach 60.0% (3/5), minimum 70%: FAILED, total 40.0% (2/5), minimum 50%: FAILED, maximum 0 survivors: FAILED
+
+A repeated gate keeps its last value:
+
+  $ run windtrap mutants --max-survivors 0 --max-survivors 1 > gated; echo "[$?] $(tail -n 1 gated)"
+  [0] mutants: 1 survived of 3 reached, 2 killed, 2 never reached, 3 executables, score 66.7% (2/3), reach 60.0% (3/5), total 40.0% (2/5), maximum 1 survivor: ok
+
+A refused suite fails each gate, though its measure meets it:
+
+  $ cd "$scratch/unknown"
+  $ for gate in --min-reach=0 --min-total=0 --max-survivors=5; do
+  >   run windtrap mutants $gate > gated; echo "[$?] $(tail -n 1 gated)"
+  > done
+  [1] mutants: 2 reached, 1 killed, 1 unknown, 1 never reached, 2 executables, 1 suite not mutation-tested, score 100.0% (1/1), reach 66.7% (2/3), minimum 0%: FAILED, total 50.0% (1/2)
+  [1] mutants: 2 reached, 1 killed, 1 unknown, 1 never reached, 2 executables, 1 suite not mutation-tested, score 100.0% (1/1), reach 66.7% (2/3), total 50.0% (1/2), minimum 0%: FAILED
+  [1] mutants: 2 reached, 1 killed, 1 unknown, 1 never reached, 2 executables, 1 suite not mutation-tested, score 100.0% (1/1), reach 66.7% (2/3), total 50.0% (1/2), maximum 5 survivors: FAILED
+
+A value of --min-reach or --min-total that is not a percentage from 0 to
+100 is a usage error. A value of --max-survivors that is not a
+non-negative integer is a usage error too. Each flag needs its value:
+
+  $ cd "$scratch/three"
+  $ for arg in --min-reach=eleventy --min-reach=101 --min-total=-1 --min-total= \
+  >   --max-survivors=-1 --max-survivors=1.5 --max-survivors=+1 --max-survivors=; do
+  >   run windtrap mutants "$arg"; echo "[$?]"
+  > done
+  --- stderr
+  windtrap: invalid value 'eleventy' for --min-reach: expected a percentage (0-100)
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: invalid value '101' for --min-reach: expected a percentage (0-100)
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: invalid value '-1' for --min-total: expected a percentage (0-100)
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: invalid value '' for --min-total: expected a percentage (0-100)
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: invalid value '-1' for --max-survivors: expected a non-negative integer
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: invalid value '1.5' for --max-survivors: expected a non-negative integer
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: invalid value '+1' for --max-survivors: expected a non-negative integer
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: invalid value '' for --max-survivors: expected a non-negative integer
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  $ for flag in --min-reach --min-total --max-survivors; do
+  >   run windtrap mutants $flag; echo "[$?]"
+  > done
+  --- stderr
+  windtrap: option '--min-reach' requires an argument
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: option '--min-total' requires an argument
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+  --- stderr
+  windtrap: option '--max-survivors' requires an argument
+  usage: windtrap mutants [OPTIONS] [PATH...]
+  [2]
+
 The document
 
 --json writes the merge as one document on standard output. Each mutant
