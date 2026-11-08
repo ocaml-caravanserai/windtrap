@@ -299,6 +299,128 @@ Lines with no site, or with no site of the selected rewrites, follow the
 same rule. The run refuses a prefix with no site, or lines that name no
 instrumented file under the prefixes, as with no filter.
 
+## Testing a sample of the mutants
+
+A large project has many mutants, and a full run can take hours.
+`--sample=PCT` (mirror `WINDTRAP_SAMPLE`) tests only a fixed part of
+`PCT` percent of the reached mutants. The report then gives the score
+and the total as estimates, each with a 95% interval:
+
+```
+$ WINDTRAP_MUTATE=1 WINDTRAP_SAMPLE=20 dune runtest --force --instrument-with ppx_windtrap.mutate
+```
+
+`PCT` is a number above 0 and at most 100, in a decimal form that
+OCaml's `float_of_string` reads, for example `20`, `12.5` or `1e1`.
+`--sample=100` is the same as no flag. Another value is a usage error,
+from the command line or from the mirror. If neither the command line
+nor a mirror gives `--mutate`, the flag on the command line is a usage
+error. The mirror alone has no effect on a suite that does not mutate.
+
+### Which mutants the sample holds
+
+A mutant is in the sample when a hash of its identifier and of the seed
+of the run is below a limit. The limit is `PCT` percent of the range of
+the hash. The seed is that of `--seed` or `WINDTRAP_SEED`. Without
+them, a mutation run uses the fixed seed `s1:6d7574616e747321`. Thus
+each run with the same seed tests the same mutants. A change to one
+file does not change the sample of another file.
+
+The run selects the sample after the dry run, from the reached mutants
+of its scope. `--skip-killed` skips its mutants first, and the sample
+holds a part of the rest. `--incremental` then uses verdicts again only
+in the sample. The job of a mutant in the sample is the job of a run
+with no sample.
+
+The verdict file records a reached mutant out of the sample as
+`not sampled`. The dry run reached this mutant, so the reach counts it
+and stays exact. The outcome line gives the count of these mutants.
+One line above the outcome line gives the sample and the seed, so you
+can do the run again. These lines come from a larger project than the
+example:
+
+```
+sample: 20% of the reached mutants, seed s1:6d7574616e747321
+mutants: 12 survived of 487 reached by this suite, 84 killed, 31 never reached, 391 not sampled, score 87.5% (84/96, 80.4% to 92.3%), reach 94.0% (487/518), total 82.3% (75.6% to 86.8%)
+```
+
+### The estimates
+
+The score of the sample is `k / n`. `n` is the scored mutants of the
+sample: the killed, the survived and the not evaluated mutants. `k` is
+the killed mutants among them. The interval of the score is the
+two-sided 95% Wilson score interval of `k / n`. It has a correction for
+a finite population, because the sample is a part of the mutants.
+
+The population is `N = n * E / s`, unrounded. `E` is the reached
+mutants that the hash judged: those of the scope, less the mutants
+that `--skip-killed` skipped. `s` is the mutants of `E` in the sample,
+also those that are unknown. The correction multiplies `z^2` by
+`(N - n) / (N - 1)`. A sample of all the population gives an interval
+of one point.
+
+The total of the sample is `score * N / (N + U)`. `U` is the mutants
+that no test reached and those that ran outside every test, which are
+exact counts. The interval of the total maps each bound of the score in
+the same way. When the sample has no scored mutant, the line gives
+`no scored mutant` for the score, and the total has no estimate. The
+interval of the score is then 0% to 100%. Thus `--min` and
+`--min-total` fail unless the minimum is 0.
+
+### Gates on a sample
+
+`windtrap mutants` merges the files of a sample as other files. When
+each file that tested its suite has the same percent and seed, the
+merge gives the intervals and the line of the sample. `--min` and
+`--min-total` then compare the lower bound of the interval. The lower
+bound is a one-sided bound at 97.5%. `--min-reach` compares the exact
+reach. The gate names the bound, here in the larger project:
+
+```
+$ dune exec windtrap -- mutants --min 80 | tail -n 1
+mutants: 12 survived of 487 reached, 84 killed, 31 never reached, 391 not sampled, 1 executable, score 87.5% (84/96, 80.4% to 92.3%), minimum 80% of the lower bound: ok, reach 94.0% (487/518), total 82.3% (75.6% to 86.8%)
+```
+
+Files with different samples, or a sample and no sample, give the
+estimates with no interval. A note on standard error tells why. `--min`
+and `--min-total` then compare a bound that is always true: each mutant
+that is not sampled counts as survived. The line gives this bound, as
+`score 87.5% (84/96, at least 17.2%)`. A file of a suite that was not
+mutation-tested does not count for this rule.
+
+`--max-survivors` with a file that tested a sample is a usage error,
+and the command exits 2. The sample does not count each survivor. In
+the document of `--json`, a mutant out of the sample has the verdict
+`not_sampled`. When the merge has a sample, `summary` gives their
+count in `not_sampled`. Under one sample, it also gives the sample and
+the bounds. `--sarif` gives no
+result for a mutant that is not sampled.
+
+### Samples and the last run
+
+A sampled run writes `not sampled` over the verdicts of the last run,
+for each mutant out of its sample. It does not narrow the scope. The
+next full run under `--incremental` thus tests these mutants again. A
+kill or a survivor of a sampled run is a verdict of a full job, and
+`--incremental` uses it again by the usual rules. A `not sampled`
+verdict is never used again, and it is no change for the unstable
+section.
+
+A change of `--seed`, or of `WINDTRAP_SEED`, changes the sample. It
+also stops the use of each verdict again, because the seed is one of
+the settings that `--incremental` compares. Under a scope, the run
+keeps the records outside its scope only from a file with the same
+sample. A run of no sample keeps them only from a file of no sample.
+
+A good practice is a small sample in each pull request and a full run
+each night. The sample gives a fast estimate. The full run gives each
+survivor and a verdict for each mutant:
+
+```
+$ WINDTRAP_MUTATE=1 WINDTRAP_SAMPLE=10 dune runtest --force --instrument-with ppx_windtrap.mutate
+$ dune exec windtrap -- mutants --min 80
+```
+
 ## What a mutation run runs
 
 A mutation run runs in passes, and prints neither the focus warning nor
@@ -942,6 +1064,8 @@ These verdicts do not appear in the section:
 - A mutant that no test reached, or that ran outside every test.
 - A mutant that the suite skipped under `--skip-killed`. No test of the
   suite ran it.
+- A mutant out of the sample of `--sample`. No test of the suite ran
+  it.
 - A verdict that the run used again under `--incremental`. No test of
   the suite ran the mutant.
 
@@ -1046,7 +1170,9 @@ to standard output fails with an error, for example on a full disk, the
 command gives the reason on standard error and exits 1. The gates do
 not run then. A closed pipe ends the command by SIGPIPE, unless the
 parent ignores that signal. The mutation run of a suite gives the three
-measures too, and has no gate.
+measures too, and has no gate. Under a sample, `--min` and
+`--min-total` compare the lower bound of an interval (see
+[Gates on a sample](#gates-on-a-sample)).
 
 ### Counting a crash as a kill
 
@@ -1096,7 +1222,12 @@ option, `killed` in `summary` counts such a mutant, and `unknown` does
 not count it. The `verdict` of such a mutant stays `unknown`. A mutant
 whose verdict a run used again under `--incremental` has
 `"reused": true` after its verdict, and the other mutants do not have
-the key. A test
+the key. A mutant out of a sample has the verdict `not_sampled`. When
+the merge has a sample, `summary` gives `not_sampled`, their count,
+which `reached` adds. Under one sample, `summary` also gives
+`sample_percent`, `sample_seed`, `score_low`, `score_high`,
+`total_low` and `total_high`. A verdict file of a sample has `sample`,
+its percent and seed, in its object of `executables`. A test
 names its verdict file by its index in `executables`, because two files
 can have the same name. Under `--lines` or `--diff`, the verdict counts,
 the three measures and `mutants` hold only the mutants on the lines. But
@@ -1179,8 +1310,9 @@ Each mutant gives one result or none:
   `--crash-kills` counts the mutant as killed, that mutant gives no
   result.
 - A mutant that was not evaluated gives a note.
-- A killed mutant, a mutant killed elsewhere, a never reached mutant and
-  a mutant evaluated outside tests give no result. An unknown mutant
+- A killed mutant, a mutant killed elsewhere, a mutant that is not
+  sampled, a never reached mutant and a mutant evaluated outside tests
+  give no result. An unknown mutant
   gives no result when only suites that were not mutation-tested hold it
   as unknown.
 
@@ -1377,14 +1509,15 @@ writes under `_windtrap/mutants` in its working directory.
 
 A run under `--mutate=PREFIX` replaces the verdicts under its prefixes
 and keeps the others, when the same build wrote the file for the same
-suite. A verdict file records its executable, a digest of its bytes and
+suite with the same sample. A verdict file records its executable, a digest of its bytes and
 its suite. Each record keeps the digest of the source file of its mutant,
 as the rewriter read it, which `--skip-killed` compares. Each record also
 keeps the previous verdict of its mutant
 (see [Unstable verdicts](#unstable-verdicts)). Each record also keeps
 the `N` of `--mutate-retry` and the settings of the run that gave its
 verdict, and a mark when a run used it again. The file keeps a digest of
-each test: of its source file, its limit and its retries. A kill also
+each test: of its source file, its limit and its retries. The file also
+keeps the sample of its run, or no sample. A kill also
 keeps a digest of the tests of its job up to the killing test
 (see [Reusing the verdicts of the last run](#reusing-the-verdicts-of-the-last-run)).
 `windtrap mutants` merges the files of all suites, and counts the files
@@ -1442,23 +1575,27 @@ The score is the percentage of killed mutants among those killed, survived and
 not evaluated. The reach is the percentage of reached mutants among those
 reached, never reached and evaluated outside tests. The total is the percentage
 of killed mutants among those scored, never reached and evaluated outside
-tests. Runs no tests and drives no build. Exits 1 when an executable could not
-mutation-test its suite. Without a gate, exits 1 also when any mutant survived
-every executable that reached it. With a gate, exits 1 when a gate fails, and
-not for a survivor alone.
+tests. When the suites tested a sample (--sample), the score and the total are
+estimates with a 95% interval. Runs no tests and drives no build. Exits 1 when
+an executable could not mutation-test its suite. Without a gate, exits 1 also
+when any mutant survived every executable that reached it. With a gate, exits 1
+when a gate fails, and not for a survivor alone.
 
 OPTIONS:
   --min=PCT
-      Gate: exit 1 when the score is below PCT.
+      Gate: exit 1 when the score is below PCT. Under a sample, the lower
+      bound of the score.
 
   --min-reach=PCT
       Gate: exit 1 when the reach is below PCT.
 
   --min-total=PCT
-      Gate: exit 1 when the total is below PCT.
+      Gate: exit 1 when the total is below PCT. Under a sample, the lower
+      bound of the total.
 
   --max-survivors=N
-      Gate: exit 1 when more than N mutants survived.
+      Gate: exit 1 when more than N mutants survived. Refused (exit 2) when
+      a suite tested a sample.
 
   --crash-kills
       Count a mutant whose run passed its deadline, crashed or passed its
