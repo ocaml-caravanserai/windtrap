@@ -834,8 +834,6 @@ type options = {
   paths : string list;
 }
 
-(* The flags are the options. Any other argument that starts with [-] is
-   refused, and the rest are PATHs. *)
 (* The flags that take a value. *)
 let value_flags =
   [
@@ -848,6 +846,8 @@ let value_flags =
     "--diff";
   ]
 
+(* The flags are the options. Any other argument that starts with [-] is
+   refused, and the rest are PATHs. *)
 let options args =
   let usage_error message =
     Os.say message;
