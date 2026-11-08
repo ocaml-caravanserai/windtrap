@@ -91,6 +91,15 @@ let outcome = function
 
 type effort = { retries : int; pass : int; settings : string }
 
+let effort_covers kind ~judged ~asked =
+  String.equal judged.settings asked.settings
+  &&
+  match kind with
+  | `Killed ->
+      (asked.retries = 0 || judged.retries > 0)
+      && judged.pass - 1 <= asked.retries
+  | `Survived -> asked.retries <= judged.retries
+
 let add_name b s = Printf.bprintf b "%d %s" (String.length s) s
 
 let add_test b names =
@@ -290,6 +299,65 @@ module Test_map = Map.Make (struct
 
   let compare = compare_test
 end)
+
+let recorded_digest f =
+  let digests =
+    List.fold_left
+      (fun map (test, digest) -> Test_map.add test digest map)
+      Test_map.empty f.test_digests
+  in
+  fun test -> Test_map.find_opt test digests
+
+(* The shortest prefix of [paths] that holds each test of [by]. *)
+let rec holding by acc = function
+  | _ when by = [] -> Some (List.rev acc)
+  | [] -> None
+  | path :: paths ->
+      holding
+        (List.filter (fun test -> not (equal_test test path)) by)
+        (path :: acc) paths
+
+let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
+  let unchanged test =
+    match (recorded test, digest test) with
+    | Some was, Some is -> String.equal was is
+    | Some _, None | None, (Some _ | None) -> false
+  in
+  let same (p : record) =
+    Option.is_some m.source_digest
+    && p.source_digest = m.source_digest
+    && p.end_line = m.end_line && p.end_col = m.end_col
+    && String.equal p.before m.before
+    && String.equal p.after m.after
+  in
+  let compared (p : record) =
+    match p.verdict with
+    | Killed { by = _ :: _ as by }
+      when effort_covers `Killed ~judged:p.effort ~asked:effort -> (
+        match holding by [] reaching with
+        | Some prefix when p.prefix = Some (prefix_digest prefix) -> Some prefix
+        | Some _ | None -> None)
+    | Survived { first; others }
+      when effort_covers `Survived ~judged:p.effort ~asked:effort
+           && List.equal equal_test (first :: others)
+                (List.sort_uniq compare_test reaching) ->
+        Some reaching
+    | Killed _ | Killed_elsewhere _ | Unknown _ | Survived _ | Not_evaluated
+    | Outside_tests | Unreached ->
+        None
+  in
+  match (last.refused, Id_map.find_opt m.id last.verdicts) with
+  | None, Some p when same p -> (
+      match compared p with
+      | Some tests when List.for_all unchanged tests ->
+          Some
+            {
+              (record_of_mutant ~effort:p.effort m p.verdict) with
+              prefix = p.prefix;
+              reused = true;
+            }
+      | Some _ | None -> None)
+  | (Some _ | None), _ -> None
 
 (* The records after the header. Every number is in decimal, and a name is
    [<byte length> <bytes>], so it may hold any byte:

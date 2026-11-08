@@ -122,6 +122,16 @@ type effort = {
 (** The type for what a run did to give a verdict. A later run reuses a verdict
     only when it asks for no more ({!effort_covers}). *)
 
+val effort_covers :
+  [ `Killed | `Survived ] -> judged:effort -> asked:effort -> bool
+(** [effort_covers kind ~judged ~asked] is [true] when a verdict of [kind] that
+    a run of the effort [judged] gave holds for a run of the effort [asked]. The
+    two must have the same [settings]. For a kill, [asked.retries] is [0] or
+    [judged.retries] is above [0], because only a run with retries checks a
+    kill, and [judged.pass - 1] is at most [asked.retries], because a run with
+    fewer retries does not run that pass. For a survivor, [asked.retries] is at
+    most [judged.retries]. [asked.pass] is not read. *)
+
 val prefix_digest : reaching_test list -> string
 (** [prefix_digest paths] is the lowercase hexadecimal MD5 of an injective
     spelling of [paths], in order: the tests of a job up to and with its killing
@@ -287,6 +297,43 @@ type file = {
           entry has no known digest. *)
 }
 (** The type for what a verdict file holds. *)
+
+val recorded_digest : file -> reaching_test -> string option
+(** [recorded_digest f] is the lookup of [f.test_digests]. It indexes the list
+    when it is applied to [f], so apply it once for each file. *)
+
+val reuse :
+  last:file ->
+  recorded:(reaching_test -> string option) ->
+  digest:(reaching_test -> string option) ->
+  effort:effort ->
+  reaching:reaching_test list ->
+  Mutate.mutant ->
+  record option
+(** [reuse ~last ~recorded ~digest ~effort ~reaching m] is the record of [m]
+    with the verdict of the last run, when the evidence of that verdict did not
+    change. [last] is the verdict file of the last run, [recorded] is
+    [recorded_digest last], [digest t] is the digest of the test [t] in this
+    run, [effort] is the effort of this run and [reaching] is the reaching tests
+    of [m] in this run, in the order of its job. The result is [Some r] when all
+    of these hold, and [None] if not:
+    + [last.refused] is [None].
+    + [last.verdicts] holds a record [p] of [m.id], [m.source_digest] is not
+      [None] and is [p.source_digest], and [p] has the end and the renderings of
+      [m].
+    + [p.verdict] is a {!Killed} that names tests, each of them is in
+      [reaching], the {!prefix_digest} of the shortest prefix of [reaching] that
+      holds them is [p.prefix], and {!effort_covers} [`Killed] holds for
+      [~judged:p.effort ~asked:effort]. The compared tests are this prefix. Or
+      [p.verdict] is a {!Survived} whose reaching tests are those of [reaching],
+      as sets, and {!effort_covers} [`Survived] holds. The compared tests are
+      [reaching].
+    + For each compared test [t], [recorded t] is [Some d] and [digest t] is
+      [Some d].
+
+    [r] has the verdict, the effort and the prefix of [p], the fields of [m], no
+    previous outcome, and the mark. A reused [p] can be reused again. [reuse]
+    reads no file. *)
 
 val load : string -> (file, error) result
 (** [load path] is [Ok file] when the file at [path] is a verdict file. The file

@@ -846,6 +846,248 @@ let collections =
         ~id:fst unchecked_records unchecked_record;
     ]
 
+(* Reuse *)
+
+let effort ?(pass = 1) ?(settings = zeros) retries =
+  { Verdicts.retries; pass; settings }
+
+let covers_cases =
+  let other = String.make 32 'f' in
+  [
+    ("a kill, judged 0, asked 0", `Killed, effort 0, effort 0, true);
+    ("a kill, judged 0, asked 1", `Killed, effort 0, effort 1, false);
+    ("a kill, judged 1, asked 0", `Killed, effort 1, effort 0, true);
+    ("a kill, judged 1, asked 1", `Killed, effort 1, effort 1, true);
+    ("a kill, judged 2, asked 1", `Killed, effort 2, effort 1, true);
+    ( "a kill, other settings",
+      `Killed,
+      effort 0,
+      effort ~settings:other 0,
+      false );
+    ("a kill of pass 2, asked 0", `Killed, effort ~pass:2 1, effort 0, false);
+    ("a kill of pass 2, asked 1", `Killed, effort ~pass:2 1, effort 1, true);
+    ("a kill of pass 3, asked 1", `Killed, effort ~pass:3 2, effort 1, false);
+    ("a survivor, judged 0, asked 0", `Survived, effort 0, effort 0, true);
+    ("a survivor, judged 0, asked 1", `Survived, effort 0, effort 1, false);
+    ("a survivor, judged 1, asked 0", `Survived, effort 1, effort 0, true);
+    ("a survivor, judged 1, asked 1", `Survived, effort 1, effort 1, true);
+    ("a survivor, judged 2, asked 1", `Survived, effort 2, effort 1, true);
+    ( "a survivor, other settings",
+      `Survived,
+      effort 0,
+      effort ~settings:other 0,
+      false );
+  ]
+
+let covers (_, kind, judged, asked, expected) =
+  equal bool expected (Verdicts.effort_covers kind ~judged ~asked)
+
+let src = String.make 32 'c'
+let at_mutant = id "lib/a.ml" 1 0 "lt"
+
+(* The mutant of [at_mutant], as [record] draws it. *)
+let mutant ?(source_digest = Some src) ?(before = "b") ?(after = "a")
+    ?(end_ = (1, 1)) () =
+  {
+    Mutate.id = at_mutant;
+    end_line = fst end_;
+    end_col = snd end_;
+    before;
+    after;
+    dismissed = None;
+    source_digest;
+  }
+
+let t1 = [ "g"; "t1" ]
+let t2 = [ "g"; "t2" ]
+let t3 = [ "g"; "t3" ]
+let digest_of test = String.make 32 (String.get (List.nth test 1) 1)
+let digests = List.map (fun t -> (t, digest_of t)) [ t1; t2; t3 ]
+
+let last ?refused ?(test_digests = digests) records =
+  {
+    Verdicts.verdicts = collection records;
+    identity = None;
+    suite = Some "s";
+    refused;
+    test_digests;
+  }
+
+let kill ?(effort = effort 0) ?(source_digest = Some src) ?reused ~prefix by =
+  record ?source_digest ~effort
+    ~prefix:(Verdicts.prefix_digest prefix)
+    ?reused at_mutant (Verdicts.killed by)
+
+let survivor ?(effort = effort 0) ?(source_digest = Some src) ?reused tests =
+  record ?source_digest ~effort ?reused at_mutant (Verdicts.survived tests)
+
+let plain verdict = record ~source_digest:src at_mutant verdict
+
+(* This run's digests: those of [digests], with [changes] applied. *)
+let now ?(changes = []) test =
+  match List.assoc_opt test changes with
+  | Some changed -> changed
+  | None -> List.assoc_opt test digests
+
+let other_digest = Some (String.make 32 'e')
+
+(* A case gives the last file, the digests and the effort of this run, the
+   reaching tests and the mutant, and whether the last record is reused. *)
+let reuse_cases =
+  let k = kill ~prefix:[ t1 ] [ t1 ] in
+  let s = survivor [ t1; t2 ] in
+  let case ?(digest = fun t -> now t) ?(asked = effort 0) ?(m = mutant ()) name
+      file reaching expected =
+    (name, (file, digest, asked, reaching, m, expected))
+  in
+  let unknown r = plain (Verdicts.Unknown r) in
+  [
+    case "a kill by its first test" (last [ k ]) [ t1; t2 ] (Some k);
+    case "a kill that names no test"
+      (last [ plain (Verdicts.killed []) ])
+      [ t1 ] None;
+    case "a kill whose test does not reach now" (last [ k ]) [ t2 ] None;
+    case "a kill whose test has another digest now"
+      ~digest:(now ~changes:[ (t1, other_digest) ])
+      (last [ k ]) [ t1; t2 ] None;
+    case "a kill whose test has no digest now"
+      ~digest:(now ~changes:[ (t1, None) ])
+      (last [ k ]) [ t1; t2 ] None;
+    case "a kill whose test has no entry in the last file"
+      (last ~test_digests:(List.tl digests) [ k ])
+      [ t1; t2 ] None;
+    case "a kill whose job order changed"
+      (last [ kill ~prefix:[ t1 ] [ t2 ] ])
+      [ t1; t2 ] None;
+    case "a kill whose earlier test in the job has another digest"
+      ~digest:(now ~changes:[ (t1, other_digest) ])
+      (last [ kill ~prefix:[ t1; t2 ] [ t2 ] ])
+      [ t1; t2 ] None;
+    case "a kill whose later test in the job has another digest"
+      ~digest:(now ~changes:[ (t2, other_digest) ])
+      (last [ k ]) [ t1; t2 ] (Some k);
+    case "a kill by two tests, up to the later one"
+      (last [ kill ~prefix:[ t1; t2; t3 ] [ t3; t1 ] ])
+      [ t1; t2; t3 ]
+      (Some (kill ~prefix:[ t1; t2; t3 ] [ t1; t3 ]));
+    case "a kill by two tests, with a change between them"
+      ~digest:(now ~changes:[ (t2, other_digest) ])
+      (last [ kill ~prefix:[ t1; t2; t3 ] [ t1; t3 ] ])
+      [ t1; t2; t3 ] None;
+    case "a kill judged 0, asked 1" ~asked:(effort 1) (last [ k ]) [ t1 ] None;
+    case "a kill judged 2, asked 1" ~asked:(effort 1)
+      (last [ kill ~effort:(effort 2) ~prefix:[ t1 ] [ t1 ] ])
+      [ t1 ]
+      (Some (kill ~effort:(effort 2) ~prefix:[ t1 ] [ t1 ]));
+    case "a kill judged 0, asked 0" (last [ k ]) [ t1 ] (Some k);
+    case "a kill of pass 2, asked 0"
+      (last [ kill ~effort:(effort ~pass:2 1) ~prefix:[ t1 ] [ t1 ] ])
+      [ t1 ] None;
+    case "a kill of pass 2, asked 1" ~asked:(effort 1)
+      (last [ kill ~effort:(effort ~pass:2 1) ~prefix:[ t1 ] [ t1 ] ])
+      [ t1 ]
+      (Some (kill ~effort:(effort ~pass:2 1) ~prefix:[ t1 ] [ t1 ]));
+    case "a survivor with the same tests, judged 0, asked 0" (last [ s ])
+      [ t1; t2 ] (Some s);
+    case "a survivor with the same tests, judged 2, asked 1" ~asked:(effort 1)
+      (last [ survivor ~effort:(effort 2) [ t1; t2 ] ])
+      [ t1; t2 ]
+      (Some (survivor ~effort:(effort 2) [ t1; t2 ]));
+    case "a survivor judged 0, asked 1" ~asked:(effort 1) (last [ s ])
+      [ t1; t2 ] None;
+    case "a survivor with one more test now" (last [ s ]) [ t1; t2; t3 ] None;
+    case "a survivor with one test less now" (last [ s ]) [ t1 ] None;
+    case "a survivor with its tests in another order and a duplicate"
+      (last [ s ]) [ t2; t1; t2 ] (Some s);
+    case "a survivor whose test has another digest now"
+      ~digest:(now ~changes:[ (t2, other_digest) ])
+      (last [ s ]) [ t1; t2 ] None;
+    case "a survivor whose test has no digest now"
+      ~digest:(now ~changes:[ (t2, None) ])
+      (last [ s ]) [ t1; t2 ] None;
+    case "a kill of other settings"
+      ~asked:(effort ~settings:(String.make 32 'f') 0)
+      (last [ k ]) [ t1 ] None;
+    case "a survivor of other settings"
+      ~asked:(effort ~settings:(String.make 32 'f') 0)
+      (last [ s ]) [ t1; t2 ] None;
+    case "a mutant that was not evaluated"
+      (last [ plain Verdicts.Not_evaluated ])
+      [ t1 ] None;
+    case "an unknown verdict of a deadline"
+      (last [ unknown (Deadline { seconds = 1. }) ])
+      [ t1 ] None;
+    case "an unknown verdict of a crash"
+      (last [ unknown (Crashed { signal = None; status = None; how = "x" }) ])
+      [ t1 ] None;
+    case "an unknown verdict of a memory limit"
+      (last [ unknown (Memory { mb = 1 }) ])
+      [ t1 ] None;
+    case "an unknown verdict of a flaky kill"
+      (last [ unknown (Flaky_kill { test = t1; failure = "x" }) ])
+      [ t1 ] None;
+    case "an unknown verdict of another reason"
+      (last [ unknown (Other "x") ])
+      [ t1 ] None;
+    case "a mutant killed elsewhere"
+      (last [ plain (Verdicts.Killed_elsewhere { exe = "x" }) ])
+      [ t1 ] None;
+    case "a mutant evaluated outside tests"
+      (last [ plain Verdicts.Outside_tests ])
+      [ t1 ] None;
+    case "an unreached mutant" (last [ plain Verdicts.Unreached ]) [ t1 ] None;
+    case "another source digest"
+      (last
+         [
+           kill ~source_digest:(Some (String.make 32 'd')) ~prefix:[ t1 ] [ t1 ];
+         ])
+      [ t1 ] None;
+    case "a mutant with no source digest"
+      ~m:(mutant ~source_digest:None ())
+      (last [ kill ~source_digest:None ~prefix:[ t1 ] [ t1 ] ])
+      [ t1 ] None;
+    case "a record with no source digest"
+      (last [ kill ~source_digest:None ~prefix:[ t1 ] [ t1 ] ])
+      [ t1 ] None;
+    case "another before" ~m:(mutant ~before:"c" ()) (last [ k ]) [ t1 ] None;
+    case "another after" ~m:(mutant ~after:"c" ()) (last [ k ]) [ t1 ] None;
+    case "another end" ~m:(mutant ~end_:(1, 2) ()) (last [ k ]) [ t1 ] None;
+    case "no record of the identifier" (last []) [ t1 ] None;
+    case "a refused last file" (last ~refused:"x" [ k ]) [ t1 ] None;
+    case "a reused kill is reused again"
+      (last [ kill ~effort:(effort 3) ~reused:true ~prefix:[ t1 ] [ t1 ] ])
+      [ t1 ]
+      (Some (kill ~effort:(effort 3) ~prefix:[ t1 ] [ t1 ]));
+  ]
+
+let reused (_, (file, digest, asked, reaching, m, expected)) =
+  equal (option string)
+    (Option.map
+       (fun (p : Verdicts.record) ->
+         record_row { p with previous = None; reused = true })
+       expected)
+    (Option.map record_row
+       (Verdicts.reuse ~last:file
+          ~recorded:(Verdicts.recorded_digest file)
+          ~digest ~effort:asked ~reaching m))
+
+let reuse =
+  group "Reuse"
+    [
+      cases "effort_covers compares the retries and the settings"
+        ~id:(fun (n, _, _, _, _) -> n)
+        covers_cases covers;
+      cases "reuse gives the last verdict only when its evidence did not change"
+        ~id:fst reuse_cases reused;
+      test "recorded_digest finds each test of the file" (fun () ->
+          let f = last [] in
+          let recorded = Verdicts.recorded_digest f in
+          equal
+            (list (option string))
+            (List.map (fun t -> Some (digest_of t)) [ t1; t2; t3 ] @ [ None ])
+            (List.map recorded [ t1; t2; t3; [ "g" ] ]));
+    ]
+
 (* Verdict files *)
 
 let sample =
@@ -1561,4 +1803,4 @@ tested
                ~exe:(Filename.concat (temp_dir ()) "no-such.exe")));
     ]
 
-let () = exit (run "verdicts" [ verdicts; collections; files ])
+let () = exit (run "verdicts" [ verdicts; collections; reuse; files ])
