@@ -162,7 +162,7 @@ before and after, and the reason of a dismissed site.
   let log = ref []
   let push x =
     (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 0
-     then ()
+     then ((())[@ocaml.warning "-41-42"])
      else
        (log :=
           (if
@@ -170,7 +170,8 @@ before and after, and the reason of a dismissed site.
                (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 1)
            then x :: (!log)
            else !log);
-        ()) : Stdlib.Unit.t);
+        ((())
+        [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
     List.length (!log)
   let loop n =
     for i =
@@ -178,11 +179,11 @@ before and after, and the reason of a dismissed site.
       then 0
       else 1 to n do
       (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 3
-       then ()
-       else (print_int i; ()) : Stdlib.Unit.t);
+       then ((())[@ocaml.warning "-41-42"])
+       else (print_int i; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
       (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 4
-       then ()
-       else (print_newline (); ()) : Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else (print_newline (); ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
     done
   let unit_first x = (); x
   let checked x = assert (x > 0); x
@@ -190,7 +191,7 @@ before and after, and the reason of a dismissed site.
     ((print_string "x")[@mutate off "the output is not checked"]); x
   let either a b =
     (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 6
-     then ()
+     then ((())[@ocaml.warning "-41-42"])
      else
        ((let __windtrap_mut_7_p = a in
          if
@@ -198,13 +199,15 @@ before and after, and the reason of a dismissed site.
              (Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 7)
          then b
          else __windtrap_mut_7_p);
-        ()) : Stdlib.Unit.t);
+        ((())
+        [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
     ()
   let () = print_string "loaded"; print_newline ()
   let finish oc ic fd dir =
     (if Windtrap_mut_________fixture_del___ml.___windtrap_armed___ 8
-     then ()
-     else (output_string oc "done"; ()) : Stdlib.Unit.t);
+     then ((())[@ocaml.warning "-41-42"])
+     else (output_string oc "done"; ((())[@ocaml.warning "-41-42"])) : 
+    Stdlib.Unit.t);
     close_out oc;
     close_in_noerr ic;
     (try Unix.close fd with | Unix.Unix_error _ -> ());
@@ -265,7 +268,7 @@ branch in tail position:
        else __windtrap_mut_1_p)
     then
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 0
-       then ()
+       then ((())[@ocaml.warning "-41-42"])
        else incr count)
   let both flag =
     if
@@ -275,13 +278,13 @@ branch in tail position:
        else __windtrap_mut_5_p)
     then
       ((if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 2
-        then ()
-        else (incr count; ()) : Stdlib.Unit.t);
+        then ((())[@ocaml.warning "-41-42"])
+        else (incr count; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
        (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 3
-        then ()
-        else (print_int (!count); ()) : Stdlib.Unit.t);
+        then ((())[@ocaml.warning "-41-42"])
+        else (print_int (!count); ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
        if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 4
-       then ()
+       then ((())[@ocaml.warning "-41-42"])
        else print_newline ())
   let drain pending =
     while
@@ -296,8 +299,8 @@ branch in tail position:
       then Stdlib.not (__windtrap_mut_7_r > __windtrap_mut_7_l)
       else __windtrap_mut_7_l > __windtrap_mut_7_r do
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 6
-       then ()
-       else (decr pending; ()) : Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else (decr pending; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
       done
   let drain_noisy pending =
     while
@@ -312,11 +315,11 @@ branch in tail position:
       then Stdlib.not (__windtrap_mut_11_r > __windtrap_mut_11_l)
       else __windtrap_mut_11_l > __windtrap_mut_11_r do
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 9
-       then ()
-       else (print_int (!pending); ()) : Stdlib.Unit.t);
+       then ((())[@ocaml.warning "-41-42"])
+       else (print_int (!pending); ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 10
-       then ()
-       else (decr pending; ()) : Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else (decr pending; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
       done
   let up n =
     for i =
@@ -324,8 +327,8 @@ branch in tail position:
       then 0
       else 1 to n do
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 14
-       then ()
-       else (print_int i; ()) : Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else (print_int i; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
     done
   let down n =
     for i = n downto
@@ -333,11 +336,11 @@ branch in tail position:
       then 0
       else 1 do
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 16
-       then ()
-       else (print_int i; ()) : Stdlib.Unit.t);
+       then ((())[@ocaml.warning "-41-42"])
+       else (print_int i; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 17
-       then ()
-       else (print_newline (); ()) : Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else (print_newline (); ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
     done
   let peek n =
     for _ =
@@ -345,8 +348,8 @@ branch in tail position:
       then 0
       else 1 to n do
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 19
-       then ()
-       else (!count; ()) : Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else (!count; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
     done
   let rec countdown n =
     if
@@ -362,7 +365,7 @@ branch in tail position:
        else __windtrap_mut_22_l > __windtrap_mut_22_r)
     then
       (if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 20
-       then ()
+       then ((())[@ocaml.warning "-41-42"])
        else
          countdown
            (let (__windtrap_mut_21_l, __windtrap_mut_21_r) = (n, 1) in
@@ -431,8 +434,8 @@ branch in tail position:
        else __windtrap_mut_34_p)
     then
       ((if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 32
-        then ()
-        else (incr count; ()) : Stdlib.Unit.t);
+        then ((())[@ocaml.warning "-41-42"])
+        else (incr count; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
        ((print_string "x")
        [@mutate off "the output is not checked"]))
   let idle more =
@@ -449,8 +452,8 @@ branch in tail position:
        else __windtrap_mut_37_p)
     then
       ((if Windtrap_mut_________fixture_del_units___ml.___windtrap_armed___ 36
-        then ()
-        else (incr count; ()) : Stdlib.Unit.t);
+        then ((())[@ocaml.warning "-41-42"])
+        else (incr count; ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
        ())
   let deferred n =
     for _ =
@@ -1611,7 +1614,7 @@ Code that gives its location keeps the mutants of its two copies:
        else __windtrap_mut_0_l + __windtrap_mut_0_r)
   let local x =
     (if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 1
-     then ()
+     then ((())[@ocaml.warning "-41-42"])
      else
        (Log.debug
           (fun m ->
@@ -1622,7 +1625,8 @@ Code that gives its location keeps the mutants of its two copies:
                     2
                 then __windtrap_mut_2_l - __windtrap_mut_2_r
                 else __windtrap_mut_2_l + __windtrap_mut_2_r));
-        ()) : Stdlib.Unit.t);
+        ((())
+        [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
     x
   let app x = Logs.app (fun m -> m "%d" (x + 1))
   let err x = Logs.err (fun m -> m "%d" (x + 1))
@@ -1631,14 +1635,14 @@ Code that gives its location keeps the mutants of its two copies:
   let listed x = Logs.debug (fun m -> m "%a" (let open Fmt in list int) [x; 2])
   let counted y x =
     (if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 3
-     then ()
+     then ((())[@ocaml.warning "-41-42"])
      else
        (Logs.debug
           (fun m ->
              (if
                 Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___
                   4
-              then ()
+              then ((())[@ocaml.warning "-41-42"])
               else
                 (y :=
                    ((let (__windtrap_mut_5_l, __windtrap_mut_5_r) = ((!y), 1) in
@@ -1647,9 +1651,11 @@ Code that gives its location keeps the mutants of its two copies:
                          5
                      then __windtrap_mut_5_l - __windtrap_mut_5_r
                      else __windtrap_mut_5_l + __windtrap_mut_5_r));
-                 ()) : Stdlib.Unit.t);
+                 ((())
+                 [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
              (let () = incr y in m "%d" (!y)));
-        ()) : Stdlib.Unit.t);
+        ((())
+        [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
     (let (__windtrap_mut_6_l, __windtrap_mut_6_r) = ((!y), x) in
      if Windtrap_mut_________fixture_equivalent_log___ml.___windtrap_armed___ 6
      then __windtrap_mut_6_l - __windtrap_mut_6_r
@@ -1719,7 +1725,7 @@ Code that gives its location keeps the mutants of its two copies:
       ((if
           Windtrap_mut_________fixture_equivalent_message___ml.___windtrap_armed___
             3
-        then ()
+        then ((())[@ocaml.warning "-41-42"])
         else
           (r :=
              (if
@@ -1727,7 +1733,8 @@ Code that gives its location keeps the mutants of its two copies:
                   4
               then 6
               else 5);
-           ()) : Stdlib.Unit.t);
+           ((())
+           [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
        "boom")
   let bound r =
     invalid_arg
@@ -2144,7 +2151,7 @@ and keeps its reason:
        else __windtrap_mut_2_p)
     then
       (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 1
-       then ()
+       then ((())[@ocaml.warning "-41-42"])
        else print_string "on")
   let drain ready step =
     while
@@ -2153,8 +2160,8 @@ and keeps its reason:
       then Stdlib.not __windtrap_mut_4_p
       else __windtrap_mut_4_p do
       (if Windtrap_mut_________fixture_neg___ml.___windtrap_armed___ 3
-       then ()
-       else (step (); ()) : Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else (step (); ((())[@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
       done
   let classify p x =
     match x with

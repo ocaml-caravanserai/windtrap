@@ -683,6 +683,10 @@ let is_opaque e =
   | Pexp_lazy body -> is_trivial_syntactic_value body
   | _ -> false
 
+(* A [()] of a [del] guard. In a file that declares its own [()], the
+   type-checker disambiguates it, and warnings 41 and 42 report that. *)
+let unit ~loc = [%expr () [@ocaml.warning "-41-42"]]
+
 (* How [del] drops a statement [e]. [In_tail] is [if armed then () else e],
    which keeps [e] in the tail position of an [if] with no [else], so a tail
    call in [e] stays a tail call. [As_statement] is
@@ -1058,15 +1062,17 @@ class instrumenter ~keeps ~module_name =
       | Some index -> (
           let loc = { e.pexp_loc with loc_ghost = true } in
           let armed = armed ~loc ~module_name index in
+          let skip = unit ~loc in
           match drop with
-          | In_tail -> [%expr if [%e armed] then () else [%e rewritten]]
+          | In_tail -> [%expr if [%e armed] then [%e skip] else [%e rewritten]]
           | In_body | As_statement ->
               let stop = e.pexp_loc.loc_end in
-              let unit = eunit ~loc:{ e.pexp_loc with loc_start = stop } in
+              let after = unit ~loc:{ e.pexp_loc with loc_start = stop } in
               let arm = if drop = In_body then e.pexp_loc else loc in
-              let disarmed = pexp_sequence ~loc:arm rewritten unit in
-              [%expr (if [%e armed] then () else [%e disarmed] : Stdlib.Unit.t)]
-          )
+              let disarmed = pexp_sequence ~loc:arm rewritten after in
+              [%expr
+                (if [%e armed] then [%e skip] else [%e disarmed]
+                  : Stdlib.Unit.t)])
 
     (* [unit_position drop e] rewrites [e], a then-branch with no [else], a
        loop body or the last statement of a sequence there, as a statement.

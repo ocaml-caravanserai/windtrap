@@ -4,8 +4,10 @@
   ---------------------------------------------------------------------------*)
 
 (* A file that declares a constructor [()]. The [()] of a [del] guard is the
-   predefined one by its type, so this module compiles with each [del]
-   site: a statement, a then-branch, a [while] body and a [for] body. *)
+   predefined one by its type, and the guard disables the warnings of that
+   disambiguation. Thus this module compiles under fatal warnings with each
+   [del] site: a statement, a then-branch, a [while] body and a [for]
+   body. *)
 
 [@@@ocaml.warning "-65"]
 

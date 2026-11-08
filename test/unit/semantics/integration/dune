@@ -8,6 +8,7 @@
   no_guard
   oracle
   own_constructors
+  own_unit
   recursive
   shadowed)
  (flags
@@ -20,7 +21,7 @@
 
 (library
  (name windtrap_mutate_disambiguate)
- (modules codec disambiguate expected_type opened_none own_unit)
+ (modules codec disambiguate expected_type opened_none)
  (preprocess
   (pps ppx_windtrap.mutate)))
 

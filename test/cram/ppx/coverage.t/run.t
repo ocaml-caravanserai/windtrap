@@ -980,10 +980,13 @@ dune builds for a stanza naming both backends:
        else __windtrap_mut_11_p)
       do
       (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 10
-       then ()
+       then ((())[@ocaml.warning "-41-42"])
        else
-         (___windtrap_visit___ 15; ___windtrap_post_visit___ 14 (loop f x); ()) : 
-      Stdlib.Unit.t) done
+         (___windtrap_visit___ 15;
+          ___windtrap_post_visit___ 14 (loop f x);
+          ((())
+          [@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
+      done
   let left f g x =
     ___windtrap_visit___ 18;
     ignore
@@ -1019,8 +1022,9 @@ dune builds for a stanza naming both backends:
   let twice f x =
     ___windtrap_visit___ 25;
     (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 16
-     then ()
-     else (___windtrap_post_visit___ 24 (f x); ()) : Stdlib.Unit.t);
+     then ((())[@ocaml.warning "-41-42"])
+     else (___windtrap_post_visit___ 24 (f x); ((())[@ocaml.warning "-41-42"])) : 
+    Stdlib.Unit.t);
     f x
   let drain more step =
     ___windtrap_visit___ 28;
@@ -1031,17 +1035,23 @@ dune builds for a stanza naming both backends:
        else __windtrap_mut_18_p)
       do
       (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 17
-       then ()
+       then ((())[@ocaml.warning "-41-42"])
        else
-         (___windtrap_visit___ 27; ___windtrap_post_visit___ 26 (step ()); ()) : 
-      Stdlib.Unit.t) done
+         (___windtrap_visit___ 27;
+          ___windtrap_post_visit___ 26 (step ());
+          ((())
+          [@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
+      done
   let count f lo hi =
     ___windtrap_visit___ 31;
     for i = lo to hi do
       (if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 19
-       then ()
-       else (___windtrap_visit___ 30; ___windtrap_post_visit___ 29 (f i); ()) : 
-      Stdlib.Unit.t)
+       then ((())[@ocaml.warning "-41-42"])
+       else
+         (___windtrap_visit___ 30;
+          ___windtrap_post_visit___ 29 (f i);
+          ((())
+          [@ocaml.warning "-41-42"])) : Stdlib.Unit.t)
     done
 
 A file is instrumented under its own name, and returned as parsed under
