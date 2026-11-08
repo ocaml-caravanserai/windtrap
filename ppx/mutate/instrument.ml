@@ -464,6 +464,34 @@ let same a b =
   && erase_locations#expression a = erase_locations#expression b
   && not (locates#expression a false)
 
+(* Stdlib scope *)
+
+(* A module that is open at an expression, by an [open], a [let open], an
+   [M.( e )] or an [include], and whose values the rewriter does not see.
+   [Unseen] is a module expression that is not a path. *)
+type opening = Path of Longident.t | Unseen
+
+(* A structure of the file brings only bindings that [kept_families] reads,
+   unless it includes another module. An [open] in it is local to it. *)
+let rec transparent me =
+  match me.pmod_desc with
+  | Pmod_structure items ->
+      List.for_all
+        (fun si ->
+          match si.pstr_desc with
+          | Pstr_include { pincl_mod; _ } -> transparent pincl_mod
+          | _ -> true)
+        items
+  | Pmod_constraint (me, _) -> transparent me
+  | _ -> false
+
+let opening me =
+  if transparent me then None
+  else
+    match me.pmod_desc with
+    | Pmod_ident { txt; _ } -> Some (Path txt)
+    | _ -> Some Unseen
+
 (* [calls p e] tells that [e] applies a function that [p] accepts, as
    [f x], [f @@ x] or [x |> f], or gives one to [Printf.ksprintf] or
    [Format.kasprintf]. *)
@@ -755,6 +783,11 @@ class instrumenter ~keeps ~module_name =
        call, or of [failwith] or [invalid_arg], outside every statement. *)
     val mutable logging = false
     val mutable message = false
+
+    (* The opaque modules that are open at the code being rewritten. An
+       operator there is Stdlib's when this is empty and the file keeps the
+       family of the operator. *)
+    val mutable opens : opening list = []
     method sites = List.rev sites
     method pins = pins
 
@@ -770,6 +803,18 @@ class instrumenter ~keeps ~module_name =
         logging <- l;
         message <- m;
         result
+
+    (* [opened o f] is [f ()] with [o] open, when [o] is a module. *)
+    method private opened : 'a. opening option -> (unit -> 'a) -> 'a =
+      fun o f ->
+        match o with
+        | None -> f ()
+        | Some o ->
+            let outer = opens in
+            opens <- o :: opens;
+            let result = f () in
+            opens <- outer;
+            result
 
     (* A statement acts on the state of the program, so the rules of a
        logging call and of a failure message do not reach into it. *)
@@ -1176,6 +1221,12 @@ class instrumenter ~keeps ~module_name =
             e with
             pexp_desc = Pexp_let (Recursive, bindings, self#expression body);
           }
+      | Pexp_open (od, body) ->
+          let od = self#open_declaration od in
+          let body =
+            self#opened (opening od.popen_expr) (fun () -> self#expression body)
+          in
+          { e with pexp_desc = Pexp_open (od, body) }
       | Pexp_apply _ when keeps Log && calls is_logger e ->
           self#within ~logging:true ~message (fun () -> super#expression e)
       | Pexp_apply _ when keeps Message && calls is_failure e ->
@@ -1221,6 +1272,13 @@ class instrumenter ~keeps ~module_name =
               ce with
               pcl_desc = Pcl_let (Recursive, bindings, self#class_expr body);
             }
+        | Pcl_open (od, body) ->
+            let od = self#open_description od in
+            let body =
+              self#opened (Some (Path od.popen_expr.txt)) (fun () ->
+                  self#class_expr body)
+            in
+            { ce with pcl_desc = Pcl_open (od, body) }
         | _ -> super#class_expr ce
       in
       at_load <- outer;
@@ -1257,14 +1315,25 @@ class instrumenter ~keeps ~module_name =
           { si with pstr_desc = Pstr_value (rec_flag, bindings) }
       | _ -> super#structure_item si
 
+    (* An [open] or an [include] is open for the items that follow it, to
+       the end of its structure. *)
     method! structure items =
-      let outer = suppressed in
+      let outer = (suppressed, opens) in
       let items =
         List.map
-          (fun si -> if is_test_item si then si else self#structure_item si)
+          (fun si ->
+            let si = if is_test_item si then si else self#structure_item si in
+            (match si.pstr_desc with
+            | Pstr_open { popen_expr = me; _ }
+            | Pstr_include { pincl_mod = me; _ } ->
+                Option.iter (fun o -> opens <- o :: opens) (opening me)
+            | _ -> ());
+            si)
           items
       in
-      suppressed <- outer;
+      let s, o = outer in
+      suppressed <- s;
+      opens <- o;
       items
 
     method! extension extension = extension
