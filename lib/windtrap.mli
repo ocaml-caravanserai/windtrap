@@ -2192,7 +2192,9 @@ val run : ?argv:string array -> string -> test list -> int
       returns [1]. Over lines ([--lines] or [--diff]) that name no line, or that
       hold no mutation site of an instrumented file they name, as a change to
       comments does, [--mutate] instead runs the suite without mutation, says
-      so, and returns [0] when the suite passes.
+      so, and returns [0] when the suite passes. A rewrite filter ([--rewrites]
+      or [--skip-rewrites]) that keeps no site of a scope that has sites does
+      the same.
     - A relative path in [WINDTRAP_JUNIT], [WINDTRAP_JSON] or [WINDTRAP_OUTPUT]
       is read from the project root, and one on the command line from the
       working directory.

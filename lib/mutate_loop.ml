@@ -97,14 +97,11 @@ let population ~scope =
   | _, _, [] -> Error All_dismissed
   | _, _, population -> Ok population
 
-let of_rewrites (scope : Run.scope) =
-  if scope.rewrites = Every_rewrite then "" else " of the selected rewrites"
-
-let no_site_on_lines ~scope =
+let no_site_on_lines ~(scope : Run.scope) =
   strf
     "the selected lines hold no mutation site%s, so nothing on them is \
      mutation-tested"
-    (of_rewrites scope)
+    (if scope.rewrites = Every_rewrite then "" else " of the selected rewrites")
 
 let no_site_of_rewrites =
   "the scope holds no mutation site of the selected rewrites, so the suite \
@@ -122,16 +119,14 @@ let refusal ~scope = function
       strf
         "%s leaves no mutant in this executable's catalogue: no instrumented \
          file matches the %s (is the library under test instrumented with \
-         ppx_windtrap.mutate?), or the matched %s"
+         ppx_windtrap.mutate?), or the matched %s no mutation sites"
         (spelled scope
            ~prefixes:(fun ps -> "--mutate=" ^ String.concat "," ps)
            ~lines:(fun l -> "--lines=" ^ l)
            ~only:(fun r -> "--rewrites=" ^ r)
            ~skip:(fun r -> "--skip-rewrites=" ^ r))
-        (if scope.lines = None && scope.rewrites = Every_rewrite then "prefix"
-         else "scope")
-        ((if scope.lines = None then "files have" else "lines hold")
-        ^ " no mutation sites" ^ of_rewrites scope)
+        (if scope.lines = None then "prefix" else "scope")
+        (if scope.lines = None then "files have" else "lines hold")
   | No_site_on_lines -> no_site_on_lines ~scope
   | No_site_of_rewrites -> no_site_of_rewrites
   | All_dismissed ->

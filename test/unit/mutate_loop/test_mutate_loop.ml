@@ -5534,9 +5534,9 @@ let filter_refusals () =
   equal (pair string text)
     ( "exited 1",
       "windtrap: --mutate=nowhere/ --rewrites=add leaves no mutant in this \
-       executable's catalogue: no instrumented file matches the scope (is the \
+       executable's catalogue: no instrumented file matches the prefix (is the \
        library under test instrumented with ppx_windtrap.mutate?), or the \
-       matched files have no mutation sites of the selected rewrites\n" )
+       matched files have no mutation sites\n" )
     (nowhere.status, nowhere.err);
   let plain = spawn ~exe:plain_exe [ "--mutate"; only_add ] in
   equal (pair string text)
@@ -5545,6 +5545,15 @@ let filter_refusals () =
        nothing to mutate: instrument the library under test with \
        ppx_windtrap.mutate and re-run\n" )
     (plain.status, plain.err)
+
+(* The red dry run comes before the population, so a filter that keeps no site
+   does not save a red suite from its refusal. *)
+let filter_red () =
+  let r = spawn ~env:[ suite "red" ] [ mutate; "--rewrites=del,not" ] in
+  equal string "exited 1" r.status;
+  contains ~sub:"the dry run is red" r.err;
+  not_contains ~sub:"selected rewrites" r.err;
+  is_some (require_some r.file).refused
 
 (* What a suite says when the filter of WINDTRAP_MUTATE leaves it no mutant. *)
 let filter_broadcast () =
@@ -5656,6 +5665,7 @@ let rewrite_filter =
         "a filter that keeps no site of the scope runs the suite without \
          mutation, and an empty scope or build stays a refusal"
         filter_refusals;
+      test "a red suite under a filter that keeps no site is refused" filter_red;
       test
         "under WINDTRAP_MUTATE, a filter that leaves no mutant runs the suite \
          without mutation and says why"

@@ -309,11 +309,12 @@ val execute_and_report :
       would not reach this run.
     - The dry run is refused at startup. {!Report.run} has said why.
     - No test ran in the dry run, or it is red.
-    - The population is empty, unless the scope's lines name no line, or name a
-      file of the catalogue but hold no site that the rewrite filter keeps, or
-      the scope has sites and the rewrite filter keeps none of them. The loop
-      then says so on standard error and is [Ok] of its dry run, with no verdict
-      file.
+    - The population is empty. This is no refusal when the scope's lines name no
+      line. It is also no refusal when the lines name a file of the catalogue
+      but hold no site that the rewrite filter keeps. The same applies when the
+      rewrite filter keeps no site of a scope that has sites. Then the loop says
+      so on standard error and is [Ok] of its dry run, with no verdict file. A
+      dry run that is red comes first, and is refused.
     - The probe disagrees with the dry run, and the sentence names the tests
       that failed in it, or its worker ended early or passed its deadline or its
       memory limit. *)
