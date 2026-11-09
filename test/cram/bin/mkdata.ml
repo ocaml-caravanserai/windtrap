@@ -32,7 +32,8 @@
      root seed SEED, an OCaml integer literal. --full-matrix gives each
      record the effort of a run under --full-matrix, and each kill the tests
      that its job ran: TESTS, and the tests RAN when given. The job ran
-     each of its tests, unless the kill ends with :partial.
+     each of its tests, unless the kill ends with :partial. RAN needs
+     --full-matrix.
 
    --exe records the identity of the executable at EXE as it is now. *)
 
@@ -83,7 +84,7 @@ let coverage ~identity out records =
 let tests_of tests =
   List.map (String.split_on_char '/') (String.split_on_char ';' tests)
 
-let verdict = function
+let verdict ~full_matrix = function
   | "killed" -> Verdicts.killed []
   | "not_evaluated" -> Verdicts.Not_evaluated
   | "not_sampled" -> Verdicts.Not_sampled
@@ -107,7 +108,9 @@ let verdict = function
                  failure = "its killing test also fails with no mutant";
                })
       | [ "survived"; tests ] -> Verdicts.survived (tests_of tests)
-      | "killed" :: tests :: _ -> Verdicts.killed (tests_of tests)
+      | [ "killed"; tests ] -> Verdicts.killed (tests_of tests)
+      | "killed" :: tests :: _ :: _ when full_matrix ->
+          Verdicts.killed (tests_of tests)
       | [ "elsewhere"; exe ] -> Verdicts.Killed_elsewhere { exe }
       | _ -> die "%S: not a verdict" v)
 
@@ -167,7 +170,7 @@ let record ~full_matrix spec =
         before;
         after;
         source_digest = None;
-        verdict = verdict v;
+        verdict = verdict ~full_matrix v;
         previous;
         effort = effort ~full_matrix;
         prefix = None;

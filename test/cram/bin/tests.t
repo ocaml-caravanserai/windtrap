@@ -122,7 +122,7 @@ the tests that kill no mutant:
     windtrap-a.mutants  calc › subtracts
   ──────────────────────────────────────────────────────────
   --- stderr
-  windtrap: the counts of windtrap-b.mutants come from the first kill of each mutant only, because its run had no --full-matrix. Thus its tests have - in the only column, and they are not in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
+  windtrap: the counts of windtrap-b.mutants come from the first kill of each mutant only, because it holds a kill with no full matrix. Thus its tests have - in the only column, and they are not in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
   $ run windtrap mutants --json | grep -E '"verdict"'
         "verdict": "killed", "full_matrix": true,
         "verdict": "killed",
@@ -144,7 +144,47 @@ When no run had the flag, the note names no file:
         1     -  windtrap-b.mutants  cli › subtracts
   ──────────────────────────────────────────────────────────
   --- stderr
-  windtrap: the counts come from the first kill of each mutant only, because the runs had no --full-matrix. Thus each test has - in the only column, and no test is in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
+  windtrap: the counts come from the first kill of each mutant only, because each verdict file holds a kill with no full matrix. Thus each test has - in the only column, and no test is in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
+
+A file that skipped a mutant as killed by another suite holds no test
+of that kill. The note tells this cause:
+
+  $ mkdata mutants _build/_mutants/windtrap-a.mutants --full-matrix \
+  >   "$add=killed:calc/adds" "$sub=survived:calc/subtracts" "$lt=elsewhere:other.exe"
+  $ run windtrap mutants --tests _build/_mutants/windtrap-a.mutants
+  ─────────────────────── tests (2) ────────────────────────
+    kills  only  executable          test
+        1     -  windtrap-a.mutants  calc › adds
+        0     -  windtrap-a.mutants  calc › subtracts
+  ──────────────────────────────────────────────────────────
+  --- stderr
+  windtrap: 1 mutant counts as killed by other.exe, but other.exe no longer exists: run the executable that wrote .../windtrap-a.mutants again with its mutants, then merge again
+  windtrap: the counts come from the first kill of each mutant only, because the verdict file holds a mutant that it skipped as killed by another suite. Thus each test has - in the only column, and no test is in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
+  [1]
+
+Two executables with one name
+
+Each executable is `main.exe` in its own directory. The column gives the
+path that each file records, so the rows of one test path stay apart:
+
+  $ plant "$scratch/names" && cd "$scratch/names"
+  $ mkdir -p _build/default/x _build/default/y
+  $ echo x > _build/default/x/main.exe && echo y > _build/default/y/main.exe
+  $ mkdata mutants _build/_mutants/windtrap-x.mutants --exe _build/default/x/main.exe \
+  >   --full-matrix "$add=killed:calc/adds" "$sub=unreached" "$lt=unreached"
+  $ mkdata mutants _build/_mutants/windtrap-y.mutants --exe _build/default/y/main.exe \
+  >   --full-matrix "$add=survived:calc/adds" "$sub=unreached" "$lt=unreached"
+  $ run windtrap mutants --tests
+  ─────────────────────── tests (2) ────────────────────────
+    kills  only  executable          test
+        1     1  default/x/main.exe  calc › adds
+        0     0  default/y/main.exe  calc › adds
+  ──────────────────────────────────────────────────────────
+  
+  ───────────── tests that kill no mutant (1) ──────────────
+    default/y/main.exe  calc › adds
+  ──────────────────────────────────────────────────────────
+  $ cd "$scratch/full"
 
 A file with no kill gives exact counts also without the flag, because
 no job of its run stopped at a kill:

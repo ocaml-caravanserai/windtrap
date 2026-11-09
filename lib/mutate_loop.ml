@@ -462,17 +462,15 @@ let caused (ran : Supervisor.ran) =
   | None -> None
   | Some first -> Some (List.filteri (fun i _ -> i >= first) ran.results)
 
-(* The first test that the mutant made fail. *)
-let killing_test ran =
-  Option.map
-    (fun (r : Run.result) -> r.path)
-    (Option.bind (caused ran) (List.find_opt kills))
-
 (* Each test that the mutant made fail. *)
 let killing_tests ran =
   List.map
     (fun (r : Run.result) -> r.path)
     (List.filter kills (Option.value (caused ran) ~default:[]))
+
+(* The first test that the mutant made fail. *)
+let killing_test ran =
+  match killing_tests ran with test :: _ -> Some test | [] -> None
 
 (* [Some by] when the mutant was killed, where [by] is its killing test, or
    each killing test under [full_matrix], or [[]] for a kill by a fixture

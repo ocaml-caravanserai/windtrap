@@ -5533,17 +5533,22 @@ let each_kill_recorded () =
 
 let first_pins = ("MUTATE_FIRST_PINS", "1")
 
+(* The kill of the mutant of [widen] by [by], and the matrix [ran], in the
+   file of [k]. *)
+let killed_and_ran (k : kill_ran) ~by ~ran =
+  equal
+    (option (list string))
+    (Some [ "subject.ml:18 killed by " ^ by ])
+    (kills k.r);
+  equal (list string) [ "subject.ml:18 ran " ^ ran ] (matrices k.r)
+
 (* [a] and then [b] kill the mutant of [widen]. Without the flag the job
    stops after [a], and [b] runs only in the dry run and the probe. *)
 let two_killing_tests () =
   let k = kill_run ~env:[ first_pins; fail_armed ] [ full ] in
   ended_well k.r;
   equal string killed_outcome (outcome k.r.out);
-  equal
-    (option (list string))
-    (Some [ strf "subject.ml:18 killed by %s; %s" b a ])
-    (kills k.r);
-  equal (list string) [ strf "subject.ml:18 ran %s; %s" b a ] (matrices k.r);
+  killed_and_ran k ~by:(strf "%s; %s" b a) ~ran:(strf "%s; %s" b a);
   equal (pair int int) (3, 3) (k.a_runs, k.b_runs);
   let k = kill_run ~env:[ first_pins; fail_armed ] [] in
   ended_well k.r;
@@ -5558,11 +5563,7 @@ let two_killing_tests () =
 let fresh_worker_after_a_kill () =
   let k = kill_run ~env:[ first_pins; ("MUTATE_LEAK", "1") ] [ full ] in
   ended_well k.r;
-  equal
-    (option (list string))
-    (Some [ strf "subject.ml:18 killed by %s" a ])
-    (kills k.r);
-  equal (list string) [ strf "subject.ml:18 ran %s; %s" b a ] (matrices k.r);
+  killed_and_ran k ~by:a ~ran:(strf "%s; %s" b a);
   equal int 3 k.b_runs
 
 (* The first reaching test fails before the first evaluation, and the last
@@ -5580,16 +5581,13 @@ let failure_before_the_evaluation () =
     ]
     (matrices r)
 
-(* [a] kills the mutant, and then [b] hangs at run 3, the job. *)
-let kill_before_an_expiry () =
-  let k = kill_run ~env:[ first_pins; ("MUTATE_HANG_AT", "3") ] [ full ] in
+(* [a] kills the mutant, and then [b] ends its job at run 3, the job, by
+   [ending]. *)
+let kill_before_an_end ending () =
+  let k = kill_run ~env:[ first_pins; (ending, "3") ] [ full ] in
   ended_well k.r;
   equal string killed_outcome (outcome k.r.out);
-  equal
-    (option (list string))
-    (Some [ strf "subject.ml:18 killed by %s" a ])
-    (kills k.r);
-  equal (list string) [ strf "subject.ml:18 ran %s, partial" a ] (matrices k.r)
+  killed_and_ran k ~by:a ~ran:(a ^ ", partial")
 
 (* [b] kills the mutant at run 3, and then the release of its fixture hangs.
    Without the flag the run is unknown. *)
@@ -5601,24 +5599,7 @@ let kill_before_a_hanging_release () =
   let k = kill_run ~env [ full ] in
   ended_well k.r;
   equal string killed_outcome (outcome k.r.out);
-  equal
-    (option (list string))
-    (Some [ strf "subject.ml:18 killed by %s" b ])
-    (kills k.r);
-  equal (list string)
-    [ strf "subject.ml:18 ran %s; %s, partial" b a ]
-    (matrices k.r)
-
-(* [a] kills the mutant, and then [b] ends its worker at run 3. *)
-let kill_before_a_crash () =
-  let k = kill_run ~env:[ first_pins; ("MUTATE_EXIT_AT", "3") ] [ full ] in
-  ended_well k.r;
-  equal string killed_outcome (outcome k.r.out);
-  equal
-    (option (list string))
-    (Some [ strf "subject.ml:18 killed by %s" a ])
-    (kills k.r);
-  equal (list string) [ strf "subject.ml:18 ran %s, partial" a ] (matrices k.r)
+  killed_and_ran k ~by:b ~ran:(strf "%s; %s, partial" b a)
 
 (* The check runs [a] alone, three times with no mutant, and keeps the two
    killing tests. *)
@@ -5626,11 +5607,7 @@ let check_of_the_first_kill () =
   let k = kill_run ~env:[ first_pins; fail_armed ] [ full; retry_once ] in
   ended_well k.r;
   equal string killed_outcome (outcome k.r.out);
-  equal
-    (option (list string))
-    (Some [ strf "subject.ml:18 killed by %s; %s" b a ])
-    (kills k.r);
-  equal (list string) [ strf "subject.ml:18 ran %s; %s" b a ] (matrices k.r);
+  killed_and_ran k ~by:(strf "%s; %s" b a) ~ran:(strf "%s; %s" b a);
   equal (pair int int) (6, 3) (k.a_runs, k.b_runs)
 
 (* [b] kills at run 3, and fails with no mutant in the check run 4. *)
@@ -5687,12 +5664,14 @@ let full_matrix =
         fresh_worker_after_a_kill;
       test "a failure before the first evaluation does not kill"
         failure_before_the_evaluation;
-      test "a kill before an expiry stays a kill" kill_before_an_expiry;
+      test "a kill before an expiry stays a kill"
+        (kill_before_an_end "MUTATE_HANG_AT");
       test
         "a kill before a release that hangs stays a kill, and is unknown \
          without the flag"
         kill_before_a_hanging_release;
-      test "a kill before a crash stays a kill" kill_before_a_crash;
+      test "a kill before a crash stays a kill"
+        (kill_before_an_end "MUTATE_EXIT_AT");
       test
         "under --mutate-retry the check runs only up to the first killing test"
         check_of_the_first_kill;

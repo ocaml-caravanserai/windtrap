@@ -33,7 +33,7 @@ the first test:
         "killed_by": [
           { "executable": 0, "test": ["adds two"] } ] } ],
   $ mutants --tests
-  windtrap: the counts come from the first kill of each mutant only, because the run had no --full-matrix. Thus each test has - in the only column, and no test is in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
+  windtrap: the counts come from the first kill of each mutant only, because the verdict file holds a kill with no full matrix. Thus each test has - in the only column, and no test is in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
   ─────────────────────── tests (1) ────────────────────────
     kills  only  executable       test
         1     -  matrix_main.exe  adds two
