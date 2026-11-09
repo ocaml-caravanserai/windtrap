@@ -68,22 +68,23 @@
 
     A site of [mul], [fmul] or [bit] must also be in Stdlib scope, where no
     opaque module is open. An opaque module is the module expression of an
-    [open], a [let open], an [M.( e )], a class [let open] or an [include], when
-    it is not a structure of the file. A structure of the file that includes
-    another module is opaque too. An [open] or an [include] in a structure is
-    open to the end of that structure. In Stdlib scope, the operator and its
-    replacement are those of Stdlib, and each has one closed type:
-    [int -> int -> int] or [float -> float -> float].
+    [open], a [let open], an [M.( e )], a class [let open] or an [include]. A
+    structure of the file is not opaque, unless it includes another module. An
+    [open] or an [include] in a structure is open to the end of that structure.
+    In Stdlib scope, the operator and its replacement are those of Stdlib, and
+    each has one closed type: [int -> int -> int] or [float -> float -> float].
 
     The guard pins its operands to that type, so the arm has the type of the
     original. The guard of [ari] also pins its operands in Stdlib scope.
 
     The rewriter does not see a flag of the compiler, as [-open M]. If [M] gives
-    one of these operators another type, or binds only the replacement, the arm
-    can be ill-typed. The compiler then shows the error at the expression, and
-    [[@mutate off "reason"]] or [[@@@mutate exclude_file]] is the way out. Under
-    [-open Base], each arm compiles, because Base gives these operators the
-    types of Stdlib. *)
+    an operator of [ari], [mul], [fmul] or [bit] another type, or binds only the
+    replacement, the arm can be ill-typed. The compiler then shows the error at
+    the expression, and [[@mutate off "reason"]] or [[@@@mutate exclude_file]]
+    is the way out. Under [-open Base], each arm compiles, because Base gives
+    these operators the types of Stdlib. Base deprecates [mod]. The original
+    gives the same alert, and the guard takes the alert attributes of the site.
+*)
 
 (** {1:sites Sites}
 
@@ -183,9 +184,10 @@
       [close_out_noerr] or [closedir], qualified or not, also under [ignore] or
       as the body of a [try].
     - [int] skips a literal that is an operand of a bare [+] or [-], which [ari]
-      moves already. It skips an operand of a bare [*], [/] or [mod] where the
-      operator can carry a [mul] site. It also skips an argument of a function
-      whose name ends in [create], as [Hashtbl.create 16], which is a capacity.
+      moves already. It skips an operand of a bare [*], [/] or [mod], unless the
+      file rebinds [*], [/] or [mod], or an [open] or [include] of another
+      module is in scope. It also skips an argument of a function whose name
+      ends in [create], as [Hashtbl.create 16], which is a capacity.
     - [int] skips the constant of a comparison that carries [cmp] when the nudge
       is the boundary move of [cmp]: up for [x < c] and [x >= c], down for
       [x <= c] and [x > c], and the mirror for a constant on the left. In
@@ -448,6 +450,9 @@
       [___windtrap_post_visit___ 0 (f x)] for [f x].
     - the visits, their indices and the booleans of the [if] of [||] are that
       rewriter's generated code, at ghost locations, and carry no site.
+    - The [open] of the coverage module is opaque. Thus [mul], [fmul] and [bit]
+      have no site in the file, and the guard of [ari] does not pin its
+      operands.
 
     The mutants of such a file are not those of the file under this rewriter
     alone. *)

@@ -8,8 +8,9 @@
   The rewrites give no mutant under an `open` or an `include` of
   another module. `x * 1`, `x / -1`, their float forms, a shift by or
   of `0`, `a land a` and `a lor a` give no mutant. A literal operand of
-  `*`, `/` or `mod` gives no `int` mutant where the operator has a
-  site (doc/manual/mutation.md#what-is-mutated).
+  `*`, `/` or `mod` gives no `int` mutant, unless the file rebinds `*`,
+  `/` or `mod`, or an `open` or `include` of another module is in scope
+  (doc/manual/mutation.md#what-is-mutated).
 - A file that binds an operator by an alias pattern, as
   `(_ as ( + ))`, loses the rewrites of that operator's family, as a
   file that binds it by name does. Before, the instrumented file could
@@ -25,4 +26,7 @@
 - The guards of `add`, `sub`, `fadd` and `fsub` give their operands the
   type `int` or `float`, where no `open` or `include` of another module
   is in scope. Before, a GADT `match` in an operand could fail to
-  compile under instrumentation.
+  compile under instrumentation. Under a compiler flag `-open M` where
+  `M` gives `+`, `-`, `+.` or `-.` another type, the instrumented file
+  does not compile at this time. Use `[@mutate off "reason"]` or
+  `[@@@mutate exclude_file]`.
