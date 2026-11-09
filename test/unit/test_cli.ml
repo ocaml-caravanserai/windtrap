@@ -97,6 +97,7 @@ let flags (p : Cli.parsed) =
         some "--mutate-memory" "mutate_memory" string_of_int c.mutate_memory;
         bool "crash_kills" c.crash_kills;
         bool "incremental" c.incremental;
+        bool "full_matrix" c.full_matrix;
         bool "help" p.help;
         bool "version" p.version;
       ]
@@ -178,6 +179,7 @@ let changes (c : Run.config) =
         field "mutate_memory" string_of_int (fun c -> c.Run.mutate_memory);
         field "crash_kills" bool (fun c -> c.Run.crash_kills);
         field "incremental" bool (fun c -> c.Run.incremental);
+        field "full_matrix" bool (fun c -> c.Run.full_matrix);
         field "github" bool (fun c -> c.Run.github);
         field "invocation" invocation_name (fun c -> c.Run.invocation);
         field "broadcast selection" bool (fun c ->
@@ -646,6 +648,8 @@ let parsing =
           ([ "--crash-kills=1" ], {|invalid --crash-kills "1"|});
           ([ "--incremental" ], "incremental");
           ([ "--incremental=1" ], {|invalid --incremental "1"|});
+          ([ "--full-matrix" ], "full_matrix");
+          ([ "--full-matrix=1" ], {|invalid --full-matrix "1"|});
           ([ "--rewrites"; "del" ], "rewrites [del]");
           ([ "--rewrites=del, int" ], "rewrites [del; int]");
           ([ "--skip-rewrites"; "add,sub" ], "skip_rewrites [add; sub]");
@@ -1219,6 +1223,52 @@ let resolution =
           ( [ ("WINDTRAP_INCREMENTAL", "1") ],
             [ "--arm"; "lib/a.ml:9:12:add" ],
             "mutation armed lib/a.ml:9:12:add" );
+        ];
+      resolve_rows
+        "--full-matrix or its mirror sets full_matrix under --mutate, and on \
+         the command line it needs --mutate"
+        [
+          ([], [ "--mutate"; "--full-matrix" ], "mutation loop [], full_matrix");
+          ( [ ("WINDTRAP_FULL_MATRIX", "1") ],
+            [ "--mutate" ],
+            "mutation loop [], full_matrix" );
+          ( [ ("WINDTRAP_FULL_MATRIX", "0") ],
+            [ "--mutate=lib/" ],
+            "mutation loop [lib/]" );
+          ( [ ("WINDTRAP_MUTATE", "1") ],
+            [ "--full-matrix" ],
+            "mutation loop [], full_matrix, broadcast mutate" );
+          ([], [ "--full-matrix" ], "--full-matrix requires --mutate");
+          ( [],
+            [ "--arm"; "lib/a.ml:9:12:add"; "--full-matrix" ],
+            "--full-matrix requires --mutate" );
+          ([ ("WINDTRAP_FULL_MATRIX", "1") ], [], "defaults");
+          ( [ ("WINDTRAP_FULL_MATRIX", "1") ],
+            [ "--arm"; "lib/a.ml:9:12:add" ],
+            "mutation armed lib/a.ml:9:12:add" );
+          ( [ ("WINDTRAP_FULL_MATRIX", "yes please") ],
+            [ "-v" ],
+            {|invalid WINDTRAP_FULL_MATRIX "yes please"|} );
+        ];
+      resolve_rows
+        "--skip-killed with --full-matrix is refused, whichever layer gave \
+         each, and the mirrors also without --mutate"
+        [
+          ( [],
+            [ "--mutate"; "--skip-killed"; "--full-matrix" ],
+            "incompatible --skip-killed --full-matrix" );
+          ( [ ("WINDTRAP_SKIP_KILLED", "1") ],
+            [ "--mutate"; "--full-matrix" ],
+            "incompatible --skip-killed --full-matrix" );
+          ( [ ("WINDTRAP_FULL_MATRIX", "1") ],
+            [ "--mutate"; "--skip-killed" ],
+            "incompatible --skip-killed --full-matrix" );
+          ( [ ("WINDTRAP_SKIP_KILLED", "1"); ("WINDTRAP_FULL_MATRIX", "true") ],
+            [],
+            "incompatible --skip-killed --full-matrix" );
+          ( [],
+            [ "--skip-killed"; "--full-matrix" ],
+            "--skip-killed requires --mutate" );
         ];
       resolve_rows "--mutate with --arm is refused, whichever layer gave each"
         [

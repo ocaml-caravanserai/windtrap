@@ -462,9 +462,11 @@ the withheld-correction warning:
 - The determinism probe runs the suite again and checks that it passes
   again.
 - Each reached mutant runs with its reaching tests, up to the first
-  failure in or after the test that first evaluates its site. One that
-  evaluates its site more than `hits * 8 + 1000` times, `hits` being
-  the dry run's count, fails its test, and the mutant is killed.
+  failure in or after the test that first evaluates its site. Under
+  `--full-matrix`, it runs all its reaching tests (see [Finding the
+  tests that kill each mutant](#finding-the-tests-that-kill-each-mutant)).
+  One that evaluates its site more than `hits * 8 + 1000` times, `hits`
+  being the dry run's count, fails its test, and the mutant is killed.
 - Under `--mutate-retry N`, the job of each survivor runs again, up to
   `N` more times (see
   [Running a survivor again](#running-a-survivor-again)).
@@ -674,11 +676,13 @@ The loop runs the checks in passes after the last pass of retries.
 Each pass runs once each check that has not failed, up to `-j` at once.
 A check that holds a test that spawned a pool runs alone, as a job does.
 Two kills whose checks run the same tests share one check, also when
-the two jobs had different tests after the killing test. Each run of
-the check has the longest deadline of the jobs that wait for it. Thus a
-killing test that fails at its own timeout also fails in the check.
-Each different list of tests costs up to 3 more runs. The live line shows a run of a check
-with the first mutant that waits for it.
+the two jobs had different tests after the killing test. Under
+`--full-matrix`, the check also runs only up to the first killing test.
+
+Each run of the check has the longest deadline of the jobs that wait for
+it. Thus a killing test that fails at its own timeout also fails in the
+check. Each different list of tests costs up to 3 more runs. The live
+line shows a run of a check with the first mutant that waits for it.
 
 Three runs with no failure do not prove that a test is not flaky. For
 example, a test that fails in 1 run of 10 passes 3 runs in about 73 of
@@ -983,6 +987,17 @@ verdict applies:
 | Survived | In this dry run, the same tests reach the mutant. The source files of these tests did not change. The `N` of `--mutate-retry` is not more than the `N` of the run that tested the mutant. |
 | Not evaluated, unknown, killed elsewhere | Never. |
 
+Under `--full-matrix`, the run uses a kill again only from a run that
+had the flag. Without the flag, the run uses again only a kill of a run
+without it. Under the flag, each killing test reaches the mutant in this
+dry run. Under the flag, the tests of the job of this run are all the
+tests of the job of the kill, in the same order. Their source files did
+not change.
+
+Under the flag, the job of the kill also ran each of its tests. Thus a kill before an
+expiry or a crash gets a job again, and the next run can record all its
+tests. The run uses a survivor again with or without the flag.
+
 A kill by a fixture release or by an `at_exit` function names no test.
 Thus the run never uses it again. The order of the reaching tests comes
 from the dry run. Under `-j` above 1, this order can change from one run
@@ -1244,26 +1259,35 @@ For other tools, `--json` prints the merge as one JSON document on
 standard output, in place of the report. The document has its version,
 the counts, the score, the reach and the total, the verdict files, and
 each mutant with its verdict. A survivor also has the tests that ran it.
+
 A killed mutant has the tests that killed it in `killed_by`: in each run
-that killed it, the first test that failed. The array is empty when a
-kill names no test, as for a kill by a fixture release. It is also empty
-for a mutant killed elsewhere. An unknown mutant has its reason, and the
-kind of the reason in `reason_kind`: `deadline`, `crashed`, `memory`,
-`flaky_kill` or `other`. Its `counted_as_killed` is `true` when
-`--crash-kills` counts it as killed, and `false` if not. Under the
-option, `killed` in `summary` counts such a mutant, and `unknown` does
-not count it. The `verdict` of such a mutant stays `unknown`. A mutant
-whose verdict a run used again under `--incremental` has
+that killed it, the first test that failed. Under `--full-matrix`,
+`killed_by` has each test that failed in such a run. The array is empty
+when a kill names no test, as for a kill by a fixture release. It is
+also empty for a mutant killed elsewhere. A killed mutant has
+`"full_matrix": true` when each verdict file that kills it had the
+flag. This key comes after its verdict, and after `"reused"` when that
+key is present.
+
+An unknown mutant has its reason, and the kind of the reason in `reason_kind`: `deadline`,
+`crashed`, `memory`, `flaky_kill` or `other`. Its `counted_as_killed` is
+`true` when `--crash-kills` counts it as killed, and `false` if not.
+Under the option, `killed` in `summary` counts such a mutant, and
+`unknown` does not count it. The `verdict` of such a mutant stays
+`unknown`.
+
+A mutant whose verdict a run used again under `--incremental` has
 `"reused": true` after its verdict, and the other mutants do not have
 the key. A test names its verdict file by its index in `executables`,
-because two files can have the same name. Under `--lines` or `--diff`,
-the verdict counts, the three measures and `mutants` hold only the
-mutants on the lines. But `executables` still lists every verdict file,
-and `refused` still counts every refused file. Under a gate, the outcome
-line goes to standard error, and the exit code is that of the gates. A
-later version can add keys. A change to the meaning of a key increments
-`version`. [`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each
-key:
+because two files can have the same name.
+
+Under `--lines` or `--diff`, the verdict counts, the three measures and `mutants` hold
+only the mutants on the lines. But `executables` still lists every
+verdict file, and `refused` still counts every refused file. Under a
+gate, the outcome line goes to standard error, and the exit code is that
+of the gates. A later version can add keys. A change to the meaning of a
+key increments `version`.
+[`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each key:
 
 ```
 $ dune exec windtrap -- mutants --json --lines=calc.ml:10
@@ -1423,6 +1447,135 @@ mutants: 12 reached by this suite, 12 killed, score 100.0% (12/12), reach 100.0%
 $ dune exec windtrap -- mutants
 mutants: 12 reached, 12 killed, 1 executable, score 100.0% (12/12), reach 100.0% (12/12), total 100.0% (12/12)
 ```
+
+## Finding the tests that kill each mutant
+
+The job of a mutant stops at the first test that kills it. Thus a kill
+names one test, and the tests after it in the job do not run.
+`--full-matrix` (mirror `WINDTRAP_FULL_MATRIX`) runs all the reaching
+tests of each mutant, and the kill names each test that kills it. If
+neither the command line nor a mirror gives `--mutate`, the flag on the
+command line is a usage error. The mirror alone has no effect on a suite
+that does not mutate.
+
+```
+$ WINDTRAP_MUTATE=1 WINDTRAP_FULL_MATRIX=1 dune runtest --force --instrument-with ppx_windtrap.mutate
+```
+
+The flag costs time. The job of each killed mutant runs all its
+reaching tests, up to the deadline of the job. A survivor costs the
+same as without the flag, because its job runs all its reaching tests
+in each case.
+
+After each kill, the worker releases its fixtures and ends, and a fresh
+worker sets them up again. This time is part of the deadline of the
+job. Thus a slow shared fixture with many killing tests can pass the
+deadline. The record of the kill then holds only a part of the tests of
+its job.
+
+After each kill, a fresh worker runs the rest of the job, with the
+mutant armed again. Thus a failing test leaves no state to the next
+test, and the count of evaluations starts again. A test that fails
+before the first evaluation of the site does not kill the mutant, as
+without the flag. A kill stays a kill when the job then passes its
+deadline or its memory limit, or when its worker ends. Without the
+flag, the job stops at the kill. If a fixture release then passes the
+deadline, or its worker ends, the mutant is unknown.
+
+The verdict file records the flag of the run for each verdict. For each
+kill, it also records the tests that ran in its job, and if the job ran
+each of them. Under `--mutate-retry N` with `N` above 0, the check of a
+kill runs only up to the first killing test, as without the flag (see
+[Flaky kills](#flaky-kills)). When the check trusts the kill, the kill
+keeps each killing test. Thus `killed_by` can hold a later test that
+also fails with no mutant.
+
+`--full-matrix` with `--skip-killed` is a usage error, from the command
+line and from the mirrors, also without `--mutate`. A skipped mutant
+gets no job, so it has no killing tests. Under `--incremental`, the run
+uses a kill again only from a run with the same flag (see [Reusing the
+verdicts of the last run](#reusing-the-verdicts-of-the-last-run)).
+Under `--sample`, the flag acts only on the mutants of the sample.
+
+### The kills of each test
+
+`windtrap mutants --tests` prints one row for each test that reaches a
+mutant, in place of the report:
+
+```
+$ dune exec windtrap -- mutants --tests
+─────────────────────── tests (7) ────────────────────────
+  kills  only  executable     test
+      1     1  test_calc.exe  addition › adds
+      1     0  test_calc.exe  division › divides
+      2     1  test_calc.exe  division › rejects a zero divisor
+      1     1  test_calc.exe  sign › is -1 for a negative
+      1     1  test_calc.exe  sign › is 1 for a positive
+      0     0  test_calc.exe  subtraction › stays positive
+      1     1  test_calc.exe  subtraction › subtracts
+──────────────────────────────────────────────────────────
+
+───────────── tests that kill no mutant (1) ──────────────
+  test_calc.exe  subtraction › stays positive
+──────────────────────────────────────────────────────────
+```
+
+This is the suite of `examples/08-mutation` after a run with
+`--full-matrix`. The test `stays positive` reaches the mutant of
+`a - b`, and the mutant `a + b` also gives a positive result.
+
+The table has a header row, and then these columns:
+
+- `kills`: the number of mutants that the test kills.
+- `only`: the number of mutants that only this test kills.
+- `executable`: the executable that ran the test, as the reaching tests
+  of a survivor name it.
+- `test`: the path of the test. When two suites of one executable have
+  the same path, the suite follows it, as in `calc › adds (suite calc)`.
+
+The rows are in the order of the executable, and then of the path of the
+test. The section of the tests that reach a mutant and kill none
+follows, with the executable and the path of each test.
+
+A test reaches a mutant when the reaching tests of a survivor name it.
+It also reaches a mutant when a kill names it, or when the job of a
+kill ran it. An unknown mutant, a mutant killed elsewhere and a mutant
+out of a sample name no test. A test that reaches no mutant has no row.
+
+A mutant counts in `only` when the kills of all the verdict files name
+only one test. Each job that killed the mutant must also run all its
+tests. An unknown mutant, a mutant killed elsewhere or a mutant out of a
+sample in another file stops this count. A test of that file can kill
+the mutant.
+
+The counts come from the verdict files. A kill with no full matrix names
+only its first killing test. An example is a kill of a run without
+`--full-matrix`, also when a later scoped run kept it. A mutant that a
+run skipped (`--skip-killed`) names no test. Thus the tests of a file
+with such a kill or skip have `-` in `only`. They are not in the section
+of the tests that kill no mutant.
+
+A note on standard error for each file with such a kill or skip names
+the file and tells the cause. When each file that tested its suite has
+such a kill or skip, one note names no file.
+
+A file with no kill gives exact counts also without the flag, because
+no job of its run stopped at a kill. Another note tells when a suite
+tested a sample, because the counts then hold only the mutants of the
+sample. The counts ignore `--crash-kills`, and a note tells this under
+the option.
+
+Under `--lines` or `--diff`, the table counts only the mutants on the
+lines. The exit code is that of the report, or that of the gates when
+you give a gate. The outcome line of a gate goes to standard error.
+`--tests` with `--json` or `--sarif` is a usage error. The JSON gives
+`"full_matrix": true` to a killed mutant when each verdict file that
+kills it had the flag.
+
+CAUTION: Do not remove a test only because it kills no mutant. Such a
+test is a candidate for removal or for a stronger assertion. It is not
+proof that the test has no value, because the test can check a behavior
+that no rewrite of windtrap changes.
 
 ## What is mutated
 
@@ -1701,6 +1854,12 @@ OPTIONS:
   --sarif
       SARIF 2.1.0 document of the survivors, the unknown and the
       not-evaluated mutants on standard output, for code scanning.
+
+  --tests
+      One row for each test that reaches a mutant on standard output, in place
+      of the report: the mutants that it kills, the mutants that only it
+      kills, and then the tests that kill no mutant. Run the suites with
+      --full-matrix for counts of each kill.
 
   --lines=FILE:A-B,...
       Report only the mutants on these lines of these files.

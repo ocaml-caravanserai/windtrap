@@ -55,9 +55,11 @@ type verdict =
       (** In the run that armed the mutant, a reaching test failed in or after
           the test that first evaluated the armed site. Or a fixture release
           failed, and the run evaluated the site at any time. [by] is the
-          killing tests, sorted and without duplicates: the first such failing
-          test of each run that killed the mutant. It is [[]] when a kill names
-          no test, as for a kill by a fixture release. *)
+          killing tests, sorted and without duplicates, of each run that killed
+          the mutant: each such failing test of a run under [--full-matrix]
+          ([effort.full_matrix]), and the first such failing test of another
+          run. It is [[]] when a kill names no test, as for a kill by a fixture
+          release. *)
   | Killed_elsewhere of { exe : string }
       (** No run of this suite armed the mutant, because the verdict file of
           another suite gave it {!Killed}, with the source digest, the
@@ -129,6 +131,11 @@ val in_sample : percent:float -> seed:int64 -> Mutate.id -> bool
 (** {1:collections Collections} *)
 
 type effort = {
+  full_matrix : bool;
+      (** [true] when the run that gave the verdict ran each reaching test of a
+          killed mutant ([--full-matrix]). It is the first field, so the
+          smallest of two efforts in [compare] order has it only when the two
+          have it. *)
   retries : int;
       (** The [--mutate-retry] count of the run that gave the verdict. *)
   pass : int;
@@ -145,20 +152,36 @@ val effort_covers :
   [ `Killed | `Survived ] -> judged:effort -> asked:effort -> bool
 (** [effort_covers kind ~judged ~asked] is [true] when a verdict of [kind] that
     a run of the effort [judged] gave holds for a run of the effort [asked]. The
-    two must have the same [settings]. For a kill, [asked.retries] is [0] or
-    [judged.retries] is above [0], because only a run with retries checks a
-    kill, and [judged.pass - 1] is at most [asked.retries], because a run with
-    fewer retries does not run that pass. For a survivor, [asked.retries] is at
-    most [judged.retries]. [asked.pass] is not read. *)
+    two must have the same [settings]. For a kill, the two have the same
+    [full_matrix], because a run under [--full-matrix] records each killing test
+    and another run only the first. [asked.retries] is [0] or [judged.retries]
+    is above [0], because only a run with retries checks a kill, and
+    [judged.pass - 1] is at most [asked.retries], because a run with fewer
+    retries does not run that pass. For a survivor, [asked.retries] is at most
+    [judged.retries], and [full_matrix] is not read. [asked.pass] is not read.
+*)
 
 val prefix_digest : reaching_test list -> string
 (** [prefix_digest paths] is the lowercase hexadecimal MD5 of an injective
     spelling of [paths], in order: the tests of a job up to and with its killing
-    test. *)
+    test, or all the tests of the job under [--full-matrix]. *)
 
 val through : reaching_test -> reaching_test list -> reaching_test list
 (** [through test paths] is [paths] up to and with the first [test], or [paths]
     when [test] is not in it. *)
+
+type matrix = {
+  ran : reaching_test list;
+      (** The tests that ran in the job of the kill, sorted and without
+          duplicates ({!add} sorts them). *)
+  complete : bool;
+      (** [true] when the job ran each of its tests: it did not pass its
+          deadline or its memory limit, and its worker did not end first. *)
+}
+(** The type for the tests of the job of a kill under [--full-matrix]. Each test
+    of [ran] reaches the mutant, and a test of the job that did not run is not
+    in [ran]. In a file that {!load} reads, a {!Killed} has a matrix if and only
+    if its effort has [full_matrix], so the two fields agree. *)
 
 type record = {
   id : Mutate.id;  (** The identifier of the mutant. *)
@@ -180,12 +203,16 @@ type record = {
           the effort of the run that tested the mutant. *)
   prefix : string option;
       (** For a {!Killed} that names a test, the {!prefix_digest} of the tests
-          of its job up to and with the killing test, when it is known. {!add}
-          drops it for every other verdict. *)
+          of its job up to and with the killing test, or of all the tests of its
+          job under [effort.full_matrix], when it is known. {!add} drops it for
+          every other verdict. *)
+  matrix : matrix option;
+      (** For a {!Killed} under [effort.full_matrix], the tests that its job
+          ran. {!add} drops it for every other record. *)
   reused : bool;
       (** [true] when a run took [verdict] from the verdict file of the last run
           ({!reuse}) and did not test the mutant. {!reuse} gives only a
-          {!Killed} that names one test and a {!Survived}. *)
+          {!Killed} that names a test and a {!Survived}. *)
 }
 (** The type for the record of one mutant. A record is self-describing: it
     carries the two renderings and the extent that a report draws the mutant
@@ -195,14 +222,16 @@ type record = {
 val record_of_mutant :
   effort:effort ->
   ?prefix:reaching_test list ->
+  ?matrix:matrix ->
   Mutate.mutant ->
   verdict ->
   record
-(** [record_of_mutant ~effort ?prefix m v] is the record of [m] with the verdict
-    [v], the effort [effort], no previous outcome and no mark. Its prefix is the
-    {!prefix_digest} of [prefix], or [None] without [prefix]. {!add} drops the
-    prefix of a verdict that is not a {!Killed} that names a test. [m.dismissed]
-    is dropped. *)
+(** [record_of_mutant ~effort ?prefix ?matrix m v] is the record of [m] with the
+    verdict [v], the effort [effort], the matrix [matrix], no previous outcome
+    and no mark. Its prefix is the {!prefix_digest} of [prefix], or [None]
+    without [prefix]. {!add} drops the prefix of a verdict that is not a
+    {!Killed} that names a test, and the matrix of a record that is not a
+    {!Killed} under [effort.full_matrix]. [m.dismissed] is dropped. *)
 
 val changed : record -> (outcome * outcome) option
 (** [changed r] is [Some (was, is)] when [r.previous] is [Some was],
@@ -218,33 +247,36 @@ val empty : t
 (** [empty] is the collection with no record. *)
 
 val add : t -> record -> t
-(** [add t r] is [t] with [r] recorded. A {!Survived} or {!Killed} verdict is
-    sorted on its way in, and the prefix of a verdict that is not a {!Killed}
-    that names a test is dropped. When [t] already holds a record under [r.id],
-    the smaller [(before, after, end_line, end_col, source_digest)] in
-    lexicographic order is kept, and the two verdicts combine into the verdict
-    of a mutant that one executable saw one way and another the other way. It is
-    {!Killed} if either is, with the killing tests of both. Otherwise it is
-    {!Killed_elsewhere} if either is, with the smaller [exe] in [String.compare]
-    order when both are. Otherwise it is {!Unknown} if either is, with the
-    reason whose {!reason_text} is smaller in [String.compare] order when both
-    are, and the smaller reason in [compare] order for two equal texts, then
-    {!Not_evaluated} if either is, then {!Not_sampled} if either is, then
-    {!Survived} with the reaching tests of both if either is, then
-    {!Outside_tests} if either is, and {!Unreached} if both are. The two
-    previous outcomes combine in the same order, and a missing one leaves the
-    other unchanged. The effort and the prefix are the smallest pair, in
-    [compare] order, of the records whose verdict has the higher rank in this
-    order, or of the two records when the two ranks are equal. The result is
-    reused when each of these records is reused.
+(** [add t r] is [t] with [r] recorded. A {!Survived} or {!Killed} verdict and
+    the tests of a matrix are sorted on its way in. The prefix of a verdict that
+    is not a {!Killed} that names a test is dropped, and so is the matrix of a
+    record that is not a {!Killed} under [r.effort.full_matrix]. When [t]
+    already holds a record under [r.id], the smaller
+    [(before, after, end_line, end_col, source_digest)] in lexicographic order
+    is kept, and the two verdicts combine into the verdict of a mutant that one
+    executable saw one way and another the other way. It is {!Killed} if either
+    is, with the killing tests of both. Otherwise it is {!Killed_elsewhere} if
+    either is, with the smaller [exe] in [String.compare] order when both are.
+    Otherwise it is {!Unknown} if either is, with the reason whose
+    {!reason_text} is smaller in [String.compare] order when both are, and the
+    smaller reason in [compare] order for two equal texts, then {!Not_evaluated}
+    if either is, then {!Not_sampled} if either is, then {!Survived} with the
+    reaching tests of both if either is, then {!Outside_tests} if either is, and
+    {!Unreached} if both are. The two previous outcomes combine in the same
+    order, and a missing one leaves the other unchanged. The effort, the prefix
+    and the matrix are the smallest triple, in [compare] order, of the records
+    whose verdict has the higher rank in this order, or of the two records when
+    the two ranks are equal. Thus the result has [effort.full_matrix] only when
+    each of these records has it. The result is reused when each of these
+    records is reused.
 
     [add] checks nothing of [r.id], of the end, of [r.source_digest], of the
-    [exe] of a {!Killed_elsewhere}, of [r.effort], of [r.prefix] or of the mark.
-    It accepts an empty [file], a [line] below [1], a negative [col], an end
-    before the start, a [rewrite] outside {!Mutate.rewrites}, a digest that is
-    not 32 lowercase hexadecimal digits, an empty [exe] and a record that
-    {!load} refuses, and {!load} then refuses the file that {!save} writes for
-    the collection. *)
+    [exe] of a {!Killed_elsewhere}, of [r.effort], of [r.prefix], of [r.matrix]
+    or of the mark. It accepts an empty [file], a [line] below [1], a negative
+    [col], an end before the start, a [rewrite] outside {!Mutate.rewrites}, a
+    digest that is not 32 lowercase hexadecimal digits, an empty [exe] and a
+    record that {!load} refuses, and {!load} then refuses the file that {!save}
+    writes for the collection. *)
 
 val records : t -> record list
 (** [records t] is the records of [t], ordered by {!Mutate.compare_id}. *)
@@ -254,9 +286,9 @@ val merge : t -> t -> t
     identifier are combined as {!add} does. [merge] is commutative, associative
     and idempotent, {!empty} is its unit, and an {!Unreached} verdict leaves the
     verdict it is combined with unchanged, so merging any number of files in any
-    order gives one answer. The previous outcome, the effort and the prefix of a
-    merged record tell nothing of one suite. A merged record is reused only when
-    each merged record of the highest rank is reused. *)
+    order gives one answer. The previous outcome, the effort, the prefix and the
+    matrix of a merged record tell nothing of one suite. A merged record is
+    reused only when each merged record of the highest rank is reused. *)
 
 val with_previous : prior:t -> t -> t
 (** [with_previous ~prior t] is [t] in which each record [r] gets its previous
@@ -271,7 +303,7 @@ val with_previous : prior:t -> t -> t
 
     Each suite of an executable has one verdict file, at {!output_file}.
 
-    The first line of a file is the magic line [windtrap-mutants-v16], which
+    The first line of a file is the magic line [windtrap-mutants-v17], which
     carries the version of the format. A file with another first line is
     refused, never converted, and nothing is promised from one version to the
     next. *)
@@ -351,19 +383,29 @@ val reuse :
     + [last.verdicts] holds a record [p] of [m.id], [m.source_digest] is not
       [None] and is [p.source_digest], and [p] has the end and the renderings of
       [m].
-    + [p.verdict] is a {!Killed} that names one test [t], [t] is in [reaching],
-      the {!prefix_digest} of [through t reaching] is [p.prefix], and
-      {!effort_covers} [`Killed] holds for [~judged:p.effort ~asked:effort]. The
-      compared tests are [through t reaching]. A kill that names several tests
-      is not reused. Or [p.verdict] is a {!Survived} whose reaching tests are
-      those of [reaching], as sets, and {!effort_covers} [`Survived] holds. The
-      compared tests are [reaching].
+    + [p.verdict] agrees with the rule of its verdict that follows.
     + For each compared test [t], [recorded t] is [Some d] and [digest t] is
       [Some d].
 
-    [r] has the verdict, the effort and the prefix of [p], the fields of [m], no
-    previous outcome, and the mark. A reused [p] can be reused again. [reuse]
-    reads no file. *)
+    A kill without [effort.full_matrix]: [p.verdict] is a {!Killed} that names
+    one test [t], and [t] is in [reaching]. The {!prefix_digest} of
+    [through t reaching] is [p.prefix], and {!effort_covers} [`Killed] holds for
+    [~judged:p.effort ~asked:effort]. The compared tests are
+    [through t reaching]. A kill that names several tests is not reused.
+
+    A kill under [effort.full_matrix]: [p.verdict] is a {!Killed} that names a
+    test, and each of its tests is in [reaching]. Its matrix is complete, the
+    {!prefix_digest} of [reaching] is [p.prefix], and {!effort_covers} [`Killed]
+    holds. The compared tests are [reaching]. A kill whose job did not run each
+    of its tests is not reused, so a later run tests the mutant again.
+
+    A survivor: [p.verdict] is a {!Survived} whose reaching tests are those of
+    [reaching], as sets, and {!effort_covers} [`Survived] holds. The compared
+    tests are [reaching].
+
+    [r] has the verdict, the effort, the prefix and the matrix of [p], the
+    fields of [m], no previous outcome, and the mark. A reused [p] can be reused
+    again. [reuse] reads no file. *)
 
 val load : string -> (file, error) result
 (** [load path] is [Ok file] when the file at [path] is a verdict file. The file
@@ -375,8 +417,10 @@ val load : string -> (file, error) result
       that are not sorted or that name one test two times,
     - a missing or negative retries count, a pass below [1] or above the retries
       count plus [1], a settings word or a prefix that is not 32 lowercase
-      hexadecimal digits, a prefix on a verdict that is not a {!Killed} that
-      names a test, or a mark that is not [fresh] or [reused],
+      hexadecimal digits, a kills word that is not [first] or [full], a prefix
+      on a verdict that is not a {!Killed} that names a test, ran tests on a
+      record that is not a {!Killed} with [full], a {!Killed} with [full] and no
+      ran tests, or a mark that is not [fresh] or [reused],
     - a [reused] mark on a verdict that is not a {!Survived} or a {!Killed} that
       names a test,
     - an empty file name, a line below [1] or a negative column,

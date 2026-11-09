@@ -106,14 +106,20 @@ let in_sample ~percent ~seed (id : Mutate.id) =
 
 (* Collections *)
 
-type effort = { retries : int; pass : int; settings : string }
+type effort = {
+  full_matrix : bool;
+  retries : int;
+  pass : int;
+  settings : string;
+}
 
 let effort_covers kind ~judged ~asked =
   String.equal judged.settings asked.settings
   &&
   match kind with
   | `Killed ->
-      (asked.retries = 0 || judged.retries > 0)
+      Bool.equal judged.full_matrix asked.full_matrix
+      && (asked.retries = 0 || judged.retries > 0)
       && judged.pass - 1 <= asked.retries
   | `Survived -> asked.retries <= judged.retries
 
@@ -129,6 +135,8 @@ let prefix_digest paths =
   List.iter (Printf.bprintf b "\n%a" add_test) paths;
   Digest.to_hex (Digest.string (Buffer.contents b))
 
+type matrix = { ran : reaching_test list; complete : bool }
+
 type record = {
   id : Mutate.id;
   end_line : int;
@@ -140,6 +148,7 @@ type record = {
   previous : outcome option;
   effort : effort;
   prefix : string option;
+  matrix : matrix option;
   reused : bool;
 }
 
@@ -150,7 +159,7 @@ let names_a_test = function
   | Outside_tests | Unreached ->
       false
 
-let record_of_mutant ~effort ?prefix (m : Mutate.mutant) verdict =
+let record_of_mutant ~effort ?prefix ?matrix (m : Mutate.mutant) verdict =
   {
     id = m.id;
     end_line = m.end_line;
@@ -162,6 +171,7 @@ let record_of_mutant ~effort ?prefix (m : Mutate.mutant) verdict =
     previous = None;
     effort;
     prefix = Option.map prefix_digest prefix;
+    matrix;
     reused = false;
   }
 
@@ -198,17 +208,19 @@ let combine a b =
     | None, p | p, None -> p
     | Some x, Some y -> Some (if outcome_rank x >= outcome_rank y then x else y)
   in
-  (* The effort, the prefix and the mark come from the record of the higher
-     rank. Of two records of one rank, the smaller effort and prefix, and the
-     mark only when the two have it. *)
-  let effort, prefix, reused =
+  (* The effort, the prefix, the matrix and the mark come from the record of
+     the higher rank. Of two records of one rank, the smaller effort, prefix
+     and matrix, and the mark only when the two have it. *)
+  let effort, prefix, matrix, reused =
     match Int.compare (rank a.verdict) (rank b.verdict) with
     | 0 ->
-        let effort, prefix = min (a.effort, a.prefix) (b.effort, b.prefix) in
-        (effort, prefix, a.reused && b.reused)
+        let effort, prefix, matrix =
+          min (a.effort, a.prefix, a.matrix) (b.effort, b.prefix, b.matrix)
+        in
+        (effort, prefix, matrix, a.reused && b.reused)
     | c ->
         let r = if c > 0 then a else b in
-        (r.effort, r.prefix, r.reused)
+        (r.effort, r.prefix, r.matrix, r.reused)
   in
   {
     kept with
@@ -216,17 +228,29 @@ let combine a b =
     previous;
     effort;
     prefix;
+    matrix;
     reused;
   }
+
+let sorted tests = List.sort_uniq (List.compare String.compare) tests
 
 let add t r =
   let r =
     match r.verdict with
-    | Survived s -> { r with verdict = survived (s.first :: s.others) }
-    | Killed { by } -> { r with verdict = killed by }
+    | Survived s ->
+        { r with verdict = survived (s.first :: s.others); matrix = None }
+    | Killed { by } ->
+        {
+          r with
+          verdict = killed by;
+          matrix =
+            (if r.effort.full_matrix then
+               Option.map (fun m -> { m with ran = sorted m.ran }) r.matrix
+             else None);
+        }
     | Killed_elsewhere _ | Unknown _ | Not_evaluated | Not_sampled
     | Outside_tests | Unreached ->
-        r
+        { r with matrix = None }
   in
   (* Only a kill that names a test has a prefix. *)
   let r = if names_a_test r.verdict then r else { r with prefix = None } in
@@ -264,7 +288,7 @@ let with_previous ~prior t =
 
 let format =
   {
-    Instr.magic = "windtrap-mutants-v16";
+    Instr.magic = "windtrap-mutants-v17";
     kind = "verdict";
     dir = "mutants";
     ext = "mutants";
@@ -341,11 +365,20 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
     && String.equal p.before m.before
     && String.equal p.after m.after
   in
+  let reaches test = List.exists (equal_test test) reaching in
   let compared (p : record) =
     match p.verdict with
+    | Killed { by = _ :: _ as by }
+      when effort.full_matrix && List.for_all reaches by
+           && effort_covers `Killed ~judged:p.effort ~asked:effort -> (
+        match p.matrix with
+        | Some { complete = true; _ }
+          when p.prefix = Some (prefix_digest reaching) ->
+            Some reaching
+        | Some _ | None -> None)
     | Killed { by = [ test ] }
-      when List.exists (equal_test test) reaching
-           && effort_covers `Killed ~judged:p.effort ~asked:effort ->
+      when reaches test && effort_covers `Killed ~judged:p.effort ~asked:effort
+      ->
         let prefix = through test reaching in
         if p.prefix = Some (prefix_digest prefix) then Some prefix else None
     | Survived { first; others }
@@ -363,7 +396,7 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
       | Some tests when List.for_all unchanged tests ->
           Some
             {
-              (record_of_mutant ~effort:p.effort m p.verdict) with
+              (record_of_mutant ~effort:p.effort ?matrix:p.matrix m p.verdict) with
               prefix = p.prefix;
               reused = true;
             }
@@ -379,7 +412,7 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
      <test count>
      <test> <digest>
      <record count>
-     <file> <line> <col> <end line> <end col> <rewrite> <before> <after> <source> <verdict> <previous> <retries> <pass> <settings> <prefix> <mark>
+     <file> <line> <col> <end line> <end col> <rewrite> <before> <after> <source> <verdict> <previous> <retries> <pass> <settings> <kills> <prefix> <ran> <mark>
 
    with one [<test> <digest>] line for each test digest, in the order of the
    tests, and one record line for each record, in [Mutate.compare_id] order.
@@ -399,10 +432,13 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
    [was] and then [killed], [survived] or [not_evaluated]. [<retries>] and
    [<pass>] are numbers, [<pass>] from 1 to [<retries>] + 1. [<digest>] and
    [<settings>] are 32 lowercase hexadecimal digits, and so is [<prefix>],
-   or [none]. Only a kill that names a test has a prefix. [<mark>] is
-   [fresh], or [reused] on a survivor or on a kill that names a test. [load]
-   reads this grammar and nothing else, and refuses a rewrite outside
-   [Mutate.rewrites], which no report could render. *)
+   or [none]. Only a kill that names a test has a prefix. [<kills>] is
+   [first], or [full] for a run under [--full-matrix]. [<ran>] is [none], or
+   [complete <n>] or [partial <n>] and then [n] tests, on each kill with
+   [full] and on no other record. [<mark>] is [fresh], or [reused] on a
+   survivor or on a kill that names a test. [load] reads this grammar and
+   nothing else, and refuses a rewrite outside [Mutate.rewrites], which no
+   report could render. *)
 let load path =
   let read_test c =
     List.init (Instr.read_count c "test path length") (fun _ ->
@@ -525,6 +561,12 @@ let load path =
     if pass < 1 || pass - 1 > retries then
       Instr.parse_fail "pass %d is not from 1 to %d" pass (retries + 1);
     let settings = read_digest c "settings digest" in
+    let full_matrix =
+      match Instr.read_word c "kills" with
+      | "first" -> false
+      | "full" -> true
+      | word -> Instr.parse_fail "unknown kills %S" word
+    in
     let prefix =
       match Instr.read_word c "prefix" with
       | "none" -> None
@@ -533,6 +575,24 @@ let load path =
             Instr.parse_fail "a prefix on a verdict that names no killing test";
           Some word
       | word -> Instr.parse_fail "%S is not a prefix" word
+    in
+    let matrix =
+      let ran complete =
+        (match verdict with
+        | Killed _ when full_matrix -> ()
+        | _ -> Instr.parse_fail "ran tests on a verdict that is no full kill");
+        let n = Instr.read_count c "ran test count" in
+        Some { ran = List.init n (fun _ -> read_test c); complete }
+      in
+      match Instr.read_word c "ran tests" with
+      | "none" -> (
+          match verdict with
+          | Killed _ when full_matrix ->
+              Instr.parse_fail "a full kill with no ran tests"
+          | _ -> None)
+      | "complete" -> ran true
+      | "partial" -> ran false
+      | word -> Instr.parse_fail "unknown ran tests %S" word
     in
     let reused =
       match Instr.read_word c "mark" with
@@ -553,8 +613,9 @@ let load path =
       source_digest;
       verdict;
       previous;
-      effort = { retries; pass; settings };
+      effort = { full_matrix; retries; pass; settings };
       prefix;
+      matrix;
       reused;
     }
   in
@@ -658,6 +719,14 @@ let save ?identity ?suite ?refused ?sample ?(test_digests = []) path t =
         Printf.bprintf b "survived %d" (List.length tests);
         List.iter (Printf.bprintf b " %a" add_test) tests
   in
+  let add_matrix b = function
+    | None -> Buffer.add_string b "none"
+    | Some { ran; complete } ->
+        Printf.bprintf b "%s %d"
+          (if complete then "complete" else "partial")
+          (List.length ran);
+        List.iter (Printf.bprintf b " %a" add_test) ran
+  in
   let add_previous b = function
     | None -> Buffer.add_string b "none"
     | Some `Killed -> Buffer.add_string b "was killed"
@@ -681,13 +750,15 @@ let save ?identity ?suite ?refused ?sample ?(test_digests = []) path t =
   Printf.bprintf b "%d\n" (Id_map.cardinal t);
   Id_map.iter
     (fun (id : Mutate.id) r ->
-      Printf.bprintf b "%a %d %d %d %d %a %a %a %a %a %a %d %d %s %s %s\n"
+      Printf.bprintf b "%a %d %d %d %d %a %a %a %a %a %a %d %d %s %s %s %a %s\n"
         add_name id.file id.line id.col r.end_line r.end_col add_name id.rewrite
         add_name r.before add_name r.after add_name
         (Option.value r.source_digest ~default:"")
         add_verdict r.verdict add_previous r.previous r.effort.retries
         r.effort.pass r.effort.settings
+        (if r.effort.full_matrix then "full" else "first")
         (Option.value r.prefix ~default:"none")
+        add_matrix r.matrix
         (if r.reused then "reused" else "fresh"))
     t;
   Instr.write_file path (Buffer.contents b)

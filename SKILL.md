@@ -478,6 +478,13 @@ change. The report then gives `reused: N verdicts from the last run`. It
 does not examine helper modules or data files, so do a full run each
 night.
 
+`--full-matrix` (`WINDTRAP_FULL_MATRIX=1`) runs all the reaching tests
+of each mutant, also after a kill, and records each test that kills it.
+`windtrap mutants --tests` then gives, for each test, the mutants that
+it kills and the mutants that only it kills, and lists the tests that
+kill no mutant. Such a test can have a weak assertion, or it can check
+what no rewrite changes. Do not remove it only for this reason.
+
 `--rewrites=NAME,...` (`WINDTRAP_REWRITES`) tests only the mutants of
 these rewrites, and `--skip-rewrites=NAME,...`
 (`WINDTRAP_SKIP_REWRITES`) tests the mutants of all other rewrites, with
