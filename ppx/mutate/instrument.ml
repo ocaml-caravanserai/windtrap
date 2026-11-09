@@ -700,16 +700,17 @@ let binary ~loc ~module_name ~index ~pin e app ~armed_arm left right =
    tail position of [b] and one copy of each operand:
 
      a && b  ->  let (p : Stdlib.Bool.t) = a in
-                 if Stdlib.( <> ) p (armed i) then b else p
+                 (if Stdlib.( <> ) p (armed i) then b else p : Stdlib.Bool.t)
      a || b  ->  let (p : Stdlib.Bool.t) = a in
-                 if Stdlib.( = ) p (armed i) then b else p
+                 (if Stdlib.( = ) p (armed i) then b else p : Stdlib.Bool.t)
 
    Armed, the first reads [if not p then b else p], which is [a || b]. The
-   constraint gives [a] the expected type that an operand of [&&] has, as a
-   GADT [match] needs, and makes the comparison an integer one. It names
-   [Stdlib.Bool.t] because a file may declare its own [bool]. No node of the
-   guard is the original expression, so the whole guard takes its
-   attributes. *)
+   two constraints give [a] and [b] the expected type of an operand of [&&],
+   so that a GADT [match] in an operand compiles. The first also makes the
+   comparison an integer one. The second is on the [if], so that [b] keeps
+   its location for the coverage rewriter. They name [Stdlib.Bool.t] because
+   a file can declare its own [bool]. No node of the guard is the original
+   expression, so the whole guard takes its attributes. *)
 let branch ~loc ~module_name ~index e app left right =
   let p = binder index "p" in
   let value = evar ~loc p in
@@ -722,7 +723,7 @@ let branch ~loc ~module_name ~index e app left right =
   {
     ([%expr
        let ([%p pvar ~loc p] : Stdlib.Bool.t) = [%e left] in
-       if [%e test] then [%e right] else [%e evar ~loc p]])
+       (if [%e test] then [%e right] else [%e evar ~loc p] : Stdlib.Bool.t)])
     with
     pexp_attributes = e.pexp_attributes;
   }
