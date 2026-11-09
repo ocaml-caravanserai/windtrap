@@ -22,7 +22,7 @@ the rewrite `sub`:
 
 `--rewrites=sub` keeps the mutant, and the loop tests it:
 
-  $ suite ./mutant_main.exe --mutate --rewrites=sub
+  $ suite ./mutant_main.exe --mutate=test/cram/run/mutant_subject.ml --rewrites=sub
   mutant: 1 passed in DURATION.
   mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach 100.0% (1/1), total 100.0% (1/1)
   [0]
@@ -30,18 +30,18 @@ the rewrite `sub`:
 `--skip-rewrites=sub` keeps no mutant. The suite runs without mutation
 and says why:
 
-  $ suite ./mutant_main.exe --mutate --skip-rewrites=sub
+  $ suite ./mutant_main.exe --mutate=test/cram/run/mutant_subject.ml --skip-rewrites=sub
   mutant: 1 passed in DURATION.
   windtrap: the scope holds no mutation site of the selected rewrites, so the suite runs without mutation
   [0]
 
 The mirrors do the same:
 
-  $ suite WINDTRAP_REWRITES=sub ./mutant_main.exe --mutate
+  $ suite WINDTRAP_REWRITES=sub ./mutant_main.exe --mutate=test/cram/run/mutant_subject.ml
   mutant: 1 passed in DURATION.
   mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach 100.0% (1/1), total 100.0% (1/1)
   [0]
-  $ suite WINDTRAP_SKIP_REWRITES=sub ./mutant_main.exe --mutate
+  $ suite WINDTRAP_SKIP_REWRITES=sub ./mutant_main.exe --mutate=test/cram/run/mutant_subject.ml
   mutant: 1 passed in DURATION.
   windtrap: the scope holds no mutation site of the selected rewrites, so the suite runs without mutation
   [0]
@@ -52,7 +52,7 @@ no mutant is no error: the suite runs without mutation and says why:
   $ suite WINDTRAP_SKIP_REWRITES=sub ./mutant_main.exe
   mutant: 1 passed in DURATION.
   [0]
-  $ suite WINDTRAP_MUTATE=1 WINDTRAP_SKIP_REWRITES=sub ./mutant_main.exe
+  $ suite WINDTRAP_MUTATE=test/cram/run/mutant_subject.ml WINDTRAP_SKIP_REWRITES=sub ./mutant_main.exe
   windtrap: WINDTRAP_MUTATE is set, but the scope holds no mutation site of the selected rewrites, so the suite runs without mutation
   mutant: 1 passed in DURATION.
   [0]

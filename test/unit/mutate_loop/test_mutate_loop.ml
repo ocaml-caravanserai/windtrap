@@ -5766,13 +5766,15 @@ let filter_refusals () =
        library under test instrumented with ppx_windtrap.mutate?), or the \
        matched files have no mutation sites\n" )
     (nowhere.status, nowhere.err);
-  let plain = spawn ~exe:plain_exe [ "--mutate"; only_add ] in
-  equal (pair string text)
-    ( "exited 1",
-      "windtrap: this executable links no instrumented module, so there is \
-       nothing to mutate: instrument the library under test with \
-       ppx_windtrap.mutate and re-run\n" )
-    (plain.status, plain.err)
+  if not core_instrumented then begin
+    let plain = spawn ~exe:plain_exe [ "--mutate"; only_add ] in
+    equal (pair string text)
+      ( "exited 1",
+        "windtrap: this executable links no instrumented module, so there is \
+         nothing to mutate: instrument the library under test with \
+         ppx_windtrap.mutate and re-run\n" )
+      (plain.status, plain.err)
+  end
 
 (* The red dry run comes before the population, so a filter that keeps no site
    does not save a red suite from its refusal. *)

@@ -20,7 +20,7 @@ the build.
 
 The loop kills the mutant:
 
-  $ suite ./division_main.exe --mutate
+  $ suite ./division_main.exe --mutate=test/cram/run/division_subject.ml
   division: 1 passed in DURATION.
   mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach 100.0% (1/1), total 100.0% (1/1)
   [0]

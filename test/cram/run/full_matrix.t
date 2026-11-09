@@ -25,7 +25,7 @@ and kills nothing:
 Without the flag, the job stops at the first kill, and the kill names
 the first test:
 
-  $ suite ./matrix_main.exe --mutate
+  $ suite ./matrix_main.exe --mutate=test/cram/run/mutant_subject.ml
   matrix: 3 passed in DURATION.
   mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach 100.0% (1/1), total 100.0% (1/1)
   [0]
@@ -42,7 +42,7 @@ the first test:
 With the flag, the kill names the two tests, and `is not 99` is the
 test that kills no mutant:
 
-  $ suite ./matrix_main.exe --mutate --full-matrix
+  $ suite ./matrix_main.exe --mutate=test/cram/run/mutant_subject.ml --full-matrix
   matrix: 3 passed in DURATION.
   mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach 100.0% (1/1), total 100.0% (1/1)
   [0]
@@ -65,7 +65,7 @@ test that kills no mutant:
 
 The mirror does the same:
 
-  $ suite WINDTRAP_FULL_MATRIX=1 ./matrix_main.exe --mutate
+  $ suite WINDTRAP_FULL_MATRIX=1 ./matrix_main.exe --mutate=test/cram/run/mutant_subject.ml
   matrix: 3 passed in DURATION.
   mutants: 1 reached by this suite, 1 killed, score 100.0% (1/1), reach 100.0% (1/1), total 100.0% (1/1)
   [0]
