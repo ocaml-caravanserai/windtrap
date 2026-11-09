@@ -231,9 +231,9 @@ val execute_and_report :
       mutant in this dry run. The tests of the job of this run, up to the
       killing test, are those of the kill, in the same order. Under
       [config.full_matrix], the record is a kill of a run with the flag, and
-      each of its killing tests reaches the mutant. All the tests of the job are
-      those of the kill, in the same order. Or the record is a survivor, and the
-      same set of tests reaches the mutant.
+      each of its killing tests reaches the mutant. Under [config.full_matrix],
+      all the tests of the job are also those of the kill, in the same order. Or
+      the record is a survivor, and the same set of tests reaches the mutant.
     - Each of these tests has the same digest in the file and in this run. The
       digest of a test is the MD5 of the digest of its source file
       ({!test_digest}), of its declared limit and of its declared retries. A

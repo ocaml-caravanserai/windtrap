@@ -362,9 +362,9 @@
     - ["killed_by"] is in the object of a killed mutant only. It is an array of
       the tests that killed the mutant: in each run that killed it, the first
       counted test that failed in or after the test that first evaluated the
-      armed site. Under [--full-matrix], it holds each such test of the run. It
-      is empty when no kill names a test, as for a kill by a fixture release or
-      a mutant killed elsewhere.
+      armed site. Under [--full-matrix], it holds each counted test that failed
+      in or after that test. It is empty when no kill names a test, as for a
+      kill by a fixture release or a mutant killed elsewhere.
     - ["executable"], ["reason"] and ["reason_kind"] are in the object of an
       unknown mutant only. ["executable"] is the index in ["executables"] of the
       file that the report names for the mutant ({{!section-merge}the merge}),
