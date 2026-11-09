@@ -9,8 +9,8 @@
   another module. `x * 1`, `x / -1`, their float forms, a shift by or
   of `0`, `a land a` and `a lor a` give no mutant. A literal operand of
   `*`, `/` or `mod` gives no `int` mutant, unless the file rebinds `*`,
-  `/` or `mod`, or an `open` or `include` of another module, or an
-  `open` of a module of the same file, is in scope
+  `/` or `mod`, or an `open` or `include` of another module or of a
+  module of the same file, is in scope
   (doc/manual/mutation.md#what-is-mutated).
 - A file that binds an operator by an alias pattern, as
   `(_ as ( + ))`, loses the rewrites of that operator's family, as a
