@@ -3,7 +3,7 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
-(* Sites of [mul], [fmul] and [bit] whose operands need the expected type of
+(* Sites of [mul], [fmul] and [bit] whose operands must get the expected type of
    the application: a GADT branch, a locally abstract result, a GADT
    [match] or an existential in an operand. The guard pins the operands to
    [ints] or [floats], so this module compiles under [-principal]. *)

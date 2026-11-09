@@ -5,7 +5,7 @@
 
 (* Operators of another type, for scoped.ml to open. None of them has its
    replacement operator here, so an arm of a site under one of these opens
-   names a Stdlib operator on the wrong type. *)
+   names a Stdlib operator on the incorrect type. *)
 
 let ( * ) = ( *. )
 let ( mod ) = Float.rem

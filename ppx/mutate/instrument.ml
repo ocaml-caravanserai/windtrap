@@ -94,7 +94,7 @@ let is_test_item si =
    [invalid_arg]. *)
 type family = Ari | Mul | Fmul | Bit | Cmp | Con | Ret | Log | Message
 
-(* The families whose sites need Stdlib scope: no opaque module is open. *)
+(* The families whose sites must be in Stdlib scope. *)
 let stdlib_only = function
   | Mul | Fmul | Bit -> true
   | Ari | Cmp | Con | Ret | Log | Message -> false
@@ -134,8 +134,8 @@ let family_of name =
 (* A family keeps its sites only where its operators are Stdlib's: [ari],
    [mul], [fmul] and [bit] name their replacement, [con] turns [&&] into an
    [if], and [cmp] swaps operands of one type. A binding that this pass sees
-   loses the family of its name. What an [open] brings in is not seen, so
-   [mul], [fmul] and [bit] also need Stdlib scope at the site. The guards of
+   loses the family of its name. What an [open] brings in is not seen, so a
+   site of [mul], [fmul] or [bit] must also be in Stdlib scope. The guards of
    [none] and [tail] name the predefined [None] and give [t] the type of
    [h :: t], so a file that declares a constructor [Some], [None] or [(::)],
    in a type or as an extension constructor, loses them. A file that binds
@@ -610,7 +610,8 @@ let armed ~loc ~module_name index =
 (* [neg], and [cmp] on an equality. The value is bound once, so it is
    evaluated as often as before, and binding the whole comparison leaves its
    operands the order the compiler gives them. The constraint gives the value
-   the expected type that a condition has, as a GADT [match] needs. *)
+   the expected type that a condition has, so that a GADT [match] in a
+   condition compiles. *)
 let negation ~loc ~module_name ~index value =
   let p = binder index "p" in
   [%expr
@@ -641,12 +642,12 @@ let negation ~loc ~module_name ~index value =
    [let lt x y = x < y] from generalizing.
 
    An application of a Stdlib operator of [ari], [mul], [fmul] or [bit] also
-   gives its operands their expected type, which a GADT [match] or an
-   existential in an operand needs. [~pin] restores that by the annotation
-   [ints] or [floats], with [type ints = int * int] and
+   gives its operands their expected type, so that a GADT [match] or an
+   existential in an operand compiles. [~pin] restores that by the
+   annotation [ints] or [floats], with [type ints = int * int] and
    [type floats = float * float]. Outside Stdlib scope [ari] does not pin,
-   since an [open]-provided [+] may take two types. The other three have no
-   site there.
+   because an [open] can give [+] two types. The other three have no site
+   there.
 
    The operands move out of [e], so the [let] takes the warning and alert
    attributes of [e], which also cover the operands.
@@ -847,9 +848,9 @@ class instrumenter ~keeps ~module_name =
     val mutable logging = false
     val mutable message = false
 
-    (* The opaque modules that are open at the code being rewritten. An
-       operator there is Stdlib's when this is empty and the file keeps the
-       family of the operator. *)
+    (* The opaque modules that are open at the code that the rewriter reads.
+       An operator there is Stdlib's when this is empty and the file keeps
+       the family of the operator. *)
     val mutable opens : opening list = []
     method sites = List.rev sites
     method pins = pins
@@ -876,7 +877,7 @@ class instrumenter ~keeps ~module_name =
         message <- m;
         result
 
-    (* [opened o f] is [f ()] with [o] open, when [o] is a module. *)
+    (* [opened o f] is [f ()] with the module of [o], if any, open. *)
     method private opened : 'a. opening option -> (unit -> 'a) -> 'a =
       fun o f ->
         match o with

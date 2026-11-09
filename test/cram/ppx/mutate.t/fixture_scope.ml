@@ -1,5 +1,5 @@
-(* [mul], [fmul] and [bit] need Stdlib scope: an operator under an opaque
-   [open] or [include] can be another module's, so it has no site. A
+(* [mul], [fmul] and [bit] must be in Stdlib scope: an operator under an
+   opaque [open] or [include] can be another module's, so it has no site. A
    structure of the file is transparent. [ari] keeps the rule of the
    rebinding alone. *)
 
@@ -34,7 +34,7 @@ class k =
     method product a b = a * b
   end
 
-(* The modules of the plan's list are opaque too. *)
+(* An open of a Stdlib module is opaque too. *)
 let float_open a b = Float.(a *. b)
 let int_open a b = Int.(a * b)
 let list_open l b = List.(length l lsl b)

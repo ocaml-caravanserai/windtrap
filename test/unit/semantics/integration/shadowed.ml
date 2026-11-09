@@ -42,7 +42,7 @@ let both p q = p && q
    comparison, on swapped operands. *)
 let below a b = if a < b then 1 else 0
 
-(* [ari]: an arm that names an unqualified operator, as the arms of [mul],
-   [fmul] and [bit] do, which is why it is gated on the file not rebinding
-   one. *)
+(* [ari]: the arm names an unqualified operator, as the arms of [mul],
+   [fmul] and [bit] do. Thus a file that rebinds the operator loses the
+   family. *)
 let sum a b = a + b

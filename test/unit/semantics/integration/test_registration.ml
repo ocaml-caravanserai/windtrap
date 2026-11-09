@@ -539,8 +539,8 @@ let lost =
 (* Stdlib scope *)
 
 (* The sites of scoped.ml outside its opens, and the [tail] site of a list
-   under an open, which needs no Stdlib scope. The test calls [product], so
-   that the module is linked. *)
+   under an open, which does not depend on Stdlib scope. The test calls
+   [product], so that the module is linked. *)
 let scoped () =
   let site (m : Mutate.mutant) = strf "%s %s" m.id.rewrite m.before in
   equal int 6 (Windtrap_mutate_scoped.Scoped.product 2 3);
