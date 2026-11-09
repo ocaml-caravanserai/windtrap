@@ -1,5 +1,5 @@
 # The bounds of gate 1 (dev/gate/self-mutate.sh) on the CI machine. A PR
 # that adds mutants measures them again.
-mutants=4300
+mutants=4400
 memory_mb=3000
 minutes=330
