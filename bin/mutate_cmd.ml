@@ -926,6 +926,16 @@ let first_kills f =
   then Some `Skip
   else None
 
+(* The label of [f] among [files]: two executables with one label are told
+   apart by their paths. *)
+let label_in files f =
+  if
+    List.exists
+      (fun g -> g.label = f.label && g.executable <> f.executable)
+      files
+  then Option.value f.exe ~default:f.path
+  else f.label
+
 module Tests = Map.Make (struct
   type t = string * string option * Verdicts.reaching_test
 
@@ -1011,15 +1021,7 @@ let test_rows files =
         (f, test, kills, only))
       (Tests.bindings !counts)
   in
-  (* Two executables with one label are told apart by their paths. *)
-  let label f =
-    if
-      List.exists
-        (fun (g, _) -> g.label = f.label && g.executable <> f.executable)
-        files
-    then Option.value f.exe ~default:f.path
-    else f.label
-  in
+  let label = label_in (List.map fst files) in
   let shared (f, test, _, _) =
     List.length
       (List.filter
@@ -1080,7 +1082,9 @@ let tests_notes ~crash_kills files =
             strf
               "the counts of %s come from the first kill of each mutant only, \
                because it holds %s."
-              (with_suite f)
+              (match f.suite with
+              | Some suite -> strf "%s (suite %s)" (label_in files f) suite
+              | None -> label_in files f)
               (match why with `First_kill -> first_kill | `Skip -> skip)
             ^ thus "its tests have" "they are not")
           first)

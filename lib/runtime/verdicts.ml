@@ -435,10 +435,10 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
    or [none]. Only a kill that names a test has a prefix. [<kills>] is
    [first], or [full] for a run under [--full-matrix]. [<ran>] is [none], or
    [complete <n>] or [partial <n>] and then [n] tests, on each kill with
-   [full] and on no other record. [<mark>] is [fresh], or [reused] on a survivor or on a kill that
-   names a test. [load]
-   reads this grammar and nothing else, and refuses a rewrite outside
-   [Mutate.rewrites], which no report could render. *)
+   [full] and on no other record. [<mark>] is [fresh], or [reused] on a
+   survivor or on a kill that names a test. [load] reads this grammar and
+   nothing else, and refuses a rewrite outside [Mutate.rewrites], which no
+   report could render. *)
 let load path =
   let read_test c =
     List.init (Instr.read_count c "test path length") (fun _ ->

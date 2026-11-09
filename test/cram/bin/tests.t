@@ -184,6 +184,20 @@ path that each file records, so the rows of one test path stay apart:
   ───────────── tests that kill no mutant (1) ──────────────
     default/y/main.exe  calc › adds
   ──────────────────────────────────────────────────────────
+
+The note names a file with the same label as the column:
+
+  $ mkdata mutants _build/_mutants/windtrap-y.mutants --exe _build/default/y/main.exe \
+  >   "$add=survived:calc/adds" "$sub=killed:calc/subtracts" "$lt=unreached"
+  $ run windtrap mutants --tests
+  ─────────────────────── tests (3) ────────────────────────
+    kills  only  executable          test
+        1     1  default/x/main.exe  calc › adds
+        0     -  default/y/main.exe  calc › adds
+        1     -  default/y/main.exe  calc › subtracts
+  ──────────────────────────────────────────────────────────
+  --- stderr
+  windtrap: the counts of default/y/main.exe come from the first kill of each mutant only, because it holds a kill with no full matrix. Thus its tests have - in the only column, and they are not in the tests that kill no mutant. Run the suites again with --full-matrix to count each kill
   $ cd "$scratch/full"
 
 A file with no kill gives exact counts also without the flag, because
