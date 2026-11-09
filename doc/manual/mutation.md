@@ -1466,32 +1466,34 @@ these names (see
   literal is one site, at its bracket: `[a; b; c]` becomes `[b; c]`. In
   a chain, as `a :: b :: t`, the outermost `::` alone is a site.
 
-Some code carries no mutant, because no test should pin it or none can
-run it. `del` leaves a resource release alone: a call of `close`,
-`close_in`, `close_out`, their `_noerr` forms or `closedir`. `bool`
-leaves alone the argument of `~cloexec`. `int` leaves alone these
+Some code carries no mutant, because a test has no reason to pin it or
+no test can run it. `del` leaves a resource release alone: a call of
+`close`, `close_in`, `close_out`, their `_noerr` forms or `closedir`.
+`bool` leaves alone the argument of `~cloexec`. `int` leaves alone these
 literals:
 
-- An operand of `+` or `-`, which `add` and `sub` move already
-- An operand of `*`, `/` or `mod`, unless the file rebinds `*`, `/` or
-  `mod`, or an `open` or `include` of another module or of a module of
-  the same file is in scope
+- An operand of `+` or `-`, which `add` and `sub` move, unless the file
+  rebinds `+`, `-`, `+.` or `-.`
+- An operand of `*`, `/` or `mod` where `mul`, `div` and `mod` can move
+  it. A rebind of `*`, `/` or `mod` removes these rewrites. An `open` or
+  `include` of another module or of a module of the same file also
+  removes them
 - An argument of a function whose name ends in `create`, as the
   capacity of `Hashtbl.create 16`
 - The constant of a comparison in a condition when the nudge is the
-  comparison's own boundary move, as the `0` of `x < 0`, because
-  `x < 1` is `x <= 0`.
+  comparison's boundary move, as the `0` of `x < 0`, because `x < 1` is
+  `x <= 0`.
 
-None of these five rewrites has a mutant in code that runs when the
-module is initialized, before any test, as in a top-level
-`let limit = 64` or `let () = setup (); main ()`, because no run can
-judge it. `none` and `tail` also leave alone the right-hand side of a
-`let rec` outside its functions and `lazy` bodies, as
-`let rec ones = 1 :: ones`, which the compiler accepts only as written.
-When the head of a `tail` site written as `h :: t` is a list, as in
-`[x] :: acc` or `(x :: cur) :: acc`, it starts at the first byte of the
-site and has no `tail` mutant of its own, because one identifier names
-one site.
+`del`, `int`, `bool`, `none` and `tail` give no mutant in code that runs
+when the module is initialized, before any test. No run can judge this
+code, as a top-level `let limit = 64` or `let () = setup (); main ()`.
+`none` and `tail` also leave alone the right-hand side of a `let rec`
+outside its functions and `lazy` bodies, as `let rec ones = 1 :: ones`.
+The compiler accepts this code only as written. When the head of a
+`tail` site written as `h :: t` is a list, as in `[x] :: acc` or
+`(x :: cur) :: acc`, the head starts at the first byte of the site. One
+identifier names one site, thus the head has no `tail` mutant of its
+own.
 
 The rewriter also gives no mutant where the syntax shows the mutant
 equivalent to the original. It gives none where the mutant changes a
@@ -1559,12 +1561,12 @@ description as `external`. A file that declares a constructor `Some`,
 `None` or `::` loses `none` and `tail`.
 
 The rewrites of `*`, `/`, `mod`, `*.`, `/.` and the bit operators give
-no mutant where an `open`, a `let open`, an `M.( ... )` or an `include`
-of another module is in scope, as in `Float.(a * b)`. A `struct ... end`
-of the file, as the `include struct ... end` of a deriver, keeps them,
-unless it includes another module. An `open`, a `let open`, an
-`M.( ... )` or an `include` of a module of the same file by its name,
-as `open Infix`, also removes them.
+no mutant under some code of another module, as in `Float.(a * b)`.
+This code is an `open`, a `let open`, an `M.( ... )` or an `include` in
+scope. A `struct ... end` of the file, as the `include struct ... end`
+of a deriver, keeps them, unless it includes another module. An
+`open`, a `let open`, an `M.( ... )` or an `include` of a module of
+the same file by its name, as `open Infix`, also removes them.
 
 The rewriter does not see a `-open` flag of the compiler. A flag can
 give `*`, `/`, `mod`, `*.`, `/.`, a bit operator, `+`, `-`, `+.` or

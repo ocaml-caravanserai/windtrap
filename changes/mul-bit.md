@@ -6,11 +6,10 @@
   (`xor`). `lsl` and `lsr` swap (`lsr`, `lsl`), and `asr` becomes `lsl`
   (`asr`). A file that binds an operator of a family loses the family.
   The rewrites give no mutant under an `open` or an `include` of
-  another module. `x * 1`, `x / -1`, their float forms, a shift by or
-  of `0`, `a land a` and `a lor a` give no mutant. A literal operand of
-  `*`, `/` or `mod` gives no `int` mutant, unless the file rebinds `*`,
-  `/` or `mod`, or an `open` or `include` of another module or of a
-  module of the same file, is in scope
+  another module or of a module of the same file. `x * 1`, `x / -1`,
+  their float forms, a shift by or of `0`, `a land a` and `a lor a`
+  give no mutant. A literal operand of `*`, `/` or `mod` gives no `int`
+  mutant where `mul`, `div` and `mod` can move it
   (doc/manual/mutation.md#what-is-mutated).
 - A file that binds an operator by an alias pattern, as
   `(_ as ( + ))`, loses the rewrites of that operator's family, as a
