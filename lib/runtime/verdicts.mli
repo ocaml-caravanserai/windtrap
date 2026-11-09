@@ -173,14 +173,15 @@ val through : reaching_test -> reaching_test list -> reaching_test list
 type matrix = {
   ran : reaching_test list;
       (** The tests that ran in the job of the kill, sorted and without
-          duplicates. *)
+          duplicates ({!add} sorts them). *)
   complete : bool;
       (** [true] when the job ran each of its tests: it did not pass its
           deadline or its memory limit, and its worker did not end first. *)
 }
 (** The type for the tests of the job of a kill under [--full-matrix]. Each test
     of [ran] reaches the mutant, and a test of the job that did not run is not
-    in [ran]. *)
+    in [ran]. In a file that {!load} reads, a {!Killed} has a matrix if and only
+    if its effort has [full_matrix], so the two fields agree. *)
 
 type record = {
   id : Mutate.id;  (** The identifier of the mutant. *)
@@ -388,11 +389,13 @@ val reuse :
       for [~judged:p.effort ~asked:effort]. The compared tests are
       [through t reaching]. A kill that names several tests is not reused. Under
       [effort.full_matrix], [p.verdict] is a {!Killed} that names a test, each
-      of its tests is in [reaching], the {!prefix_digest} of [reaching] is
-      [p.prefix], and {!effort_covers} [`Killed] holds. The compared tests are
-      [reaching]. Or [p.verdict] is a {!Survived} whose reaching tests are those
-      of [reaching], as sets, and {!effort_covers} [`Survived] holds. The
-      compared tests are [reaching].
+      of its tests is in [reaching], its matrix is complete, the
+      {!prefix_digest} of [reaching] is [p.prefix], and {!effort_covers}
+      [`Killed] holds. The compared tests are [reaching]. A kill whose job did
+      not run each of its tests is not reused, so a later run completes its
+      matrix. Or [p.verdict] is a {!Survived} whose reaching tests are those of
+      [reaching], as sets, and {!effort_covers} [`Survived] holds. The compared
+      tests are [reaching].
     + For each compared test [t], [recorded t] is [Some d] and [digest t] is
       [Some d].
 
@@ -412,8 +415,8 @@ val load : string -> (file, error) result
       count plus [1], a settings word or a prefix that is not 32 lowercase
       hexadecimal digits, a kills word that is not [first] or [full], a prefix
       on a verdict that is not a {!Killed} that names a test, ran tests on a
-      record that is not a {!Killed} with [full], or a mark that is not [fresh]
-      or [reused],
+      record that is not a {!Killed} with [full], a {!Killed} with [full] and no
+      ran tests, or a mark that is not [fresh] or [reused],
     - a [reused] mark on a verdict that is not a {!Survived} or a {!Killed} that
       names a test,
     - an empty file name, a line below [1] or a negative column,

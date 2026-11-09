@@ -370,11 +370,15 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
     match p.verdict with
     | Killed { by = _ :: _ as by }
       when effort.full_matrix && List.for_all reaches by
-           && effort_covers `Killed ~judged:p.effort ~asked:effort ->
-        if p.prefix = Some (prefix_digest reaching) then Some reaching else None
+           && effort_covers `Killed ~judged:p.effort ~asked:effort -> (
+        match p.matrix with
+        | Some { complete = true; _ }
+          when p.prefix = Some (prefix_digest reaching) ->
+            Some reaching
+        | Some _ | None -> None)
     | Killed { by = [ test ] }
-      when (not effort.full_matrix) && reaches test
-           && effort_covers `Killed ~judged:p.effort ~asked:effort ->
+      when reaches test && effort_covers `Killed ~judged:p.effort ~asked:effort
+      ->
         let prefix = through test reaching in
         if p.prefix = Some (prefix_digest prefix) then Some prefix else None
     | Survived { first; others }
@@ -430,8 +434,8 @@ let reuse ~last ~recorded ~digest ~effort ~reaching (m : Mutate.mutant) =
    [<settings>] are 32 lowercase hexadecimal digits, and so is [<prefix>],
    or [none]. Only a kill that names a test has a prefix. [<kills>] is
    [first], or [full] for a run under [--full-matrix]. [<ran>] is [none], or
-   [complete <n>] or [partial <n>] and then [n] tests, only on a kill with
-   [full]. [<mark>] is [fresh], or [reused] on a survivor or on a kill that
+   [complete <n>] or [partial <n>] and then [n] tests, on each kill with
+   [full] and on no other record. [<mark>] is [fresh], or [reused] on a survivor or on a kill that
    names a test. [load]
    reads this grammar and nothing else, and refuses a rewrite outside
    [Mutate.rewrites], which no report could render. *)
@@ -581,7 +585,11 @@ let load path =
         Some { ran = List.init n (fun _ -> read_test c); complete }
       in
       match Instr.read_word c "ran tests" with
-      | "none" -> None
+      | "none" -> (
+          match verdict with
+          | Killed _ when full_matrix ->
+              Instr.parse_fail "a full kill with no ran tests"
+          | _ -> None)
       | "complete" -> ran true
       | "partial" -> ran false
       | word -> Instr.parse_fail "unknown ran tests %S" word

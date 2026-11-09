@@ -287,6 +287,15 @@ let any_record =
           settings = Option.value settings ~default:zeros;
         }
       in
+      (* A kill under the flag has a matrix, as load demands. *)
+      let matrix =
+        match verdict with
+        | Verdicts.Killed _ when full_matrix ->
+            Some
+              (Option.value matrix
+                 ~default:{ Verdicts.ran = []; complete = true })
+        | _ -> matrix
+      in
       record ~before ~after ~end_ ?source_digest ?previous ~effort
         ?prefix:(if killer verdict then prefix else None)
         ?matrix
@@ -1317,6 +1326,14 @@ let reuse_cases =
       ~asked:full
       ~digest:(now ~changes:[ (t2, other_digest) ])
       (last [ fk ]) [ t1; t2; t3 ] None;
+    case "a full kill whose job did not run each test" ~asked:full
+      (last
+         [
+           kill ~effort:full ~prefix:[ t1; t2; t3 ]
+             ~matrix:{ ran = [ t1 ]; complete = false }
+             [ t1 ];
+         ])
+      [ t1; t2; t3 ] None;
     case "a full kill that names no test" ~asked:full
       (last
          [
@@ -1836,6 +1853,7 @@ let corrupt_files =
     ("no ran tests", effort_prefix ^ "0 1 " ^ zeros ^ " full none\n");
     ("an unknown ran word", with_tail ~kills:"full" ~ran:"whole 0" "killed 0");
     ("ran tests on a first kill", with_tail ~ran:"complete 0" "killed 0");
+    ("a full kill with no ran tests", with_tail ~kills:"full" "killed 0");
     ( "ran tests on a survivor",
       with_tail ~kills:"full" ~ran:"complete 0" "survived 1 1 1 t" );
     ( "ran tests on an unknown verdict",
@@ -1965,6 +1983,7 @@ let corrupt_reasons () =
     no ran tests: expected ran tests at offset 147
     an unknown ran word: unknown ran tests "whole"
     ran tests on a first kill: ran tests on a verdict that is no full kill
+    a full kill with no ran tests: a full kill with no ran tests
     ran tests on a survivor: ran tests on a verdict that is no full kill
     ran tests on an unknown verdict: ran tests on a verdict that is no full kill
     a ran test count past the input: ran test count exceeds data
