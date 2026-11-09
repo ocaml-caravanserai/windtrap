@@ -795,7 +795,11 @@ let json ~crash_kills files merged (m : Sections.mutation) =
       (string r.id.file) r.id.line r.id.col (string r.id.rewrite) r.end_line
       r.end_col (string r.before) (string r.after)
       (string (verdict_name r.verdict))
-      (if r.reused then ", \"reused\": true" else "")
+      ((if r.reused then ", \"reused\": true" else "")
+      ^
+      match r.verdict with
+      | Killed _ when r.effort.full_matrix -> ", \"full_matrix\": true"
+      | _ -> "")
       (details r)
   in
   let records = Verdicts.records merged in
@@ -898,6 +902,168 @@ let sarif merged (m : Sections.mutation) =
   Sarif.document ?version:Windtrap.Private.version
     (List.filter_map result (Verdicts.records merged))
 
+(* The tests *)
+
+(* A file counts each kill of a test when each kill of the file is of a run
+   under --full-matrix. A skip hides the tests of a kill. *)
+let full_matrix f =
+  List.for_all
+    (fun (r : Verdicts.record) ->
+      match r.verdict with
+      | Killed _ -> r.effort.full_matrix
+      | Killed_elsewhere _ -> false
+      | Unknown _ | Survived _ | Not_evaluated | Not_sampled | Outside_tests
+      | Unreached ->
+          true)
+    (Verdicts.records f.verdicts)
+
+module Tests = Map.Make (struct
+  type t = string * string option * Verdicts.reaching_test
+
+  let compare = compare
+end)
+
+(* The rows of [--tests], by test, from the records of each file: a test of
+   a survivor or of a full matrix reaches the mutant. A mutant counts in
+   [only] for the one test that kills it when each file holds it as a kill
+   of a whole job under --full-matrix, or as a verdict that no test of the
+   file kills. *)
+let test_rows files =
+  let key f test = (f.executable, f.suite, test) in
+  let counts = ref Tests.empty and only = ref Tests.empty in
+  let bump map k =
+    map := Tests.update k (fun n -> Some (Option.value n ~default:0 + 1)) !map
+  in
+  let reach f test =
+    if not (Tests.mem (key f test) !counts) then
+      counts := Tests.add (key f test) 0 !counts
+  in
+  let holders = Hashtbl.create 64 in
+  List.iter
+    (fun f ->
+      List.iter
+        (fun (r : Verdicts.record) ->
+          let id = Mutate.id_to_string r.id in
+          Hashtbl.replace holders id
+            ((f, r) :: Option.value (Hashtbl.find_opt holders id) ~default:[]);
+          match r.verdict with
+          | Survived { first; others } -> List.iter (reach f) (first :: others)
+          | Killed { by } ->
+              Option.iter
+                (fun (m : Verdicts.matrix) -> List.iter (reach f) m.ran)
+                r.matrix;
+              List.iter (reach f) by;
+              List.iter (fun t -> bump counts (key f t)) by
+          | Killed_elsewhere _ | Unknown _ | Not_evaluated | Not_sampled
+          | Outside_tests | Unreached ->
+              ())
+        (Verdicts.records f.verdicts))
+    files;
+  Hashtbl.iter
+    (fun _ held ->
+      let decided (_, (r : Verdicts.record)) =
+        match (r.verdict, r.matrix) with
+        | Killed _, Some { complete; _ } -> complete
+        | Killed _, None -> false
+        | (Survived _ | Not_evaluated | Outside_tests | Unreached), _ -> true
+        | (Killed_elsewhere _ | Unknown _ | Not_sampled), _ -> false
+      in
+      let killers =
+        List.sort_uniq compare
+          (List.concat_map
+             (fun (f, (r : Verdicts.record)) ->
+               match r.verdict with
+               | Killed { by } -> List.map (key f) by
+               | _ -> [])
+             held)
+      in
+      match killers with
+      | [ k ] when List.for_all decided held -> bump only k
+      | _ -> ())
+    holders;
+  let flagged = List.map (fun f -> (f, full_matrix f)) files in
+  let file_of (executable, suite, _) =
+    List.find
+      (fun (f, _) -> f.executable = executable && f.suite = suite)
+      flagged
+  in
+  let rows =
+    List.map
+      (fun (((_, _, test) as k), kills) ->
+        let f, full = file_of k in
+        let only =
+          if full then Some (Option.value (Tests.find_opt k !only) ~default:0)
+          else None
+        in
+        (f, test, kills, only))
+      (Tests.bindings !counts)
+  in
+  (* The suite tells apart one test path that two suites of an executable
+     report, as in a survivor block. *)
+  let shared (f, test, _, _) =
+    List.length
+      (List.filter (fun (g, t, _, _) -> g.label = f.label && t = test) rows)
+    > 1
+  in
+  List.stable_sort
+    (fun (a : Sections.test_row) (b : Sections.test_row) ->
+      compare (a.exe, a.test) (b.exe, b.test))
+    (List.map
+       (fun ((f, test, kills, only) as row) : Sections.test_row ->
+         let path = Test_tree.path_to_string test in
+         {
+           exe = f.label;
+           test =
+             (match f.suite with
+             | Some suite when shared row -> strf "%s (suite %s)" path suite
+             | Some _ | None -> path);
+           kills;
+           only;
+         })
+       rows)
+
+(* What the counts of [--tests] leave out. *)
+let tests_notes ~crash_kills files =
+  let tested = List.filter (fun f -> Option.is_none f.refused) files in
+  let first = List.filter (fun f -> not (full_matrix f)) tested in
+  (match first with
+    | [] -> []
+    | first ->
+        let all = List.length first = List.length tested in
+        let one = List.length first = 1 in
+        [
+          strf
+            "the counts%s come from the first kill of each mutant only, \
+             because %s had no --full-matrix. Thus %s - in the only column, \
+             and %s in the tests that kill no mutant. Run the suites again \
+             with --full-matrix to count each kill"
+            (if all then ""
+             else strf " of %s" (String.concat ", " (List.map with_suite first)))
+            (match (all, one) with
+            | true, true -> "the run"
+            | true, false -> "the runs"
+            | false, true -> "its run"
+            | false, false -> "their runs")
+            (match (all, one) with
+            | true, _ -> "each test has"
+            | false, true -> "its tests have"
+            | false, false -> "their tests have")
+            (if all then "no test is" else "they are not");
+        ])
+  @ (if List.exists (fun f -> Option.is_some f.sample) tested then
+       [
+         "a suite tested a sample of its mutants (--sample), so the counts \
+          hold only the mutants of its sample";
+       ]
+     else [])
+  @
+  if crash_kills then
+    [
+      "the counts hold only the killed mutants: --crash-kills counts no \
+       unknown mutant here";
+    ]
+  else []
+
 (* Running *)
 
 let usage = "usage: windtrap mutants [OPTIONS] [PATH...]"
@@ -952,6 +1118,12 @@ OPTIONS:
       SARIF 2.1.0 document of the survivors, the unknown and the
       not-evaluated mutants on standard output, for code scanning.
 
+  --tests
+      One row for each test that reaches a mutant on standard output, in place
+      of the report: the mutants that it kills, the mutants that only it
+      kills, and then the tests that kill no mutant. Run the suites with
+      --full-matrix for counts of each kill.
+
   --lines=FILE:A-B,...
       Report only the mutants on these lines of these files.
 
@@ -969,7 +1141,7 @@ ENVIRONMENT (no flag):
   NO_COLOR
       Any value: never style output (--color auto).|}
 
-type format = [ `Report | `Json | `Sarif ]
+type format = [ `Report | `Json | `Sarif | `Tests ]
 
 type options = {
   gates : Sections.gates;
@@ -1036,14 +1208,24 @@ let options args =
                  "invalid value '%s' for --max-survivors: expected a \
                   non-negative integer"
                  value))
-    | (("--json" | "--sarif") as flag) :: args -> (
-        let format = if flag = "--json" then `Json else `Sarif in
+    | (("--json" | "--sarif" | "--tests") as flag) :: args -> (
+        let format =
+          match flag with
+          | "--json" -> `Json
+          | "--sarif" -> `Sarif
+          | _ -> `Tests
+        in
+        let flag_of = function
+          | `Json -> "--json"
+          | `Sarif -> "--sarif"
+          | `Tests -> "--tests"
+        in
         match o.format with
         | `Report -> parse { o with format } args
         | given when given = format -> parse o args
-        | `Json | `Sarif ->
-            let other = if flag = "--json" then "--sarif" else "--json" in
-            usage_error (Cli.error_message (Incompatible_flags (other, flag))))
+        | (`Json | `Sarif | `Tests) as given ->
+            usage_error
+              (Cli.error_message (Incompatible_flags (flag_of given, flag))))
     | "--crash-kills" :: args -> parse { o with crash_kills = true } args
     | "--lines" :: value :: args -> (
         match Lines.of_spec value with
@@ -1094,7 +1276,7 @@ let options args =
    terms and never read as [auto] out of a typo. A document is never styled,
    so it reads no [WINDTRAP_COLOR]. *)
 let ansi o =
-  if o.format <> `Report then Ok false
+  if o.format = `Json || o.format = `Sarif then Ok false
   else
     let color =
       match o.color with Some color -> Ok color | None -> Cli.color_mode ()
@@ -1197,11 +1379,17 @@ let run args =
     (match mutation.sample with
     | Some (Mixed _) -> Os.say mixed_note
     | Some (Uniform _) | None -> ());
+    if o.format = `Tests then
+      List.iter Os.say (tests_notes ~crash_kills:o.crash_kills files);
     let* () =
       write
         (match o.format with
         | `Json -> json ~crash_kills:o.crash_kills files merged mutation
         | `Sarif -> sarif merged mutation
+        | `Tests ->
+            Pp.str "%a"
+              (fun out -> Sections.print ~out ~ansi)
+              (Sections.tests_report (test_rows files))
         | `Report ->
             Pp.str "%a"
               (fun out -> Sections.print ~out ~ansi)

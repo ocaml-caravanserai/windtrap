@@ -2033,6 +2033,12 @@ The command line
         SARIF 2.1.0 document of the survivors, the unknown and the
         not-evaluated mutants on standard output, for code scanning.
   
+    --tests
+        One row for each test that reaches a mutant on standard output, in place
+        of the report: the mutants that it kills, the mutants that only it
+        kills, and then the tests that kill no mutant. Run the suites with
+        --full-matrix for counts of each kill.
+  
     --lines=FILE:A-B,...
         Report only the mutants on these lines of these files.
   

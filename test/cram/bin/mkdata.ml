@@ -12,8 +12,10 @@
      string escapes, so a session can name any byte.
 
    mkdata mutants OUT [--exe EXE] [--suite NAME] [--refused REASON]
-       [--sample PCT SEED] FILE:LINE:COL:REWRITE:BEFORE:AFTER=VERDICT...
-     VERDICT is killed, killed:TESTS, elsewhere:EXE, not_evaluated,
+       [--sample PCT SEED] [--full-matrix]
+       FILE:LINE:COL:REWRITE:BEFORE:AFTER=VERDICT...
+     VERDICT is killed, killed:TESTS, killed:TESTS:RAN,
+     killed:TESTS:RAN:partial, elsewhere:EXE, not_evaluated,
      not_sampled, outside_tests, unreached, unknown:REASON, crashed:HOW,
      deadline:SECONDS,
      memory:MB, flaky:TEST or survived:TESTS, where EXE is the identity of
@@ -27,7 +29,10 @@
      suite. No record has a source digest or a prefix, and each record has
      the effort of a run with no retry and settings of 32 zeros. The file
      has no test digest. --sample records a sample of PCT percent with the
-     root seed SEED, an OCaml integer literal.
+     root seed SEED, an OCaml integer literal. --full-matrix gives each
+     record the effort of a run under --full-matrix, and each kill the tests
+     that its job ran: TESTS, and the tests RAN when given. The job ran
+     each of its tests, unless the kill ends with :partial.
 
    --exe records the identity of the executable at EXE as it is now. *)
 
@@ -102,7 +107,7 @@ let verdict = function
                  failure = "its killing test also fails with no mutant";
                })
       | [ "survived"; tests ] -> Verdicts.survived (tests_of tests)
-      | [ "killed"; tests ] -> Verdicts.killed (tests_of tests)
+      | "killed" :: tests :: _ -> Verdicts.killed (tests_of tests)
       | [ "elsewhere"; exe ] -> Verdicts.Killed_elsewhere { exe }
       | _ -> die "%S: not a verdict" v)
 
@@ -112,15 +117,25 @@ let previous = function
   | "not_evaluated" -> `Not_evaluated
   | p -> die "%S: not an outcome" p
 
-let effort =
-  {
-    Verdicts.full_matrix = false;
-    retries = 0;
-    pass = 1;
-    settings = String.make 32 '0';
-  }
+let effort ~full_matrix =
+  { Verdicts.full_matrix; retries = 0; pass = 1; settings = String.make 32 '0' }
 
-let record spec =
+(* The tests that the job of a kill ran: its killing tests and RAN. *)
+let matrix ~full_matrix v =
+  match (full_matrix, String.split_on_char ':' v) with
+  | true, "killed" :: tests :: rest ->
+      let ran, complete =
+        match rest with
+        | [] -> ([], true)
+        | [ ran ] -> (tests_of ran, true)
+        | [ ran; "partial" ] -> (tests_of ran, false)
+        | _ -> die "%S: not killed:TESTS:RAN:partial" v
+      in
+      Some { Verdicts.ran = tests_of tests @ ran; complete }
+  | true, [ "killed" ] -> Some { Verdicts.ran = []; complete = true }
+  | _ -> None
+
+let record ~full_matrix spec =
   let mutant, v = split_last '=' spec in
   let v, reused =
     match String.ends_with ~suffix:"+reused" v with
@@ -154,16 +169,17 @@ let record spec =
         source_digest = None;
         verdict = verdict v;
         previous;
-        effort;
+        effort = effort ~full_matrix;
         prefix = None;
-        matrix = None;
+        matrix = matrix ~full_matrix v;
         reused;
       }
   | _ -> die "%S: not FILE:LINE:COL:REWRITE:BEFORE:AFTER" mutant
 
-let mutants ~identity ?suite ?refused ?sample out specs =
+let mutants ~identity ?suite ?refused ?sample ~full_matrix out specs =
   Verdicts.save ?identity ?suite ?refused ?sample out
-    (List.fold_left Verdicts.add Verdicts.empty (List.map record specs))
+    (List.fold_left Verdicts.add Verdicts.empty
+       (List.map (record ~full_matrix) specs))
 
 let () =
   match List.tl (Array.to_list Sys.argv) with
@@ -189,11 +205,17 @@ let () =
             (Some (float_of_string percent, Int64.of_string seed), args)
         | args -> (None, args)
       in
+      let full_matrix, args =
+        match args with
+        | "--full-matrix" :: args -> (true, args)
+        | args -> (false, args)
+      in
       match kind with
       | "coverage" -> coverage ~identity out args
-      | "mutants" -> mutants ~identity ?suite ?refused ?sample out args
+      | "mutants" ->
+          mutants ~identity ?suite ?refused ?sample ~full_matrix out args
       | kind -> die "%S: not coverage or mutants" kind)
   | _ ->
       die
         "usage: mkdata (coverage | mutants) OUT [--exe EXE] [--suite NAME] \
-         [--refused REASON] [--sample PCT SEED] RECORD..."
+         [--refused REASON] [--sample PCT SEED] [--full-matrix] RECORD..."

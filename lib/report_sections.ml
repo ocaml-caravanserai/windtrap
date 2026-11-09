@@ -2291,3 +2291,59 @@ let mutation_report ?(lines = []) ~invocation ~gates (m : mutation) =
       List.map (fun line -> Line [ plain line ]) lines
       @ outcome ~invocation ~tests:(`Filter None) ~gates m;
     ]
+
+(* The tests *)
+
+type test_row = { exe : string; test : string; kills : int; only : int option }
+
+let tests_report rows =
+  let right gap = { gap; align = `Right; width = None }
+  and left gap = { gap; align = `Left; width = None } in
+  let header =
+    List.map (styled `Faint) [ "kills"; "only"; "executable"; "test" ]
+  in
+  let row r =
+    [
+      plain (string_of_int r.kills);
+      plain (Option.fold ~none:"-" ~some:string_of_int r.only);
+      plain r.exe;
+      plain r.test;
+    ]
+  in
+  let tests =
+    match rows with
+    | [] ->
+        [
+          Rule (Some "tests (0)");
+          Line [ plain "  No test reaches a mutant." ];
+          Rule None;
+        ]
+    | rows ->
+        [
+          Rule (Some (strf "tests (%d)" (List.length rows)));
+          Rows
+            {
+              margin = "  ";
+              columns = [ right ""; right "  "; left "  "; left "  " ];
+              rows = header :: List.map row rows;
+            };
+          Rule None;
+        ]
+  in
+  let idle = List.filter (fun r -> r.kills = 0 && Option.is_some r.only) rows in
+  let no_kill =
+    match idle with
+    | [] -> []
+    | idle ->
+        [
+          Rule (Some (strf "tests that kill no mutant (%d)" (List.length idle)));
+          Rows
+            {
+              margin = "  ";
+              columns = [ left ""; left "  " ];
+              rows = List.map (fun r -> [ plain r.exe; plain r.test ]) idle;
+            };
+          Rule None;
+        ]
+  in
+  join [ tests; no_kill ]

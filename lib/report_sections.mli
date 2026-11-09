@@ -850,3 +850,27 @@ val mutation_report :
     directly above the [reproduce:] command, or above the outcome line when
     there is no [reproduce:] command. A verdict file does not record
     [--mutate-workers], so no command here has it. *)
+
+(** {1:tests Tests}
+
+    The table of [windtrap mutants --tests]. *)
+
+type test_row = {
+  exe : string;  (** The executable that ran the test. *)
+  test : string;
+      (** The path of the test, as {!Test_tree.path_to_string} spells it. *)
+  kills : int;  (** The mutants that the test kills. *)
+  only : int option;
+      (** The mutants that only this test kills, or [None] when its verdict file
+          holds a kill of a run without [--full-matrix]. *)
+}
+(** The type for the row of one test. *)
+
+val tests_report : test_row list -> section list
+(** [tests_report rows] is the table of the tests. It holds a rule that carries
+    the number of [rows], a faint header row ([kills], [only], [executable],
+    [test]), one row for each of [rows] in order, and a closing rule. [kills]
+    and [only] are aligned on the right, and an [only] of [None] is [-]. When
+    [rows] is empty, one line says that no test reaches a mutant. Then, when a
+    row with [only] has no kill, a blank line, a rule that carries the number of
+    these rows, their executable and test, and a closing rule follow. *)
