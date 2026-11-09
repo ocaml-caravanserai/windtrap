@@ -120,7 +120,7 @@ val execute_and_report :
 
     {b Full matrix.} Under [config.full_matrix] ([--full-matrix]), the job of a
     mutant does not stop at a kill. After each counted failure in or after the
-    test that first evaluated the armed site, its worker retires, and a fresh
+    test that first evaluated the armed site, its worker retires. A fresh
     worker, with the mutant armed again, runs the rest of the job
     ([Supervisor.fresh]). Thus a failure leaves no state to the next test, and
     the runaway budget starts again.
@@ -161,8 +161,8 @@ val execute_and_report :
     them with no mutant and with no stop at a failure, in a fresh worker. Two
     kills whose checks run the same cases share one check. Under
     [config.full_matrix], the check also runs only up to the first killing test.
-    When the check trusts the kill, the kill keeps each of its killing tests, so
-    a later killing test that also fails with no mutant can stay in [by].
+    When the check trusts the kill, the kill keeps each of its killing tests.
+    Thus [by] can hold a later killing test that also fails with no mutant.
 
     The checks run after the last retry pass, in up to [3] passes
     ([check_runs]). Each pass runs once each check that has not failed, up to
@@ -230,8 +230,8 @@ val execute_and_report :
     - The record is a kill that names a test, and the killing test reaches the
       mutant in this dry run. The tests of the job of this run, up to the
       killing test, are those of the kill, in the same order. Under
-      [config.full_matrix], the record is a kill of a run with the flag, each of
-      its killing tests reaches the mutant, and all the tests of the job are
+      [config.full_matrix], the record is a kill of a run with the flag, and
+      each of its killing tests reaches the mutant. All the tests of the job are
       those of the kill, in the same order. Or the record is a survivor, and the
       same set of tests reaches the mutant.
     - Each of these tests has the same digest in the file and in this run. The
@@ -301,10 +301,10 @@ val execute_and_report :
     ({!Windtrap_runtime.Verdicts.record_of_mutant}), the effort of the run that
     gave its verdict and a mark. A reused record keeps the effort of the run
     that tested the mutant. A kill that names a test has the digest of the tests
-    of its job up to the killing test, or of all the tests of its job under
-    [config.full_matrix]. A kill under [config.full_matrix] also has the tests
-    that ran in its job. The file has the digest of each test of the suite that
-    has one, also without [config.incremental]. The file is written to
+    of its job up to the killing test. Under [config.full_matrix], the digest is
+    of all the tests of its job. A kill under [config.full_matrix] also has the
+    tests that ran in its job. The file has the digest of each test of the suite
+    that has one, also without [config.incremental]. The file is written to
     {!Windtrap_runtime.Verdicts.output_file} of the executable and the suite, by
     {!Windtrap_runtime.Verdicts.save}, which records the suite. Under a scope,
     the records of the files outside it stay when the file there was written by

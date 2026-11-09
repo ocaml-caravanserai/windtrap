@@ -678,6 +678,7 @@ A check that holds a test that spawned a pool runs alone, as a job does.
 Two kills whose checks run the same tests share one check, also when
 the two jobs had different tests after the killing test. Under
 `--full-matrix`, the check also runs only up to the first killing test.
+
 Each run of the check has the longest deadline of the jobs that wait for
 it. Thus a killing test that fails at its own timeout also fails in the
 check. Each different list of tests costs up to 3 more runs. The live
@@ -987,10 +988,11 @@ verdict applies:
 | Not evaluated, unknown, killed elsewhere | Never. |
 
 Under `--full-matrix`, the run uses a kill again only from a run that
-had the flag, and a run without the flag uses again only a kill of a run
+had the flag. Without the flag, the run uses again only a kill of a run
 without it. Under the flag, each killing test reaches the mutant in this
 dry run. The tests of the job of this run are all the tests of the job
-of the kill, in the same order, and their source files did not change.
+of the kill, in the same order. Their source files did not change.
+
 The job of the kill also ran each of its tests. Thus a kill before an
 expiry or a crash gets a job again, and the next run can record all its
 tests. The run uses a survivor again with or without the flag.
@@ -1257,28 +1259,28 @@ standard output, in place of the report. The document has its version,
 the counts, the score, the reach and the total, the verdict files, and
 each mutant with its verdict. A survivor also has the tests that ran it.
 A killed mutant has the tests that killed it in `killed_by`: in each run
-that killed it, the first test that failed, or each such test in a run
-under `--full-matrix`. Such a mutant has `"full_matrix": true` after
-its verdict, and after `"reused"` when that key is present, when each
-verdict file that kills it had the flag. The array is empty when a kill
-names no test, as for a kill by a fixture release. It is also empty
-for a mutant killed elsewhere. An unknown mutant has its reason, and the
-kind of the reason in `reason_kind`: `deadline`, `crashed`, `memory`,
-`flaky_kill` or `other`. Its `counted_as_killed` is `true` when
-`--crash-kills` counts it as killed, and `false` if not. Under the
-option, `killed` in `summary` counts such a mutant, and `unknown` does
-not count it. The `verdict` of such a mutant stays `unknown`. A mutant
-whose verdict a run used again under `--incremental` has
-`"reused": true` after its verdict, and the other mutants do not have
-the key. A test names its verdict file by its index in `executables`,
-because two files can have the same name. Under `--lines` or `--diff`,
-the verdict counts, the three measures and `mutants` hold only the
-mutants on the lines. But `executables` still lists every verdict file,
-and `refused` still counts every refused file. Under a gate, the outcome
-line goes to standard error, and the exit code is that of the gates. A
-later version can add keys. A change to the meaning of a key increments
-`version`. [`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each
-key:
+that killed it, the first test that failed. Under `--full-matrix`, it
+has each such test. The array is empty when a kill names no test, as for
+a kill by a fixture release. It is also empty for a mutant killed
+elsewhere. Such a mutant has `"full_matrix": true` when each verdict
+file that kills it had the flag. This key comes after its verdict, and
+after `"reused"` when that key is present. An unknown mutant has its
+reason, and the kind of the reason in `reason_kind`: `deadline`,
+`crashed`, `memory`, `flaky_kill` or `other`. Its `counted_as_killed` is
+`true` when `--crash-kills` counts it as killed, and `false` if not.
+Under the option, `killed` in `summary` counts such a mutant, and
+`unknown` does not count it. The `verdict` of such a mutant stays
+`unknown`. A mutant whose verdict a run used again under `--incremental`
+has `"reused": true` after its verdict, and the other mutants do not
+have the key. A test names its verdict file by its index in
+`executables`, because two files can have the same name. Under `--lines`
+or `--diff`, the verdict counts, the three measures and `mutants` hold
+only the mutants on the lines. But `executables` still lists every
+verdict file, and `refused` still counts every refused file. Under a
+gate, the outcome line goes to standard error, and the exit code is that
+of the gates. A later version can add keys. A change to the meaning of a
+key increments `version`.
+[`bin/mutate_cmd.mli`](../../bin/mutate_cmd.mli) gives each key:
 
 ```
 $ dune exec windtrap -- mutants --json --lines=calc.ml:10
@@ -1542,13 +1544,13 @@ the mutant.
 The counts come from the verdict files. A kill with no full matrix names
 only its first killing test. An example is a kill of a run without
 `--full-matrix`, also when a later scoped run kept it. A mutant that a
-run skipped (`--skip-killed`) names no test. Thus the tests of such a
-file have `-` in `only`. They are not in the section of the tests that
-kill no mutant.
+run skipped (`--skip-killed`) names no test. Thus the tests of a file
+with such a kill or skip have `-` in `only`. They are not in the section
+of the tests that kill no mutant.
 
-A note on standard error names these files and tells the cause. When
-each file that tested its suite has such a kill or skip, the note names
-no file.
+A note on standard error names each file with such a kill or skip, and
+tells the cause. When each file that tested its suite has such a kill
+or skip, the note names no file.
 
 A file with no kill gives exact counts also without the flag, because
 no job of its run stopped at a kill. Another note tells when a suite
