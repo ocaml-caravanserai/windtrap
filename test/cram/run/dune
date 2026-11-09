@@ -91,6 +91,21 @@
   (<> %{os_type} Win32))
  (deps mutant_main.exe))
 
+; full_matrix.t runs the mutation loop over a suite in which two tests kill
+; one mutant, and merges its verdict file.
+
+(executable
+ (name matrix_main)
+ (modules matrix_main)
+ (libraries windtrap mutant_subject))
+
+(cram
+ (package ppx_windtrap)
+ (applies_to full_matrix)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps matrix_main.exe %{bin:windtrap}))
+
 ; nodune.t reads OCAMLPATH as POSIX spells it and runs the mutation loop.
 ; Under --instrument-with, dune 3.23.1 and 3.24 close (package windtrap)
 ; over ppx_windtrap, whose runtime depends on windtrap, and report a
