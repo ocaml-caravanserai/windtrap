@@ -96,6 +96,7 @@ let verdict = function
       ^ String.concat ", "
           (List.map (String.concat " \u{203a} ") (first :: others))
   | Verdicts.Not_evaluated -> "not evaluated"
+  | Verdicts.Not_sampled -> "not sampled"
   | Verdicts.Outside_tests -> "outside tests"
   | Verdicts.Unreached -> "unreached"
 
@@ -134,6 +135,7 @@ type file = {
   raw : string;
   suite : string option;
   refused : string option;
+  sample : (float * int64) option;
   rows : string list;
   kills : string list; (* The killing tests of each kill. *)
   previous : string list; (* The previous outcome of each record. *)
@@ -160,7 +162,8 @@ let saved path =
   else
     let raw = read path in
     match Verdicts.load path with
-    | Ok { verdicts; identity = writer; suite; refused; test_digests } ->
+    | Ok { verdicts; identity = writer; suite; refused; sample; test_digests }
+      ->
         let records = Verdicts.records verdicts in
         let at (r : Verdicts.record) =
           strf "%s:%d" (local r.id.file) r.id.line
@@ -170,6 +173,7 @@ let saved path =
             raw;
             suite;
             refused;
+            sample;
             rows = List.map row records;
             kills = List.filter_map kill_row records;
             previous = List.map previous_row records;
@@ -194,6 +198,7 @@ let saved path =
             raw;
             suite = None;
             refused = None;
+            sample = None;
             rows = [ reason ];
             kills = [];
             previous = [];
@@ -2739,7 +2744,7 @@ let plant_old p =
 let old_warning p =
   strf
     "windtrap: warning: --skip-killed ignores %s/%s: not a windtrap verdict \
-     file (expected header \"windtrap-mutants-v15\", found \
+     file (expected header \"windtrap-mutants-v16\", found \
      \"windtrap-mutants-v13\"); files written by other windtrap versions are \
      not readable - delete the stale verdict files, then re-run the mutation \
      tests\n"
@@ -3192,7 +3197,7 @@ let rewrite ?(path = verdicts_path ()) ?digest ?suite ?refused ?(tests = Fun.id)
   Verdicts.save ?identity
     ?suite:(match suite with Some _ -> suite | None -> f.suite)
     ?refused:(match refused with Some r -> r | None -> f.refused)
-    ~test_digests:(tests f.test_digests) path
+    ?sample:f.sample ~test_digests:(tests f.test_digests) path
     (List.fold_left Verdicts.add Verdicts.empty
        (List.map change (Verdicts.records f.verdicts)))
 
@@ -3448,7 +3453,7 @@ let refused_between () =
 let unloadable_earlier =
   [
     ("a file of the format before", "windtrap-mutants-v14\ntested\n0\n");
-    ("a corrupt file", "windtrap-mutants-v15\ntested\n0\n1\njunk\n");
+    ("a corrupt file", "windtrap-mutants-v16\ntested\nsample none\n0\n1\njunk\n");
   ]
 
 let unloadable_earlier_file (_, text) =
@@ -3459,7 +3464,7 @@ let unloadable_earlier_file (_, text) =
   equal (option (list string)) None (unstable r.out);
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option (list string)) (Some none_rows) (previous_rows r);
-  starts_with ~prefix:"windtrap-mutants-v15\n" (read path)
+  starts_with ~prefix:"windtrap-mutants-v16\n" (read path)
 
 let narrowed_run () =
   let path = verdicts_path () in
@@ -5293,12 +5298,12 @@ let last_files () =
   equal string "exited 0" r.status;
   equal text
     (ignored_warning
-       "not a windtrap verdict file (expected header \"windtrap-mutants-v15\", \
+       "not a windtrap verdict file (expected header \"windtrap-mutants-v16\", \
         found \"windtrap-mutants-v14\")")
     r.err;
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option string) (Some (reused_line 0)) (reused_of r.out);
-  write path "windtrap-mutants-v15\ntested\n0\n1\njunk\n";
+  write path "windtrap-mutants-v16\ntested\nsample none\n0\n1\njunk\n";
   let r = second_run () in
   equal string "exited 0" r.status;
   contains ~sub:"windtrap: warning: --incremental ignores " r.err;
@@ -5680,6 +5685,209 @@ let rewrite_filter =
         filter_skip;
     ]
 
+(* The sample *)
+
+(* Under the root seed of a mutation run, the hash of the mutant of line 15
+   is 79.94% of its range, and that of line 18 is 69.69%. Under the seed
+   [seed_3], they are 9.85% and 50.69%. *)
+let seed_3 = "--seed=s1:0000000000000003"
+
+let mutation_seed =
+  Windtrap.Private.Seed.to_string Windtrap.Private.Cli.mutation_seed
+
+let sample_line ?(percent = "75") ?(seed = mutation_seed) () =
+  strf "sample: %s%% of the reached mutants, seed %s" percent seed
+
+let sample_of out =
+  List.find_opt (String.starts_with ~prefix:"sample: ") (lines out)
+
+let only_18 =
+  [
+    "subject.ml:15 not sampled";
+    List.nth green_rows 1;
+    "subject.ml:21 unreached";
+    "subject.ml:27 unreached";
+  ]
+
+let only_18_outcome =
+  "mutants: 1 survived of 2 reached by this suite, 2 never reached, 1 not \
+   sampled, score 0.0% (0/1, 0.0% to 79.3%), reach 50.0% (2/4), total 0.0% \
+   (0.0% to 39.7%)"
+
+let sampled_run (env, args) =
+  remove (verdicts_path ());
+  let r = rerun ~env (mutate :: args) in
+  equal (pair string text) ("exited 0", "") (r.status, r.err);
+  (outcome r.out, sample_of r.out, rows r)
+
+let sample_rows () =
+  let line = Some (sample_line ()) in
+  equal
+    (list (triple string (option string) (option (list string))))
+    [
+      (only_18_outcome, line, Some only_18);
+      (only_18_outcome, line, Some only_18);
+      ( "mutants: 2 reached by this suite, 1 killed, 2 never reached, 1 not \
+         sampled, score 100.0% (1/1, 20.7% to 100.0%), reach 50.0% (2/4), \
+         total 50.0% (10.3% to 50.0%)",
+        Some (sample_line ~percent:"50" ~seed:"s1:0000000000000003" ()),
+        Some
+          [
+            "subject.ml:15 killed";
+            "subject.ml:18 not sampled";
+            "subject.ml:21 unreached";
+            "subject.ml:27 unreached";
+          ] );
+      (green_outcome, None, Some green_rows);
+    ]
+    (List.map sampled_run
+       [
+         ([], [ "--sample=75" ]);
+         ([ ("WINDTRAP_SAMPLE", "75") ], []);
+         ([], [ "--sample=50"; seed_3 ]);
+         ([], [ "--sample=100" ]);
+       ])
+
+let sample_stable () =
+  let raw () =
+    remove (verdicts_path ());
+    Option.map (fun (f : file) -> f.raw) (rerun [ mutate; "--sample=75" ]).file
+  in
+  let first = raw () in
+  is_true (Option.is_some first);
+  List.iter (fun () -> equal (option text) first (raw ())) [ (); () ]
+
+let sample_recorded () =
+  remove (verdicts_path ());
+  let r = rerun [ mutate; "--sample=75"; seed_3 ] in
+  equal string "exited 0" r.status;
+  equal
+    (option (option (pair float_exact int64)))
+    (Some (Some (75., 3L)))
+    (Option.map (fun (f : file) -> f.sample) r.file);
+  remove (verdicts_path ());
+  let r = rerun [ mutate; "--sample=75"; "-f"; "calc" ] in
+  equal string "exited 0" r.status;
+  equal
+    (option (pair (option string) (option (pair float_exact int64))))
+    (Some (Some narrowing, Some (75., Windtrap.Private.Cli.mutation_seed)))
+    (Option.map (fun (f : file) -> (f.refused, f.sample)) r.file)
+
+let sample_mirror_alone () =
+  remove (verdicts_path ());
+  let r = spawn ~env:[ ("WINDTRAP_SAMPLE", "50") ] [] in
+  equal (pair string text) ("exited 0", "") (r.status, r.err);
+  is_true (Option.is_none r.file);
+  is_none (sample_of r.out)
+
+(* A sampled run writes Not_sampled over the verdict of the run before it.
+   Under a line scope, the records outside the scope stay only from a file
+   with the same sample, here with line 15 planted as survived. *)
+let sample_save () =
+  let on_18 = "--lines=test/unit/mutate_loop/subject.ml:18" in
+  let rows_of args =
+    let r = rerun (mutate :: args) in
+    equal string "exited 0" r.status;
+    rows r
+  in
+  let planted args =
+    remove (verdicts_path ());
+    ignore (rerun (mutate :: args));
+    rewrite (at_line 15 (survived_by "sub to zero"))
+  in
+  remove (verdicts_path ());
+  whole (rerun [ mutate ]);
+  equal (option (list string)) (Some only_18) (rows_of [ "--sample=75" ]);
+  planted [];
+  equal
+    (option (list string))
+    (Some [ List.nth green_rows 1 ])
+    (rows_of [ "--sample=75"; on_18 ]);
+  planted [ "--sample=75" ];
+  equal
+    (option (list string))
+    (Some
+       [
+         "subject.ml:15 survived by calc \u{203a} sub to zero";
+         List.nth green_rows 1;
+         "subject.ml:21 unreached";
+         "subject.ml:27 unreached";
+       ])
+    (rows_of [ "--sample=75"; on_18 ]);
+  planted [ "--sample=75" ];
+  equal
+    (option (list string))
+    (Some [ List.nth green_rows 1 ])
+    (rows_of [ on_18 ])
+
+(* A sampled run reuses only in its sample. A full run after it tests again
+   what the sampled run did not test. *)
+let sample_reuse () =
+  ignore (first_run ());
+  let r = second_run ~args:[ "--sample=75" ] () in
+  equal string "exited 0" r.status;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal (option (list string)) (Some only_18) (rows r);
+  equal (option (list string)) (marked "fresh" "reused") (marks r);
+  let r = second_run () in
+  equal string "exited 0" r.status;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal (option (list string)) (marked "fresh" "reused") (marks r)
+
+let sample_skip () =
+  let p = skip_project () in
+  let skipped args =
+    plant_other p "windtrap-other.mutants" [ (15, Verdicts.killed []) ];
+    let r = skip_run p (skip_killed :: args) in
+    equal (pair string text) ("exited 0", "") (r.status, r.err);
+    (outcome r.out, rows r)
+  in
+  equal
+    (list (pair string (option (list string))))
+    [
+      ( "mutants: 1 survived of 2 reached by this suite, 2 never reached, 1 \
+         not tested, score 0.0% (0/1, 0.0% to 0.0%), reach 50.0% (2/4), total \
+         0.0% (0.0% to 0.0%)",
+        Some
+          [
+            "subject.ml:15 killed elsewhere by default/other.exe";
+            List.nth green_rows 1;
+            "subject.ml:21 unreached";
+            "subject.ml:27 unreached";
+          ] );
+      ( "mutants: 2 reached by this suite, 2 never reached, 1 not tested, 1 \
+         not sampled, no scored mutant, reach 50.0% (2/4)",
+        Some
+          [
+            "subject.ml:15 killed elsewhere by default/other.exe";
+            "subject.ml:18 not sampled";
+            "subject.ml:21 unreached";
+            "subject.ml:27 unreached";
+          ] );
+    ]
+    [ skipped [ "--sample=75" ]; skipped [ "--sample=60" ] ]
+
+let sampling =
+  group "The sample"
+    [
+      test
+        "--sample tests and records only the mutants of its sample, from the \
+         flag or the mirror, and 100 is no sample"
+        sample_rows;
+      test "one seed gives one sample" sample_stable;
+      test "the verdict file records the sample, also when it is refused"
+        sample_recorded;
+      test "a mirror of the sample without --mutate runs no mutant"
+        sample_mirror_alone;
+      test
+        "a sampled run drops the verdicts out of its sample, and keeps the \
+         records outside its scope only from a file of its sample"
+        sample_save;
+      test "a sampled run reuses only in its sample" sample_reuse;
+      test "the sample judges the mutants that --skip-killed leaves" sample_skip;
+    ]
+
 (* Evidence *)
 
 module Loop = Windtrap.Private.Mutate_loop
@@ -5795,5 +6003,6 @@ let () =
          killing_tests;
          incremental_reuse;
          rewrite_filter;
+         sampling;
          evidence;
        ])

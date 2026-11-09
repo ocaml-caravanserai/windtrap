@@ -2013,6 +2013,8 @@ let loop_report =
     outside_tests = [];
     killed = 3;
     not_tested = 0;
+    not_sampled = 0;
+    sample = None;
     scope = Sections.Suite;
   }
 

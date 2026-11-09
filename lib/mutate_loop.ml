@@ -82,7 +82,9 @@ let population ~scope =
   in
   let unfiltered = { scope with rewrites = Every_rewrite } in
   match (catalogue, scoped, undismissed) with
-  | [], _, _ when { unfiltered with skip_killed = false } = Run.every_mutant ->
+  | [], _, _
+    when { unfiltered with skip_killed = false; sample = None }
+         = Run.every_mutant ->
       Error Uninstrumented
   | _ :: _, [], _
     when Option.fold ~none:false ~some:names_a_file scope.Run.lines ->
@@ -292,14 +294,16 @@ let by_this_build = function
 let this_build ~suite = by_this_build (earlier ~suite)
 
 (* Under a scope, the records of the other files stay when this build wrote
-   them and tested its suite. The result is the records of [records] whose
-   verdict changed, and the note on a file that cannot be written. *)
-let save ~suite ~scope ?refused ?test_digests records =
+   them with the sample of this run and tested its suite. The result is the
+   records of [records] whose verdict changed, and the note on a file that
+   cannot be written. *)
+let save ~suite ~(scope : Run.scope) ?refused ?test_digests records =
   let exe = Windtrap_runtime.Instr.executable in
   let earlier = earlier ~suite in
   let kept =
     match (by_this_build earlier, refused) with
-    | Some { verdicts; refused = None; _ }, None ->
+    | Some { verdicts; refused = None; sample; _ }, None
+      when sample = scope.sample ->
         List.filter
           (fun (r : Verdicts.record) -> not (in_scope ~scope r.id))
           (Verdicts.records verdicts)
@@ -316,7 +320,7 @@ let save ~suite ~scope ?refused ?test_digests records =
   match
     Verdicts.save
       ?identity:(Verdicts.writer_identity ~exe)
-      ~suite ?refused ?test_digests
+      ~suite ?refused ?sample:scope.sample ?test_digests
       (Verdicts.output_file ~exe ~suite)
       (List.fold_left Verdicts.add tested kept)
   with
@@ -591,7 +595,8 @@ let found_verdict renderer (config : Run.config) ~locations ~failed ~runs ~early
                 reason;
           } )
         :: found.unknown
-  | Killed _ | Killed_elsewhere _ | Outside_tests | Unreached -> ());
+  | Killed _ | Killed_elsewhere _ | Not_sampled | Outside_tests | Unreached ->
+      ());
   found.records <- record :: found.records
 
 (* Signals *)
@@ -1050,8 +1055,8 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   in
   (ended, found)
 
-let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside found
-    : Report_sections.mutation =
+let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside
+    ~sample ~not_sampled found : Report_sections.mutation =
   let lines = List.map (fun (m : Mutate.mutant) -> (m.id.file, m.id.line)) in
   let unstable (r : Verdicts.record) =
     Option.map
@@ -1077,7 +1082,10 @@ let report ?(changed = []) ~narrowed ~dry_run ~reached ~unreached ~outside found
            (fun (r : Verdicts.record) ->
              match r.verdict with Verdicts.Killed _ -> true | _ -> false)
            found.records);
-    not_tested = List.length reached - List.length found.records;
+    not_tested =
+      List.length reached - List.length found.records - List.length not_sampled;
+    not_sampled = List.length not_sampled;
+    sample;
     scope =
       (if narrowed then Report_sections.Selected (List.length dry_run)
        else Report_sections.Suite);
@@ -1298,6 +1306,26 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   in
                   (skipped, to_test, [ elsewhere_line ~used skipped ])
               in
+              (* The hash judges what the skip leaves, and a mutant out of the
+                 sample is never reused. *)
+              let judged = List.length to_test in
+              let to_test, not_sampled =
+                match scope.sample with
+                | None -> (to_test, [])
+                | Some (percent, seed) ->
+                    List.partition_map
+                      (fun (((m : Mutate.mutant), _) as mutant) ->
+                        if Verdicts.in_sample ~percent ~seed m.id then
+                          Either.Left mutant
+                        else Either.Right m)
+                      to_test
+              in
+              let sample =
+                Option.map
+                  (fun (percent, seed) ->
+                    Report_sections.Uniform { percent; seed; judged; exact = 0 })
+                  scope.sample
+              in
               let to_test =
                 match if config.incremental then last_run ~suite else None with
                 | None -> List.map Either.right to_test
@@ -1316,7 +1344,9 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
               in
               let lines found =
                 skip_lines
-                @ if config.incremental then [ reused_line found ] else []
+                @ (if config.incremental then [ reused_line found ] else [])
+                @ Option.to_list
+                    (Option.bind sample Report_sections.sample_line)
               in
               let narrowed = narrows_suite config ~focus:outcome.focus_active in
               let save records =
@@ -1330,6 +1360,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                           Verdicts.record_of_mutant ~effort m
                             (Verdicts.Killed_elsewhere { exe }))
                         skipped
+                    @ recorded ~effort Verdicts.Not_sampled not_sampled
                     @ recorded ~effort Verdicts.Outside_tests outside
                     @ recorded ~effort Verdicts.Unreached unreached)
               in
@@ -1355,13 +1386,13 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                       | `Wait m -> `Wait (id m)
                       | `Check m -> `Check (id m))
                     (report ~narrowed ~dry_run ~reached ~unreached ~outside
-                       found);
+                       ~sample ~not_sampled found);
                   flush_descriptors ();
                   Os.die_by s
               | Finished (changed, note), found -> (
                   let report =
                     report ~changed ~narrowed ~dry_run ~reached ~unreached
-                      ~outside found
+                      ~outside ~sample ~not_sampled found
                   in
                   (match meter with
                   | None -> ()

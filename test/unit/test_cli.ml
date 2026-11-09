@@ -91,6 +91,7 @@ let flags (p : Cli.parsed) =
         | Run.Only_rewrites names -> [ "rewrites " ^ words names ]
         | Run.Skip_rewrites names -> [ "skip_rewrites " ^ words names ]);
         bool "skip_killed" p.skip_killed;
+        opt "sample" (strf "%g") p.sample;
         bool "mutate_workers" c.mutate_workers;
         some "--mutate-retry" "mutate_retry" string_of_int c.mutate_retry;
         some "--mutate-memory" "mutate_memory" string_of_int c.mutate_memory;
@@ -112,8 +113,8 @@ let parsed args = parsed_argv (Array.of_list ("windtrap-test" :: args))
 
 let mutation_name = function
   | Run.No_mutation -> "none"
-  | Run.Loop { prefixes; lines; rewrites; skip_killed } ->
-      strf "loop %s%s%s%s" (words prefixes)
+  | Run.Loop { prefixes; lines; rewrites; skip_killed; sample } ->
+      strf "loop %s%s%s%s%s" (words prefixes)
         (Option.fold ~none:""
            ~some:(fun l -> " lines " ^ Lines.to_string l)
            lines)
@@ -122,6 +123,10 @@ let mutation_name = function
         | Run.Only_rewrites names -> " rewrites " ^ words names
         | Run.Skip_rewrites names -> " skip_rewrites " ^ words names)
         (if skip_killed then " skip_killed" else "")
+        (Option.fold ~none:""
+           ~some:(fun (percent, seed) ->
+             strf " sample %g %s" percent (Seed.to_string seed))
+           sample)
   | Run.Armed id -> "armed " ^ id
 
 let baseline_name = function
@@ -284,6 +289,13 @@ let mirrors =
           ("WINDTRAP_REWRITES", "--rewrites", "nope");
           ("WINDTRAP_REWRITES", "--rewrites", ",");
           ("WINDTRAP_SKIP_REWRITES", "--skip-rewrites", "add,nope");
+          ("WINDTRAP_SAMPLE", "--sample", "0");
+          ("WINDTRAP_SAMPLE", "--sample", "-5");
+          ("WINDTRAP_SAMPLE", "--sample", "100.5");
+          ("WINDTRAP_SAMPLE", "--sample", "nan");
+          ("WINDTRAP_SAMPLE", "--sample", "inf");
+          ("WINDTRAP_SAMPLE", "--sample", "half");
+          ("WINDTRAP_SAMPLE", "--sample", "50%");
         ]
         refused_alike;
       mirror_rows "a mirror set to the empty string counts as unset"
@@ -996,6 +1008,43 @@ let resolution =
           ( [ ("WINDTRAP_SKIP_KILLED", "1") ],
             [ "--arm"; "lib/a.ml:9:12:add" ],
             "mutation armed lib/a.ml:9:12:add" );
+        ];
+      resolve_rows
+        "--sample or its mirror samples the loop with the seed of the run, and \
+         needs --mutate on the command line"
+        [
+          ( [],
+            [ "--mutate"; "--sample=50" ],
+            "mutation loop [] sample 50 s1:6d7574616e747321" );
+          ( [ ("WINDTRAP_SAMPLE", " 12.5 ") ],
+            [ "--mutate"; "--seed=s1:000000000000002a" ],
+            "mutation loop [] sample 12.5 s1:000000000000002a" );
+          ( [ ("WINDTRAP_SAMPLE", "12.5") ],
+            [ "--mutate"; "--sample=1e1" ],
+            "mutation loop [] sample 10 s1:6d7574616e747321" );
+          ( [],
+            [ "--mutate"; "--sample=0x1p-2" ],
+            "mutation loop [] sample 0.25 s1:6d7574616e747321" );
+          ([], [ "--mutate"; "--sample=100" ], "mutation loop []");
+          ([], [ "--mutate"; "--sample=50"; "--sample=100" ], "mutation loop []");
+          ( [ ("WINDTRAP_MUTATE", "1") ],
+            [ "--sample=5" ],
+            "mutation loop [] sample 5 s1:6d7574616e747321, broadcast mutate" );
+          ([], [ "--sample=50" ], "--sample requires --mutate");
+          ([], [ "--sample=100" ], "--sample requires --mutate");
+          ( [],
+            [ "--arm"; "lib/a.ml:9:12:add"; "--sample=50" ],
+            "--sample requires --mutate" );
+          ([ ("WINDTRAP_SAMPLE", "50") ], [], "defaults");
+          ( [ ("WINDTRAP_SAMPLE", "50") ],
+            [ "--arm"; "lib/a.ml:9:12:add" ],
+            "mutation armed lib/a.ml:9:12:add" );
+          ( [ ("WINDTRAP_SAMPLE", "0") ],
+            [ "--mutate" ],
+            {|invalid WINDTRAP_SAMPLE "0"|} );
+          ( [ ("WINDTRAP_SAMPLE", "0") ],
+            [ "-v" ],
+            {|invalid WINDTRAP_SAMPLE "0"|} );
         ];
       resolve_rows
         "--rewrites or its mirror filters the rewrites of the loop, and needs \

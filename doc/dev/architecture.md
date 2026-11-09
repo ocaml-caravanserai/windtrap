@@ -431,6 +431,14 @@ a lossy `%g` spelling is asked for at the call site.
   test. A test before the killing test can leave a state that is
   necessary for the kill. No record names that test, so `--incremental`
   compares the whole prefix of the job.
+- The sample of a run (`--sample`) is a field of the file, and a
+  reached mutant out of the sample has a `Not_sampled` record. The merge
+  gives an interval only when the files of the tested suites have one
+  sample. A record of each mutant out of the sample lets the merge count
+  the population. `Not_sampled` outranks a survivor, as an unknown
+  verdict does, because the suite reached the mutant and did not test it.
+  A skip that stands in a merge is an exact kill that the hash did not
+  judge, so the estimate adds it as it is and does not scale it.
 
 **The runtime (`Windtrap_runtime.Mutate`, `.Coverage`).**
 

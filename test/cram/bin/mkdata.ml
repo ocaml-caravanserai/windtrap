@@ -12,9 +12,10 @@
      string escapes, so a session can name any byte.
 
    mkdata mutants OUT [--exe EXE] [--suite NAME] [--refused REASON]
-       FILE:LINE:COL:REWRITE:BEFORE:AFTER=VERDICT...
+       [--sample PCT SEED] FILE:LINE:COL:REWRITE:BEFORE:AFTER=VERDICT...
      VERDICT is killed, killed:TESTS, elsewhere:EXE, not_evaluated,
-     outside_tests, unreached, unknown:REASON, crashed:HOW, deadline:SECONDS,
+     not_sampled, outside_tests, unreached, unknown:REASON, crashed:HOW,
+     deadline:SECONDS,
      memory:MB, flaky:TEST or survived:TESTS, where EXE is the identity of
      the killing executable and TESTS are ';'-separated paths of
      '/'-separated names. A plain kill names no test. REASON is a reason of
@@ -25,7 +26,8 @@
      after VERDICT@PREVIOUS, marks the verdict as reused. --suite records the
      suite. No record has a source digest or a prefix, and each record has
      the effort of a run with no retry and settings of 32 zeros. The file
-     has no test digest.
+     has no test digest. --sample records a sample of PCT percent with the
+     root seed SEED, an OCaml integer literal.
 
    --exe records the identity of the executable at EXE as it is now. *)
 
@@ -79,6 +81,7 @@ let tests_of tests =
 let verdict = function
   | "killed" -> Verdicts.killed []
   | "not_evaluated" -> Verdicts.Not_evaluated
+  | "not_sampled" -> Verdicts.Not_sampled
   | "outside_tests" -> Verdicts.Outside_tests
   | "unreached" -> Verdicts.Unreached
   | v when String.starts_with ~prefix:"unknown:" v ->
@@ -151,8 +154,8 @@ let record spec =
       }
   | _ -> die "%S: not FILE:LINE:COL:REWRITE:BEFORE:AFTER" mutant
 
-let mutants ~identity ?suite ?refused out specs =
-  Verdicts.save ?identity ?suite ?refused out
+let mutants ~identity ?suite ?refused ?sample out specs =
+  Verdicts.save ?identity ?suite ?refused ?sample out
     (List.fold_left Verdicts.add Verdicts.empty (List.map record specs))
 
 let () =
@@ -173,11 +176,17 @@ let () =
         | "--refused" :: reason :: args -> (Some reason, args)
         | args -> (None, args)
       in
+      let sample, args =
+        match args with
+        | "--sample" :: percent :: seed :: args ->
+            (Some (float_of_string percent, Int64.of_string seed), args)
+        | args -> (None, args)
+      in
       match kind with
       | "coverage" -> coverage ~identity out args
-      | "mutants" -> mutants ~identity ?suite ?refused out args
+      | "mutants" -> mutants ~identity ?suite ?refused ?sample out args
       | kind -> die "%S: not coverage or mutants" kind)
   | _ ->
       die
         "usage: mkdata (coverage | mutants) OUT [--exe EXE] [--suite NAME] \
-         [--refused REASON] RECORD..."
+         [--refused REASON] [--sample PCT SEED] RECORD..."

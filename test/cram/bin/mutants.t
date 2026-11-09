@@ -1959,13 +1959,13 @@ is to delete it, which a coverage dump in the directory shares:
   $ printf 'windtrap-mutants-v0\n1\nsome older payload\n' > _build/_mutants/old.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v15", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../old.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v16", found "windtrap-mutants-v0"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
   $ rm _build/_mutants/old.mutants
   $ printf 'windtrap-coverage-v3\n0\n' > _build/_mutants/cov.mutants
   $ run windtrap mutants
   --- stderr
-  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v15", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+  windtrap: .../cov.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v16", found "windtrap-coverage-v3"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
   [1]
 
 A PATH that cannot be used fails the command, and the files named beside
@@ -1999,23 +1999,28 @@ The command line
   not evaluated. The reach is the percentage of reached mutants among those
   reached, never reached and evaluated outside tests. The total is the percentage
   of killed mutants among those scored, never reached and evaluated outside
-  tests. Runs no tests and drives no build. Exits 1 when an executable could not
-  mutation-test its suite. Without a gate, exits 1 also when any mutant survived
-  every executable that reached it. With a gate, exits 1 when a gate fails, and
-  not for a survivor alone.
+  tests. When the suites tested a sample (--sample), the score and the total are
+  estimates with a 95% interval. Runs no tests and drives no build. Exits 1 when
+  an executable could not mutation-test its suite. Without a gate, exits 1 also
+  when any mutant survived every executable that reached it, or when a mutant is
+  not sampled. With a gate, exits 1 when a gate fails, and not for a survivor
+  alone.
   
   OPTIONS:
     --min=PCT
-        Gate: exit 1 when the score is below PCT.
+        Gate: exit 1 when the score is below PCT. Under a sample, the lower
+        bound of the score.
   
     --min-reach=PCT
         Gate: exit 1 when the reach is below PCT.
   
     --min-total=PCT
-        Gate: exit 1 when the total is below PCT.
+        Gate: exit 1 when the total is below PCT. Under a sample, the lower
+        bound of the total.
   
     --max-survivors=N
-        Gate: exit 1 when more than N mutants survived.
+        Gate: exit 1 when more than N mutants survived. Refused (exit 2) when
+        a suite tested a sample.
   
     --crash-kills
         Count a mutant whose run passed its deadline, crashed or passed its
