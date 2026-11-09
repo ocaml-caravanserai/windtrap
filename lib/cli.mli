@@ -181,11 +181,14 @@ val settings : parsed -> (Run.config, error) result
       [seed] of the result. [--lines], [--diff], [--rewrites],
       [--skip-rewrites], [--skip-killed] or [--sample] from the command line
       without [--mutate] is [Error (Requires _)]; from their mirrors alone they
-      are ignored. But an invalid value of a mirror, or the two mirrors of the
-      rewrite filter together, is an error also without [--mutate]. [mutate] and
-      [arm] at once is [Error (Incompatible_flags _)], whichever layer gave
-      each, and it is checked after every mirror. A prefix that spells a boolean
-      cannot go through the variable.
+      are ignored. But an invalid value of a mirror, the two mirrors of the
+      rewrite filter together, or the mirrors of [--skip-killed] and
+      [--full-matrix] together, is an error also without [--mutate].
+      [--skip-killed] with [--full-matrix] is [Error (Incompatible_flags _)],
+      whichever layer gave each. [mutate] and [arm] at once is
+      [Error (Incompatible_flags _)], whichever layer gave each, and it is
+      checked after every mirror. A prefix that spells a boolean cannot go
+      through the variable.
     - [mutate_workers] is [true] when a layer gives [--mutate-workers] and a
       layer gives [--mutate] or [--arm]. [--mutate-workers] from the command
       line without them is [Error (Requires_any _)]. From its mirror alone it is
@@ -203,6 +206,9 @@ val settings : parsed -> (Run.config, error) result
       is [Error (Requires_any _)]. From its mirror alone it is ignored.
     - [incremental] is [true] when a layer gives [--incremental] and a layer
       gives [--mutate]. [--incremental] from the command line without [--mutate]
+      is [Error (Requires_any _)]. From its mirror alone it is ignored.
+    - [full_matrix] is [true] when a layer gives [--full-matrix] and a layer
+      gives [--mutate]. [--full-matrix] from the command line without [--mutate]
       is [Error (Requires_any _)]. From its mirror alone it is ignored.
     - A relative path of [--junit], [--json] or [-o] is made absolute, against
       the working directory when the command line gives it and against

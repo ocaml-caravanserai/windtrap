@@ -468,14 +468,22 @@ let killing_test ran =
     (fun (r : Run.result) -> r.path)
     (Option.bind (caused ran) (List.find_opt kills))
 
+(* Each test that the mutant made fail. *)
+let killing_tests ran =
+  List.map
+    (fun (r : Run.result) -> r.path)
+    (List.filter kills (Option.value (caused ran) ~default:[]))
+
 (* [Some by] when the mutant was killed, where [by] is its killing test, or
-   [[]] for a kill by a fixture release. *)
-let killed_by (ran : Supervisor.ran) =
-  match killing_test ran with
-  | Some test -> Some [ test ]
-  | None when Option.is_some (caused ran) && ran.release_failures <> [] ->
-      Some []
-  | None -> None
+   each killing test under [full_matrix], or [[]] for a kill by a fixture
+   release. *)
+let killed_by ~full_matrix (ran : Supervisor.ran) =
+  match
+    if full_matrix then killing_tests ran else Option.to_list (killing_test ran)
+  with
+  | _ :: _ as by -> Some by
+  | [] when Option.is_some (caused ran) && ran.release_failures <> [] -> Some []
+  | [] -> None
 
 (* The runs of the check of a kill, at most. *)
 let check_runs = 3
@@ -503,20 +511,34 @@ let uncaused (ran : Supervisor.ran) =
   | None -> None
 
 (* A run that ended before its tests did judged nothing, and tests that did
-   not evaluate the armed site tested nothing: neither is a survivor. *)
-let verdict ~deadline paths (ran : Supervisor.ran) =
-  match ran.ended with
-  | Supervisor.Expired -> Verdicts.Unknown (Deadline { seconds = deadline })
-  | Lost { signal; status; how } ->
+   not evaluate the armed site tested nothing: neither is a survivor. Under
+   [full_matrix], a kill before such an end stays a kill. *)
+let verdict ~full_matrix ~deadline paths (ran : Supervisor.ran) =
+  match (ran.ended, killed_by ~full_matrix ran) with
+  | _, Some by when full_matrix -> Verdicts.killed by
+  | Supervisor.Expired, _ -> Verdicts.Unknown (Deadline { seconds = deadline })
+  | Lost { signal; status; how }, _ ->
       Verdicts.Unknown (Crashed { signal; status; how })
-  | Outgrown mb -> Verdicts.Unknown (Memory { mb })
-  | Ran -> (
-      match killed_by ran with
-      | Some by -> Verdicts.killed by
-      | None -> (
-          match ran.evaluated with
-          | None -> Verdicts.Not_evaluated
-          | Some _ -> Verdicts.survived paths))
+  | Outgrown mb, _ -> Verdicts.Unknown (Memory { mb })
+  | Ran, Some by -> Verdicts.killed by
+  | Ran, None -> (
+      match ran.evaluated with
+      | None -> Verdicts.Not_evaluated
+      | Some _ -> Verdicts.survived paths)
+
+(* The tests that the job of a kill ran, under [full_matrix]. *)
+let matrix ~full_matrix verdict (ran : Supervisor.ran) =
+  match verdict with
+  | Verdicts.Killed _ when full_matrix ->
+      Some
+        {
+          Verdicts.ran = List.map (fun (r : Run.result) -> r.path) ran.results;
+          complete =
+            (match ran.ended with
+            | Supervisor.Ran -> true
+            | Lost _ | Expired | Outgrown _ -> false);
+        }
+  | _ -> None
 
 let read_source =
   let cache = Hashtbl.create 16 in
@@ -732,8 +754,8 @@ let probe_job ~deadline ~pooled dry_run =
     (List.map (fun (r : Run.result) -> r.path) dry_run)
 
 (* The budget counts the job's evaluations, not the dry run's. *)
-let mutant_job ~deadline ~pooled ((mutant : Mutate.mutant), site) =
-  job ~deadline ~pooled ~bail:true
+let mutant_job ~deadline ~pooled ~bail ((mutant : Mutate.mutant), site) =
+  job ~deadline ~pooled ~bail
     ~armed:(Some (mutant.id, budget_of site.hits))
     (List.rev site.tests)
 
@@ -749,13 +771,21 @@ let pass ?(on_stop = ignore) (config : Run.config) ~suite tests jobs ~on_ran =
         true
       end)
 
+(* A mutant that waits for a check, with the run, the verdict and the matrix
+   of its kill. *)
+type waiter = {
+  i : int;
+  run : int;
+  kill : Verdicts.verdict;
+  matrix : Verdicts.matrix option;
+}
+
 (* The check of the kills whose jobs ran [paths], which end with the killing
    test [test]. *)
 type check = {
   paths : string list list;
   test : string list;
-  mutable waiting : (int * int) list;
-      (* each mutant that waits for it, with the run of its kill *)
+  mutable waiting : waiter list;
 }
 
 (* The first pass runs the probe and then one job per reached mutant, in
@@ -806,12 +836,15 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   (* The retries of each mutant that ended early, newest first. *)
   let early = Array.make total [] in
   let paths i = List.rev (snd mutants.(i)).tests in
-  (* A kill that names a test keeps the tests of its job up to it. *)
-  let commit ~failed ~run i verdict =
+  let full_matrix = config.full_matrix in
+  (* A kill that names a test keeps the tests of its job up to it, or each
+     test of its job under [full_matrix]. *)
+  let commit ~failed ~run ?matrix i verdict =
     judged.(i) <- true;
     let mutant = fst mutants.(i) in
     let prefix =
       match verdict with
+      | Verdicts.Killed { by = _ :: _ } when full_matrix -> Some (paths i)
       | Verdicts.Killed { by = [ test ] } ->
           Some (Verdicts.through test (paths i))
       | _ -> None
@@ -822,7 +855,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
       (indices.(i), mutant)
       (Verdicts.record_of_mutant
          ~effort:{ effort with Verdicts.pass = run }
-         ?prefix mutant verdict)
+         ?prefix ?matrix mutant verdict)
   in
   let reused = ref reused in
   let commit_reused due =
@@ -847,12 +880,12 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   (* The checks by their paths, and the mutants that wait for one. *)
   let checks = Hashtbl.create 16 in
   let checking = Array.make total false in
-  let await_check ~run i test =
-    checking.(i) <- true;
-    let paths = Verdicts.through test (paths i) in
+  let await_check test waiter =
+    checking.(waiter.i) <- true;
+    let paths = Verdicts.through test (paths waiter.i) in
     match Hashtbl.find_opt checks paths with
-    | Some check -> check.waiting <- (i, run) :: check.waiting
-    | None -> Hashtbl.add checks paths { paths; test; waiting = [ (i, run) ] }
+    | Some check -> check.waiting <- waiter :: check.waiting
+    | None -> Hashtbl.add checks paths { paths; test; waiting = [ waiter ] }
   in
   let measured point =
     match meter with
@@ -890,7 +923,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
       Verdicts.survived paths
     in
     let verdict =
-      match verdict ~deadline:(deadline paths) paths ran with
+      match verdict ~full_matrix ~deadline:(deadline paths) paths ran with
       | Verdicts.Killed _ as killed -> killed
       | verdict when run = 1 -> verdict
       | Verdicts.Unknown reason -> ended_early (Verdicts.reason_text reason)
@@ -905,32 +938,34 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
                   what)
       | verdict -> verdict
     in
+    let matrix = matrix ~full_matrix verdict ran in
+    (* The check runs the tests up to the first killing test. *)
     match (verdict, killing_test ran) with
     | Verdicts.Survived _, _ when run < last -> `Again
     | Verdicts.Killed _, Some test when config.mutate_retry > 0 ->
-        await_check ~run i test;
+        await_check test { i; run; kill = verdict; matrix };
         `Done
     | verdict, _ ->
-        commit ~failed:(uncaused ran) ~run i verdict;
+        commit ~failed:(uncaused ran) ~run ?matrix i verdict;
         `Done
   in
   (* A kill in a retry that the check does not trust leaves the survivor of
      the first run. *)
   let settle check failure =
     List.iter
-      (fun (i, run) ->
+      (fun { i; run; kill; matrix } ->
         match failure with
-        | None -> commit ~failed:None ~run i (Verdicts.killed [ check.test ])
+        | None -> commit ~failed:None ~run ?matrix i kill
         | Some failure when run = 1 ->
             commit ~failed:None ~run i
               (Verdicts.Unknown (Flaky_kill { test = check.test; failure }))
         | Some reason ->
             early.(i) <- (run, reason) :: early.(i);
             commit ~failed:None ~run i (Verdicts.survived (paths i)))
-      (List.sort (fun (i, _) (j, _) -> Int.compare i j) check.waiting)
+      (List.sort (fun a b -> Int.compare a.i b.i) check.waiting)
   in
   let first check =
-    List.fold_left (fun m (i, _) -> Int.min m i) total check.waiting
+    List.fold_left (fun m waiter -> Int.min m waiter.i) total check.waiting
   in
   let rec check_passes ~run = function
     | [] -> ()
@@ -954,7 +989,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
         let job check =
           let longest =
             List.fold_left
-              (fun d (i, _) -> Float.max d (deadline (paths i)))
+              (fun d waiter -> Float.max d (deadline (paths waiter.i)))
               0. check.waiting
           in
           unarmed_job ~deadline:(fun _ -> longest) ~pooled check.paths
@@ -988,7 +1023,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
         let jobs =
           Array.to_list
             (Array.map
-               (fun i -> mutant_job ~deadline ~pooled mutants.(i))
+               (fun i ->
+                 mutant_job ~deadline ~pooled ~bail:(not full_matrix)
+                   mutants.(i))
                waiting)
         in
         starting jobs;
@@ -1027,7 +1064,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
     with_interrupts @@ fun () ->
     let jobs =
       probe_job ~deadline ~pooled dry_run
-      :: List.map (mutant_job ~deadline ~pooled) (Array.to_list mutants)
+      :: List.map
+           (mutant_job ~deadline ~pooled ~bail:(not full_matrix))
+           (Array.to_list mutants)
     in
     starting jobs;
     match pass config ~suite tests jobs ~on_ran with
@@ -1218,7 +1257,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
   let started = Os.counter () in
   let effort =
     {
-      Verdicts.full_matrix = false;
+      Verdicts.full_matrix = config.full_matrix;
       retries = config.mutate_retry;
       pass = 1;
       settings = settings config;

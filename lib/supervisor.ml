@@ -1321,12 +1321,15 @@ let fresh ?(stopped = fun () -> false) (config : Run.config) ~suite tests jobs
     | exception (Closed | Failure _ | End_of_file) -> closed st
     | Report (Done { served; retire; _ }) ->
         st.rev_results <- served.result :: st.rev_results;
-        if
-          st.job.bail
-          && counted_failure served.result
+        let kills =
+          counted_failure served.result
           && (Option.is_some st.evaluated || not st.witnessed)
-        then st.pending <- [];
-        if retire then begin
+        in
+        if kills && st.job.bail then st.pending <- [];
+        (* A fresh worker runs the cases after a kill, with no state that the
+           failure left and a new budget. *)
+        if retire || (kills && Option.is_some st.job.armed && not st.job.bail)
+        then begin
           st.finishing <- true;
           request st.w Finish
         end

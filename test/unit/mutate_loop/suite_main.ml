@@ -538,6 +538,11 @@ let unprimed_late =
   unprimed
   @ [ test "widen is nonzero" (fun () -> is_true (Subject.widen 1 2 <> 0)) ]
 
+(* [unprimed] with a later reaching test that pins [widen]: the job runs it
+   after the failure, and it kills the mutant. *)
+let unprimed_kill =
+  unprimed @ [ test "widen adds" (fun () -> equal int 7 (Subject.widen 3 4)) ]
+
 (* [unprimed] where the release of a fixture fails in place of the test. *)
 let held_unprimed =
   fixture
@@ -794,13 +799,16 @@ let intermittent =
    - Under MUTATE_KILL_SUB the two tests also reach [sub], so the jobs of
      [sub] and [widen] run the same tests.
    - The second test holds a fixture whose release hangs at the run
-     MUTATE_RELEASE_HANG_AT. *)
+     MUTATE_RELEASE_HANG_AT.
+   - Under MUTATE_LEAK the second test fails under a mutant when the first
+     test ran in its worker. *)
 let among var n =
   match Sys.getenv_opt var with
   | None | Some "" -> false
   | Some runs -> List.mem (string_of_int n) (String.split_on_char ',' runs)
 
 let b_run = ref 0
+let a_ran = ref false
 
 let held_by_b =
   fixture
@@ -816,6 +824,7 @@ let flaky_kill =
   in
   [
     test "reaches widen" (fun () ->
+        a_ran := true;
         ignore (count "MUTATE_FIRST_RUNS");
         reach ();
         if Sys.getenv_opt "MUTATE_FIRST_PINS" <> None then
@@ -831,7 +840,9 @@ let flaky_kill =
         if
           among "MUTATE_FAIL_AT" run
           || (Sys.getenv_opt "MUTATE_FAIL_ARMED" <> None && armed ())
-        then fail (Printf.sprintf "run %d" run));
+        then fail (Printf.sprintf "run %d" run);
+        if Sys.getenv_opt "MUTATE_LEAK" <> None && !a_ran && armed () then
+          fail "the first test ran in this worker");
   ]
 
 (* The fixture of the deadline of a check. The first test reaches [widen],
@@ -900,6 +911,7 @@ let () =
       exit @@ run "calc" [ group "calc" strong; group "primed" priming ]
   | "unprimed" -> exit @@ run "calc" [ group "unprimed" unprimed ]
   | "unprimed_late" -> exit @@ run "calc" [ group "unprimed" unprimed_late ]
+  | "unprimed_kill" -> exit @@ run "calc" [ group "unprimed" unprimed_kill ]
   | "unprimed_release" ->
       exit @@ run "calc" [ group "unprimed" unprimed_release ]
   | "forked" -> exit @@ run "calc" [ group "forked" forked ]

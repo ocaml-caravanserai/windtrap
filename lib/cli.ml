@@ -365,6 +365,11 @@ let entries =
       ~mirror:(mirrored "WINDTRAP_INCREMENTAL")
       "Reuse the verdicts of the last run of this suite for the mutants whose \
        source and tests did not change (with --mutate).";
+    row "--full-matrix"
+      (switch (fun c -> { c with full_matrix = true }))
+      ~mirror:(mirrored "WINDTRAP_FULL_MATRIX")
+      "Run each reaching test of a mutant, also after a kill, and record each \
+       test that kills it (with --mutate).";
     row "--mutate-retry"
       (value "N" retry (field (fun c mutate_retry -> { c with mutate_retry })))
       ~mirror:(mirrored "WINDTRAP_MUTATE_RETRY")
@@ -651,6 +656,12 @@ let rewrite_filter (layered : parsed) =
     Error (Incompatible_flags ("--rewrites", "--skip-rewrites"))
   else Ok layered.rewrites
 
+(* A skip gives no tests, so it cannot hold a full matrix. *)
+let matrix_pair (layered : parsed) =
+  if gave layered "--skip-killed" && gave layered "--full-matrix" then
+    Error (Incompatible_flags ("--skip-killed", "--full-matrix"))
+  else Ok ()
+
 (* Every value arrived through its flag's parser, so nothing is range-checked
    here. [broadcast] keeps what the mirrors alone asked for: a mirror reaches
    every stanza of a project, and a stanza that cannot honour it is not in
@@ -659,6 +670,7 @@ let settings cli =
   let* layered = layer_entries entries cli in
   let* lines = line_scope ~cli ~layered in
   let* rewrites = rewrite_filter layered in
+  let* () = matrix_pair layered in
   let mutates = gave layered "--mutate" || gave layered "--arm" in
   let* () =
     if gave cli "--mutate-workers" && not mutates then
@@ -683,6 +695,11 @@ let settings cli =
   let* () =
     if gave cli "--incremental" && not (gave layered "--mutate") then
       Error (Requires_any ("--incremental", [ "--mutate" ]))
+    else Ok ()
+  in
+  let* () =
+    if gave cli "--full-matrix" && not (gave layered "--mutate") then
+      Error (Requires_any ("--full-matrix", [ "--mutate" ]))
     else Ok ()
   in
   let* () =
@@ -722,6 +739,7 @@ let settings cli =
          else (Run.default_config ()).mutate_memory);
       crash_kills = c.crash_kills && gave layered "--mutate";
       incremental = c.incremental && gave layered "--mutate";
+      full_matrix = c.full_matrix && gave layered "--mutate";
       case_file;
       log_dir = path "--output" c.log_dir;
       junit = Option.map (path "--junit") c.junit;

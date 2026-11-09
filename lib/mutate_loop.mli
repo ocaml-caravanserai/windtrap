@@ -74,11 +74,12 @@ val execute_and_report :
       dry run executed, unarmed, and then one job per reached mutant that it
       does not skip, in the order of the catalogue, with the mutant armed and
       its reaching tests up to the first failure in or after the test that first
-      evaluated the armed site. Up to [config.jobs] run at once, and they are
-      given in that order. A job that holds a test that spawned a pool of worker
-      domains in the dry run ([config.mutate_workers]) runs alone. The probe
-      agrees iff it executed as many tests, skipped as many and counted no
-      failure.
+      evaluated the armed site. Under [config.full_matrix], the job runs all its
+      reaching tests ({b Full matrix} below). Up to [config.jobs] run at once,
+      and they are given in that order. A job that holds a test that spawned a
+      pool of worker domains in the dry run ([config.mutate_workers]) runs
+      alone. The probe agrees iff it executed as many tests, skipped as many and
+      counted no failure.
     + Under [config.mutate_retry = n] above [0], it runs up to [n] more passes
       ({b Retries} below), and then up to [3] passes that check the kills
       ({b Flaky kills} below).
@@ -117,6 +118,20 @@ val execute_and_report :
     as killed ({!Report_sections.val-counted_as_killed}). Its verdict stays
     unknown.
 
+    {b Full matrix.} Under [config.full_matrix] ([--full-matrix]), the job of a
+    mutant does not stop at a kill. After each counted failure in or after the
+    test that first evaluated the armed site, its worker retires, and a fresh
+    worker, with the mutant armed again, runs the rest of the job
+    ([Supervisor.fresh]). Thus a failure leaves no state to the next test, and
+    the runaway budget starts again. The [by] of the kill holds each such
+    failing test that is not marked xfail. A failure before the first evaluation
+    does not count, as without the flag. A kill stays a kill when the job then
+    passes its deadline or its memory limit, or loses its worker. Without the
+    flag, such a job is unknown. The record of the kill keeps the tests that ran
+    in its job, and whether the job ran each of them
+    ({!Windtrap_runtime.Verdicts.type-matrix}). The effort of each record of the
+    run has the flag. A survivor costs the same as without the flag.
+
     {b Retries.} Each pass after the first runs again the jobs of the mutants
     that survived the pass before it, with the same cases, deadline and budget,
     each in a fresh worker, up to [config.jobs] at once, in the order of the
@@ -141,7 +156,10 @@ val execute_and_report :
     no test and gets no check. The check runs the cases of the job, which are
     the reaching tests of the mutant, up to and with the killing test. It runs
     them with no mutant and with no stop at a failure, in a fresh worker. Two
-    kills whose checks run the same cases share one check.
+    kills whose checks run the same cases share one check. Under
+    [config.full_matrix], the check also runs only up to the first killing test.
+    When the check trusts the kill, the kill keeps each of its killing tests, so
+    a later killing test that also fails with no mutant can stay in [by].
 
     The checks run after the last retry pass, in up to [3] passes
     ([check_runs]). Each pass runs once each check that has not failed, up to
@@ -208,17 +226,21 @@ val execute_and_report :
       digest, not [None], the renderings and the extent of this run.
     - The record is a kill that names a test, and the killing test reaches the
       mutant in this dry run. The tests of the job of this run, up to the
-      killing test, are those of the kill, in the same order. Or the record is a
-      survivor, and the same set of tests reaches the mutant.
+      killing test, are those of the kill, in the same order. Under
+      [config.full_matrix], the record is a kill of a run with the flag, each of
+      its killing tests reaches the mutant, and all the tests of the job are
+      those of the kill, in the same order. Or the record is a survivor, and the
+      same set of tests reaches the mutant.
     - Each of these tests has the same digest in the file and in this run. The
       digest of a test is the MD5 of the digest of its source file
       ({!test_digest}), of its declared limit and of its declared retries. A
       test with no location, or whose file the loop cannot read, has no digest.
     - The effort of the record covers the effort of this run
       ({!Windtrap_runtime.Verdicts.effort_covers}): the same {!settings}, and
-      enough retries. Under [config.mutate_retry] above [0], a kill is reused
-      only from a run that had retries too. A kill from the [k]-th retry is
-      reused only when [config.mutate_retry] is [k] or more.
+      enough retries. A kill needs a run with the same [config.full_matrix].
+      Under [config.mutate_retry] above [0], a kill is reused only from a run
+      that had retries too. A kill from the [k]-th retry is reused only when
+      [config.mutate_retry] is [k] or more.
 
     A reused mutant gets no job, no retry and no check. Once the probe agrees,
     the loop commits each reused kill in the first pass, and each reused
@@ -275,17 +297,19 @@ val execute_and_report :
     ({!Windtrap_runtime.Verdicts.record_of_mutant}), the effort of the run that
     gave its verdict and a mark. A reused record keeps the effort of the run
     that tested the mutant. A kill that names a test has the digest of the tests
-    of its job up to the killing test. The file has the digest of each test of
-    the suite that has one, also without [config.incremental]. The file is
-    written to {!Windtrap_runtime.Verdicts.output_file} of the executable and
-    the suite, by {!Windtrap_runtime.Verdicts.save}, which records the suite.
-    Under a scope, the records of the files outside it stay when the file there
-    was written by this build ({!Windtrap_runtime.Verdicts.writer_identity}) for
-    the same suite with the same sample, or with no sample in the two runs, and
-    the suite was tested. They are dropped otherwise. The sample does not narrow
-    the scope, so a sampled run writes [Not_sampled] over the records of the
-    last run for the mutants out of its sample. A file that cannot be written
-    ([Sys_error]) is one sentence on standard error above the outcome line.
+    of its job up to the killing test, or of all the tests of its job under
+    [config.full_matrix]. A kill under [config.full_matrix] also has the tests
+    that ran in its job. The file has the digest of each test of the suite that
+    has one, also without [config.incremental]. The file is written to
+    {!Windtrap_runtime.Verdicts.output_file} of the executable and the suite, by
+    {!Windtrap_runtime.Verdicts.save}, which records the suite. Under a scope,
+    the records of the files outside it stay when the file there was written by
+    this build ({!Windtrap_runtime.Verdicts.writer_identity}) for the same suite
+    with the same sample, or with no sample in the two runs, and the suite was
+    tested. They are dropped otherwise. The sample does not narrow the scope, so
+    a sampled run writes [Not_sampled] over the records of the last run for the
+    mutants out of its sample. A file that cannot be written ([Sys_error]) is
+    one sentence on standard error above the outcome line.
 
     Only a loop that ran whole, over the whole suite, writes its verdicts. A run
     whose selection narrows the suite says so on standard error above the
