@@ -1570,7 +1570,8 @@ The rewriter does not see a `-open` flag of the compiler. A flag can
 give `*`, `/`, `mod`, `*.`, `/.`, a bit operator, `+`, `-`, `+.` or
 `-.` another type. It can also give only the replacement another type.
 Then the instrumented file does not compile. The compiler shows the
-error at the expression, and `[@mutate off "reason"]` or `[@@@mutate exclude_file]` removes it.
+error at the expression, and `[@mutate off "reason"]` or
+`[@@@mutate exclude_file]` removes it.
 
 Under `-open Base`, each mutant compiles. Base deprecates `mod`. The
 original gives the same alert, and the guard takes the alert attributes
