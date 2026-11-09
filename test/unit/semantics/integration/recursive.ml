@@ -45,6 +45,13 @@ class cycles =
     method sixes = sixes
   end
 
+(* A [let rec] whose right-hand side is a site of [mul]: the guard reads no
+   variable of the [let rec]. *)
+
+let product () =
+  let rec v = 2 * 3 and g () = v in
+  g ()
+
 (* A function and a [lazy] in the right-hand side run later, and keep their
    sites. *)
 

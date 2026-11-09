@@ -476,9 +476,9 @@ let rewrite_messages () =
   expect (String.concat "\n" (List.map Cli.error_message refused))
   @@ __POS_OF__
        {|
-    invalid value 'dell' for --rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
-    invalid value '' for --skip-rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
-    invalid value 'add,x' for WINDTRAP_REWRITES: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, and, or, del, int, bool, none, tail
+    invalid value 'dell' for --rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, div, mul, mod, fdiv, fmul, lor, land, xor, lsr, lsl, asr, and, or, del, int, bool, none, tail
+    invalid value '' for --skip-rewrites: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, div, mul, mod, fdiv, fmul, lor, land, xor, lsr, lsl, asr, and, or, del, int, bool, none, tail
+    invalid value 'add,x' for WINDTRAP_REWRITES: expected a comma-separated list of the rewrites not, lt, le, gt, ge, eq, neq, add, sub, fadd, fsub, div, mul, mod, fdiv, fmul, lor, land, xor, lsr, lsl, asr, and, or, del, int, bool, none, tail
     options '--rewrites' and '--skip-rewrites' cannot be combined
     option '--rewrites' scopes '--mutate', which is not given
     |}

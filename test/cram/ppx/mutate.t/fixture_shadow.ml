@@ -1,10 +1,10 @@
 (* A file that visibly rebinds an operator gets no sites for that
-   family, and only that family: [ari]'s armed arm names an operator the
-   source did not write, so it must not be emitted where [+] means
-   something else. The comparisons and the connectives are untouched
-   here, so [cmp] and [con] still fire. What an [open] brings in cannot
-   be seen; that residue is one compile error at the user's own source
-   location, with [[@@@mutate exclude_file]] as the remedy. *)
+   family, and only that family: the armed arm of [ari], as of [mul],
+   [fmul] and [bit], names an operator the source did not write, so it
+   must not be emitted where [+] means something else. [cmp] and [con]
+   keep their sites here. For [ari], the rewriter does not see what an
+   [open] brings in. Such an operator gives one compile error at its
+   location in the source, and [[@@@mutate exclude_file]] removes it. *)
 
 module Vec = struct
   type t = { x : int; y : int }

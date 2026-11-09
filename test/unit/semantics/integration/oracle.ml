@@ -40,6 +40,22 @@ let ari_sub a b = a - b
 let ari_fadd a b = a +. b
 let ari_fsub a b = a -. b
 
+(* [mul], [fmul] and [bit], the eleven operators. *)
+let mul_mul a b = a * b
+let mul_div a b = a / b
+let mul_mod a b = a mod b
+let fmul_mul a b = a *. b
+let fmul_div a b = a /. b
+let bit_and a b = a land b
+let bit_or a b = a lor b
+let bit_xor a b = a lxor b
+let bit_lsl a b = a lsl b
+let bit_lsr a b = a lsr b
+let bit_asr a b = a asr b
+
+(* Armed, [n * d] is [n / d], which raises [Division_by_zero] at [d = 0]. *)
+let scale_by n d = n * d
+
 (* [del], whose armed statement does not run, [int] up and down, and
    [bool]. *)
 let dropped = ref 0
@@ -110,6 +126,7 @@ let note tag v =
    evaluate each exactly once and right to left, armed or disarmed. *)
 let cmp_order a b = if note "l" a < note "r" b then 1 else 0
 let ari_order a b = note "l" a + note "r" b
+let mul_order a b = note "l" a * note "r" b
 
 (* The connective's right operand must be evaluated exactly when the
    connective in force - the original disarmed, the mutant armed - says

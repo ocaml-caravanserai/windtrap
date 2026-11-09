@@ -84,9 +84,12 @@ what is non-obvious.
   generated code under fatal warnings, a shadowed `not` and `bool`, a
   warning attribute on `h :: t`, a file that declares `Some` and `(::)`,
   an opened `None`, the right-hand sides of `let rec`, the typing-order
-  and expected-type corpora, and a registration suite that arms each
-  mutant and checks that the library then behaves as the mutant's text
-  says. An instrumenter change that cannot keep the semantics suites
+  and expected-type corpora, an operator under an open of another
+  module, a file that binds an operator, a GADT operand under
+  `-principal`, the operators of Base under `-open Base` (where Base is
+  installed), and a registration suite that arms each mutant and checks
+  that the library then behaves as the mutant's text says. An
+  instrumenter change that cannot keep the semantics suites
   green is rejected, not accommodated; grow the fixtures with every
   expression form the instrumenter learns.
 - `cram/`: cram sessions, one directory per subject. Cram pins stdout,

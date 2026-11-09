@@ -894,7 +894,7 @@ dune builds for a stanza naming both backends:
     33: 2424-2430
     34: 2418-2443
     35: 2408-2443
-  mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands:
+  mutation sites of "./fixture_guards.ml" in Windtrap_mut_________fixture_guards___ml, with type 'a operands, type ints:
     0: 14:34-14:35 "int" "0" -> "1"
     1: 14:27-14:28 "int" "1" -> "0"
     2: 14:16-14:21 "le" "a < b" -> "a <= b"
@@ -935,7 +935,8 @@ dune builds for a stanza naming both backends:
       then 1
       else (___windtrap_visit___ 2; 0)
   let add a b =
-    let (__windtrap_mut_3_l, __windtrap_mut_3_r) = (a, b) in
+    let (__windtrap_mut_3_l, __windtrap_mut_3_r) =
+      ((a, b) : Windtrap_mut_________fixture_guards___ml.ints) in
     if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 3
     then __windtrap_mut_3_l - __windtrap_mut_3_r
     else (___windtrap_visit___ 4; __windtrap_mut_3_l + __windtrap_mut_3_r)
@@ -943,37 +944,38 @@ dune builds for a stanza naming both backends:
     ___windtrap_visit___ 10;
     (match x with
      | 0 when
-         let __windtrap_mut_4_p = p x in
+         let __windtrap_mut_4_p : Stdlib.Bool.t = p x in
          if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 4
          then Stdlib.not __windtrap_mut_4_p
          else __windtrap_mut_4_p -> (___windtrap_visit___ 6; "neg")
      | 1 when
-         let __windtrap_mut_5_p = a = b in
+         let __windtrap_mut_5_p : Stdlib.Bool.t = a = b in
          if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 5
          then Stdlib.not __windtrap_mut_5_p
          else __windtrap_mut_5_p -> (___windtrap_visit___ 7; "equality")
      | 2 when
-         let __windtrap_mut_6_p = a in
-         if
-           Stdlib.(<>) (__windtrap_mut_6_p : Stdlib.Bool.t)
-             (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 6)
-         then (___windtrap_visit___ 5; b)
-         else __windtrap_mut_6_p -> (___windtrap_visit___ 8; "con")
+         let __windtrap_mut_6_p : Stdlib.Bool.t = a in
+         (if
+            Stdlib.(<>) __windtrap_mut_6_p
+              (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 6)
+          then (___windtrap_visit___ 5; b)
+          else __windtrap_mut_6_p : Stdlib.Bool.t)
+         -> (___windtrap_visit___ 8; "con")
      | _ -> (___windtrap_visit___ 9; "other"))
   let both c a b =
     ___windtrap_visit___ 13;
     if
-      (let __windtrap_mut_9_p = c in
+      (let __windtrap_mut_9_p : Stdlib.Bool.t = c in
        if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 9
        then Stdlib.not __windtrap_mut_9_p
        else __windtrap_mut_9_p)
     then
-      (let __windtrap_mut_8_p = a in
-       if
-         Stdlib.(<>) (__windtrap_mut_8_p : Stdlib.Bool.t)
-           (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 8)
-       then (___windtrap_visit___ 11; b)
-       else __windtrap_mut_8_p)
+      (let __windtrap_mut_8_p : Stdlib.Bool.t = a in
+       (if
+          Stdlib.(<>) __windtrap_mut_8_p
+            (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 8)
+        then (___windtrap_visit___ 11; b)
+        else __windtrap_mut_8_p : Stdlib.Bool.t))
     else
       if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 7
       then true
@@ -981,7 +983,7 @@ dune builds for a stanza naming both backends:
   let rec loop f x =
     ___windtrap_visit___ 16;
     while
-      (let __windtrap_mut_11_p = f x in
+      (let __windtrap_mut_11_p : Stdlib.Bool.t = f x in
        if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 11
        then Stdlib.not __windtrap_mut_11_p
        else __windtrap_mut_11_p)
@@ -997,19 +999,19 @@ dune builds for a stanza naming both backends:
   let left f g x =
     ___windtrap_visit___ 18;
     ignore
-      (let __windtrap_mut_12_p = f x in
-       if
-         Stdlib.(<>) (__windtrap_mut_12_p : Stdlib.Bool.t)
-           (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 12)
-       then (___windtrap_visit___ 17; ___windtrap_post_visit___ 17 (g x))
-       else __windtrap_mut_12_p)
+      (let __windtrap_mut_12_p : Stdlib.Bool.t = f x in
+       (if
+          Stdlib.(<>) __windtrap_mut_12_p
+            (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 12)
+        then (___windtrap_visit___ 17; ___windtrap_post_visit___ 17 (g x))
+        else __windtrap_mut_12_p : Stdlib.Bool.t))
   let either a b =
-    let __windtrap_mut_13_p = a in
-    if
-      Stdlib.(=) (__windtrap_mut_13_p : Stdlib.Bool.t)
-        (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 13)
-    then (___windtrap_visit___ 19; b)
-    else __windtrap_mut_13_p
+    let __windtrap_mut_13_p : Stdlib.Bool.t = a in
+    (if
+       Stdlib.(=) __windtrap_mut_13_p
+         (Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 13)
+     then (___windtrap_visit___ 19; b)
+     else __windtrap_mut_13_p : Stdlib.Bool.t)
   let wrap f x =
     if
       Stdlib.not
@@ -1036,7 +1038,7 @@ dune builds for a stanza naming both backends:
   let drain more step =
     ___windtrap_visit___ 28;
     while
-      (let __windtrap_mut_18_p = more () in
+      (let __windtrap_mut_18_p : Stdlib.Bool.t = more () in
        if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 18
        then Stdlib.not __windtrap_mut_18_p
        else __windtrap_mut_18_p)
@@ -1063,7 +1065,7 @@ dune builds for a stanza naming both backends:
   let both_steps step a b c =
     ___windtrap_visit___ 35;
     if
-      (let __windtrap_mut_22_p = c in
+      (let __windtrap_mut_22_p : Stdlib.Bool.t = c in
        if Windtrap_mut_________fixture_guards___ml.___windtrap_armed___ 22
        then Stdlib.not __windtrap_mut_22_p
        else __windtrap_mut_22_p)

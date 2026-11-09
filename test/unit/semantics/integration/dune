@@ -1,6 +1,7 @@
 (library
  (name windtrap_mutate_forced)
  (modules
+  aliased
   arid
   attributes
   forced
@@ -9,6 +10,7 @@
   oracle
   own_constructors
   own_unit
+  rebound
   recursive
   shadowed)
  (flags
@@ -25,11 +27,12 @@
  (preprocess
   (pps ppx_windtrap.mutate)))
 
-; A [None] of another type in scope, under fatal warnings and -principal.
+; A [None] of another type in scope, and a GADT match at a site, under
+; fatal warnings and -principal.
 
 (library
  (name windtrap_mutate_principal)
- (modules levels opened_levels)
+ (modules gadt levels numeric opened_levels)
  (flags
   (:standard -principal -w +a-70 -warn-error +a))
  (preprocess
@@ -45,8 +48,41 @@
  (preprocess
   (pps ppx_windtrap.mutate)))
 
+; The operators of another module under each opaque form of open, under
+; fatal warnings and -principal. Warnings 44 and 45 report the opens that
+; shadow an identifier, which is the subject of these modules.
+
+(library
+ (name windtrap_mutate_scoped)
+ (modules float_ops scoped)
+ (flags
+  (:standard -principal -w +a-44-45-70 -warn-error +a))
+ (preprocess
+  (pps ppx_windtrap.mutate)))
+
+; The operators of Base under the flag -open Base, which the rewriter does
+; not see. Only where Base is installed.
+
+(library
+ (name windtrap_mutate_base)
+ (enabled_if %{lib-available:base})
+ (modules base_ops)
+ (libraries base)
+ (flags
+  (:standard -open Base -w +a-70 -warn-error +a))
+ (preprocess
+  (pps ppx_windtrap.mutate)))
+
+(test
+ (package ppx_windtrap)
+ (name test_base_ops)
+ (enabled_if %{lib-available:base})
+ (build_if %{lib-available:base})
+ (modules test_base_ops)
+ (libraries windtrap_mutate_base))
+
 ; test_registration lists it, calling nothing in it, so that runtest builds
-; it at all.
+; it at all. It is instrumented only under --instrument-with.
 
 (library
  (name windtrap_mutate_both)
@@ -67,4 +103,5 @@
   windtrap_mutate_disambiguate
   windtrap_mutate_principal
   windtrap_mutate_loose
+  windtrap_mutate_scoped
   windtrap_mutate_both))

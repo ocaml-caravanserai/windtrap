@@ -46,16 +46,45 @@
     has another type, fails to compile under instrumentation. [[@mutate off]] on
     the expression is the way out.
 
-    [ari] is the one exception, because [a + b] cannot become [a - b] without
-    naming [-]. A file that rebinds an operator where the rewriter can see it
-    thus loses the whole family of that operator: [ari] for [+], [-], [+.] and
-    [-.], [cmp] for the six comparisons, and [con] for [&&] and [||]. [neg]
-    names [Stdlib.not] alone and is never lost. A rebinding is seen when a
-    variable pattern anywhere in the file, or a value description such as an
-    [external], bears the name of the operator. What an [open] brings into scope
-    is not seen. When such an operator does not fit an arm, the file fails to
-    compile under instrumentation, with the error at the expression in the
-    source, and [[@@@mutate exclude_file]] is the way out. *)
+    [ari], [mul], [fmul] and [bit] are the exceptions, because [a + b] cannot
+    become [a - b] without naming [-]. A file that rebinds an operator where the
+    rewriter can see it thus loses the whole family of that operator:
+    - [ari] for [+], [-], [+.] and [-.]
+    - [mul] for [*], [/] and [mod]
+    - [fmul] for [*.] and [/.]
+    - [bit] for [land], [lor], [lxor], [lsl], [lsr] and [asr]
+    - [cmp] for the six comparisons
+    - [con] for [&&] and [||].
+
+    [neg] names [Stdlib.not] and [Stdlib.Bool.t] alone and is never lost. A
+    rebinding is seen when a variable pattern or an alias pattern anywhere in
+    the file, or a value description such as an [external], bears the name of
+    the operator.
+
+    For [ari], [cmp] and [con], what an [open] brings into scope is not seen.
+    When such an operator does not fit an arm, the file fails to compile under
+    instrumentation, with the error at the expression in the source, and
+    [[@@@mutate exclude_file]] is the way out.
+
+    A site of [mul], [fmul] or [bit] must also be in Stdlib scope, where no
+    opaque module is open. An opaque module is the module expression of an
+    [open], a [let open], an [M.( e )], a class [let open] or an [include]. A
+    structure of the file is not opaque, unless it includes another module. An
+    [open] or an [include] in a structure is open to the end of that structure.
+    In Stdlib scope, the operator and its replacement are those of Stdlib, and
+    each has one closed type: [int -> int -> int] or [float -> float -> float].
+
+    The guard pins its operands to that type, so the arm has the type of the
+    original. The guard of [ari] also pins its operands in Stdlib scope.
+
+    The rewriter does not see a flag of the compiler, as [-open M]. If [M] gives
+    an operator of [ari], [mul], [fmul] or [bit] another type, or binds only the
+    replacement, the guard can be ill-typed. The compiler then shows the error
+    at the expression, and [[@mutate off "reason"]] or
+    [[@@@mutate exclude_file]] is the way out. Under [-open Base], each arm
+    compiles, because Base gives these operators the types of Stdlib. Base
+    deprecates [mod]. The original gives the same alert, and the guard takes the
+    alert attributes of the site. *)
 
 (** {1:sites Sites}
 
@@ -64,7 +93,8 @@
 (** {2:operators Operators}
 
     Each operator rewrites its sites in one way, and the name of the rewrite
-    says what replaces the original. The sites of [cmp], [con] and [ari] are
+    says what replaces the original, but for [mod], [xor] and [asr], which name
+    the original. The sites of [cmp], [con], [ari], [mul], [fmul] and [bit] are
     applications of a bare operator to two unlabelled arguments. A qualified
     spelling such as [Float.( < )], a labelled application and a partial one are
     not sites.
@@ -79,6 +109,13 @@
       short-circuit evaluation. The deprecated [&] and [or] are not sites.
     - [ari] swaps [+] and [-] under the names [sub] and [add], and [+.] and [-.]
       under [fsub] and [fadd].
+    - [mul] swaps [*] and [/] under the names [div] and [mul], and replaces
+      [mod] with [*] under the name [mod].
+    - [fmul] swaps [*.] and [/.] under the names [fdiv] and [fmul].
+    - [bit] swaps [land] and [lor] under the names [lor] and [land], and
+      replaces [lxor] with [land] under the name [xor]. It swaps [lsl] and [lsr]
+      under the names [lsr] and [lsl], and replaces [asr] with [lsl] under the
+      name [asr].
     - [del] drops a statement, under the name [del]: the statement does not run.
       A statement is [e1] in [e1; e2]. A statement is also the branch [e] of
       [if c then e] with no [else], and the body of a [while] or a [for]. In
@@ -96,6 +133,9 @@
       [[a; b]] is one site, at its bracket, and becomes [[b]]. In a chain of
       [(::)], as [a :: b :: t], the outermost [(::)] alone is a site, and
       becomes [b :: t]. A qualified constructor, as [Option.Some], is no site.
+
+    [mod], [xor] and [asr] name the original, because two sites at one byte with
+    one name have one identifier, as [mod] and [mul] in [a / b mod c].
 
     The guard of [del] in [e1; e2] is
     [(if armed then () else (e1; ()) : Stdlib.Unit.t); e2], which types [e1] as
@@ -126,8 +166,8 @@
     A boolean context is the condition of an [if] or of a [while], the guard of
     an arm, or a direct operand of [&&] or [||] in a file that keeps the [con]
     family. It does not reach through a sequence, a [let], a type constraint or
-    [not], so the comparison of [let ok = a < b] has no mutant. [con] and [ari]
-    have sites in every context.
+    [not], so the comparison of [let ok = a < b] has no mutant. [con], [ari],
+    [mul], [fmul] and [bit] have sites in every context.
 
     The armed arm of an ordering rewrite applies the original operator to the
     swapped operands under [Stdlib.not], so [a < b] armed is [not (b < a)]. On
@@ -144,8 +184,10 @@
       [close_out_noerr] or [closedir], qualified or not, also under [ignore] or
       as the body of a [try].
     - [int] skips a literal that is an operand of a bare [+] or [-], which [ari]
-      moves already, and an argument of a function whose name ends in [create],
-      as [Hashtbl.create 16], which is a capacity.
+      moves already. It skips an operand of a bare [*], [/] or [mod], unless the
+      file rebinds [*], [/] or [mod], or an [open] or [include] of another
+      module is in scope. It also skips an argument of a function whose name
+      ends in [create], as [Hashtbl.create 16], which is a capacity.
     - [int] skips the constant of a comparison that carries [cmp] when the nudge
       is the boundary move of [cmp]: up for [x < c] and [x >= c], down for
       [x <= c] and [x > c], and the mirror for a constant on the left. In
@@ -164,6 +206,17 @@
       suffix, as [0] or [0x0]. The two are equal on every [int]. [0 + x] keeps
       its mutant, and so does [x +. 0.], because [-0. +. 0.] is [0.] and
       [-0. -. 0.] is [-0.].
+    - [mul] skips [x * 1], [x / 1], [x * -1] and [x / -1], where the literal is
+      an integer without a suffix. [x * -1] and [x / -1] are both [-x] on every
+      [int], [min_int] too. [1 * x], [x mod 1] and [x * 0] keep their mutants.
+    - [fmul] skips [x *. 1.], [x /. 1.], [x *. -1.] and [x /. -1.], where the
+      literal is a float without a suffix. IEEE 754 gives the two operators one
+      result on these operands, on NaN, the infinities and the signed zeros too.
+    - [bit] skips a shift by [0], as [x lsl 0], and a shift of [0], as
+      [0 lsr n]. A shift by [0] gives [x], and a shift of [0] gives [0] for each
+      amount. The [0] keeps its [int] mutant. [bit] also skips [a land a] and
+      [a lor a] under the rule of [con]. [a lxor a] keeps its mutant, because it
+      is [0] and [a land a] is [a].
     - [con] skips [a && a] and [a || a] when the two operands are one expression
       and [a] is an identifier, a constructor without an argument, as [true], or
       a field of such an expression, with or without a type constraint. Such an
@@ -211,11 +264,12 @@
     location that a backtrace gives for a call.
 
     An arid site ends the chain of its operator. In [a + b + 0] the outermost
-    site is arid, so [a + b] carries its own mutant.
+    site is arid, so [a + b] carries its own mutant, and so does [a * b] in
+    [a * b * 1].
 
-    A [[@mutate off]] on a site that one of the last five rules skips records
-    the site as dismissed, as on any other site. The other rules make the
-    expression no site, so a [[@mutate off]] there records nothing.
+    A [[@mutate off]] on a site that an equivalence rule or a message rule skips
+    records the site as dismissed, as on any other site. The other rules make
+    the expression no site, so a [[@mutate off]] there records nothing.
 
     These rules read the syntax alone, as [ari]'s chains do. *)
 
@@ -230,11 +284,15 @@
       mutates [b && c] alone. Its operands are boolean contexts all the same.
     - In a file that lost the [con] or the [cmp] family, a condition of that
       family is no longer recognized as one, and carries [neg].
-    - In a chain of one arithmetic operator, as [a + b + c], the outermost
-      application alone is a site. The rule reads the tree and not the layout,
-      so [(a + b) + c] and [f (a + b + c)] carry one mutant too. [a + b - c]
-      carries two, because [sub] and [add] are two rewrites, and so does
-      [a + b + (c + d)]. An {{!section-arid}arid} site ends the chain.
+    - In a chain of one operator of [ari], [mul], [fmul] or [bit], as
+      [a + b + c], the outermost application alone is a site. The rule reads the
+      tree and not the layout, so [(a + b) + c] and [f (a + b + c)] carry one
+      mutant too. [a + b - c] carries two, because [sub] and [add] are two
+      rewrites, and so does [a + b + (c + d)]. [lsl] is right associative, so
+      [x lsl 1 lsl 2] carries two mutants and [(x lsl 1) lsl 2] carries one. An
+      {{!section-arid}arid} site ends the chain.
+    - Two sites can start at one byte under two rewrites, as [mod] and [mul] in
+      [a / b mod c].
     - A guard binds its operands under the names [__windtrap_mut_<i>_<role>],
       where [<i>] is the index of the site and [<role>] is [p], [l] or [r]. *)
 
@@ -343,19 +401,26 @@
       thus fails to compile against the generated code.
     - [type 'a operands = 'a * 'a], only in a file that holds the guard of an
       ordering rewrite, which annotates its pair of operands with it.
+    - [type ints = int * int] and [type floats = float * float], each only in a
+      file that holds a guard that annotates its pair of operands with it. The
+      guards of [ari], [mul], [fmul] and [bit] do so in
+      {{!section-law}Stdlib scope}. Thus a GADT [match] in an operand gets the
+      expected type that the application gives it.
     - [___windtrap_armed___], bound to
       [Windtrap_runtime.Mutate.register ~file ~sites]. The call is made once,
       when the module is initialized, within the preconditions of [register].
       [file] is the input name and [sites] is the table in index order.
 
     Every generated node has a ghost location, with two exceptions. The disarmed
-    arm of an ordering or [ari] guard is the original application rebuilt over
-    the binders, and keeps its location and its attributes. The disarmed arm of
-    the [del] guard of a statement or a loop body is [e; ()], whose [()] has a
-    location of zero width at the end of [e]. On a loop body, the arm [e; ()]
-    has the location of [e]. The copy [t'] in the guard of [tail] is generated
-    code too, and each of its locations is ghost, so that no two nodes share a
-    location.
+    arm of an ordering, [ari], [mul], [fmul] or [bit] guard is the original
+    application rebuilt over the binders, and keeps its location and its
+    attributes. The whole guard also takes the [ocaml.warning], [warning],
+    [ocaml.alert] and [alert] attributes of the site, because its operands are
+    outside the arm. The disarmed arm of the [del] guard of a statement or a
+    loop body is [e; ()], whose [()] has a location of zero width at the end of
+    [e]. On a loop body, the arm [e; ()] has the location of [e]. The copy [t']
+    in the guard of [tail] is generated code too, and each of its locations is
+    ghost, so that no two nodes share a location.
 
     In the driver that dune builds for a stanza naming both backends this
     rewriter runs first, so its sites are those stated here and the coverage
@@ -385,6 +450,9 @@
       [___windtrap_post_visit___ 0 (f x)] for [f x].
     - the visits, their indices and the booleans of the [if] of [||] are that
       rewriter's generated code, at ghost locations, and carry no site.
+    - The [open] of the coverage module is opaque. Thus [mul], [fmul] and [bit]
+      have no site in the file, and the guard of [ari] does not pin its
+      operands.
 
     The mutants of such a file are not those of the file under this rewriter
     alone. *)
