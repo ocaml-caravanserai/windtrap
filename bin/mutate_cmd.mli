@@ -235,33 +235,44 @@
     ({!Windtrap.Private.Report_sections.tests_report}), so the report is not
     printed. It acts as [--json] does for the outcome line, the gates,
     [--lines], [--diff] and the write. The table reads the records of each file,
-    before the {{!section-merge}merge}, after the skips are judged. A test is
-    the path of a test in one file, with the executable and the suite of the
-    file. It reaches a mutant when the file holds the mutant as a survivor that
-    names it, or as a kill that names it in its killing tests or in the tests
-    that its job ran ([Windtrap_runtime.Verdicts.type-matrix]). An unknown
-    verdict, a skip and a mutant out of a sample give no reach. A test that
-    reaches no mutant has no row.
+    before the {{!section-merge}merge}, after the skips are judged.
 
-    A row gives the label of the file, the path of the test, with the suite when
-    two suites of an executable have that path, the number of mutants whose kill
-    names it, and the number of mutants that only it kills. A mutant counts in
-    the second number of a test when the kills of all files that hold the mutant
-    name only that test, each such kill is of a whole job under [--full-matrix],
-    and each other file holds the mutant as survived, not evaluated, unreached
-    or evaluated outside tests. An unknown mutant, a skip and a mutant out of a
-    sample in a file stop the count. A file has a full matrix when each of its
-    kills is of a run under [--full-matrix] and it holds no skip. A test of
-    another file has [None] as its second number, and the table does not list it
-    among the tests that kill no mutant. The rows are sorted by the label, then
-    by the path of the test.
+    A test is the path of a test in one file, with the executable and the suite
+    of the file. It reaches a mutant when the file holds the mutant as a
+    survivor that names it. It also reaches a mutant when the file holds the
+    mutant as a kill that names it in its killing tests or in the tests that its
+    job ran ([Windtrap_runtime.Verdicts.type-matrix]). An unknown verdict, a
+    skip and a mutant out of a sample give no reach. A test that reaches no
+    mutant has no row.
 
-    Before the table, standard error gives notes. One names the files that
-    tested their suite and have no full matrix. It names no file when each file
-    that tested its suite has no full matrix. One tells when a file that tested
-    its suite records a sample. One tells under [--crash-kills] that the counts
-    leave out the unknown mutants. [--tests] with [--json] or [--sarif] is a
-    usage error. *)
+    A row gives:
+    - The label of the file. When two files of different executables have one
+      label, it is the executable that the file records, or the path of the file
+      when it records none.
+    - The path of the test, with the suite when two suites of an executable have
+      that path, as in a survivor block.
+    - The number of mutants whose kill names the test.
+    - The number of mutants that only this test kills, or [None].
+
+    A mutant counts in the last number of a test when these conditions are true:
+    - The kills of all files that hold the mutant name only that test.
+    - Each such kill has a complete matrix, from a whole job under
+      [--full-matrix].
+    - Each other file holds the mutant as survived, not evaluated, unreached or
+      evaluated outside tests.
+
+    Thus an unknown mutant, a skip and a mutant out of a sample in a file stop
+    the count. A file has a full matrix when each of its kills has a matrix and
+    it holds no skip. A test of another file has [None] as its last number, and
+    the table does not list it among the tests that kill no mutant. The rows are
+    sorted by the label, then by the path of the test.
+
+    Before the table, standard error gives notes. One names each file that
+    tested its suite and has no full matrix, with the cause: a kill with no
+    matrix, or a skip. It names no file when each file that tested its suite has
+    no full matrix. One tells when a file that tested its suite records a
+    sample. One tells under [--crash-kills] that the counts leave out the
+    unknown mutants. [--tests] with [--json] or [--sarif] is a usage error. *)
 
 (** {1:format Machine format}
 

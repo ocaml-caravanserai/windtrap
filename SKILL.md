@@ -482,8 +482,8 @@ night.
 of each mutant, also after a kill, and records each test that kills it.
 `windtrap mutants --tests` then gives, for each test, the mutants that
 it kills and the mutants that only it kills, and lists the tests that
-kill no mutant. Such a test needs a stronger assertion, or it checks
-what no rewrite changes: do not remove it only for this reason.
+kill no mutant. Such a test can have a weak assertion, or it can check
+what no rewrite changes. Do not remove it only for this reason.
 
 `--rewrites=NAME,...` (`WINDTRAP_REWRITES`) tests only the mutants of
 these rewrites, and `--skip-rewrites=NAME,...`

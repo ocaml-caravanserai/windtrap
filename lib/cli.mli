@@ -185,10 +185,11 @@ val settings : parsed -> (Run.config, error) result
       rewrite filter together, or the mirrors of [--skip-killed] and
       [--full-matrix] together, is an error also without [--mutate].
       [--skip-killed] with [--full-matrix] is [Error (Incompatible_flags _)],
-      whichever layer gave each. [mutate] and [arm] at once is
-      [Error (Incompatible_flags _)], whichever layer gave each, and it is
-      checked after every mirror. A prefix that spells a boolean cannot go
-      through the variable.
+      whichever layer gave each. When no layer gives [--mutate], the [Requires]
+      check of a [--skip-killed] from the command line comes first. [mutate] and
+      [arm] at once is [Error (Incompatible_flags _)], whichever layer gave
+      each, and it is checked after every mirror. A prefix that spells a boolean
+      cannot go through the variable.
     - [mutate_workers] is [true] when a layer gives [--mutate-workers] and a
       layer gives [--mutate] or [--arm]. [--mutate-workers] from the command
       line without them is [Error (Requires_any _)]. From its mirror alone it is

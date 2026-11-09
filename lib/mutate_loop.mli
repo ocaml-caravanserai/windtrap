@@ -123,14 +123,15 @@ val execute_and_report :
     test that first evaluated the armed site, its worker retires, and a fresh
     worker, with the mutant armed again, runs the rest of the job
     ([Supervisor.fresh]). Thus a failure leaves no state to the next test, and
-    the runaway budget starts again. The [by] of the kill holds each such
-    failing test that is not marked xfail. A failure before the first evaluation
-    does not count, as without the flag. A kill stays a kill when the job then
-    passes its deadline or its memory limit, or loses its worker. Without the
-    flag, such a job is unknown. The record of the kill keeps the tests that ran
-    in its job, and whether the job ran each of them
-    ({!Windtrap_runtime.Verdicts.type-matrix}). The effort of each record of the
-    run has the flag. A survivor costs the same as without the flag.
+    the runaway budget starts again.
+
+    The [by] of the kill holds each such failing test that is not marked xfail.
+    A failure before the first evaluation does not count, as without the flag. A
+    kill stays a kill when the job then passes its deadline or its memory limit,
+    or loses its worker. Without the flag, such a job is unknown. The record of
+    the kill keeps the tests that ran in its job, and if the job ran each of
+    them ({!Windtrap_runtime.Verdicts.type-matrix}). The effort of each record
+    of the run has the flag. A survivor costs the same as without the flag.
 
     {b Retries.} Each pass after the first runs again the jobs of the mutants
     that survived the pass before it, with the same cases, deadline and budget,
@@ -237,10 +238,11 @@ val execute_and_report :
       test with no location, or whose file the loop cannot read, has no digest.
     - The effort of the record covers the effort of this run
       ({!Windtrap_runtime.Verdicts.effort_covers}): the same {!settings}, and
-      enough retries. A kill needs a run with the same [config.full_matrix].
-      Under [config.mutate_retry] above [0], a kill is reused only from a run
-      that had retries too. A kill from the [k]-th retry is reused only when
-      [config.mutate_retry] is [k] or more.
+      enough retries. A kill is reused only from a run with the same
+      [config.full_matrix]. Under [config.full_matrix], a kill is reused only
+      when its job ran each of its tests. Under [config.mutate_retry] above [0],
+      a kill is reused only from a run that had retries too. A kill from the
+      [k]-th retry is reused only when [config.mutate_retry] is [k] or more.
 
     A reused mutant gets no job, no retry and no check. Once the probe agrees,
     the loop commits each reused kill in the first pass, and each reused

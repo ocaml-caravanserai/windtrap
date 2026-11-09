@@ -856,13 +856,16 @@ val mutation_report :
     The table of [windtrap mutants --tests]. *)
 
 type test_row = {
-  exe : string;  (** The executable that ran the test. *)
+  exe : string;
+      (** The label of the verdict file of the test, which names the executable
+          that ran the test. *)
   test : string;
       (** The path of the test, as {!Test_tree.path_to_string} spells it. *)
   kills : int;  (** The mutants that the test kills. *)
   only : int option;
       (** The mutants that only this test kills, or [None] when its verdict file
-          holds a kill of a run without [--full-matrix]. *)
+          holds a kill with no full matrix, as of a run without [--full-matrix],
+          or a skip. *)
 }
 (** The type for the row of one test. *)
 
