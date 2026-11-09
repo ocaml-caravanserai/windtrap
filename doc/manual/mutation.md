@@ -1471,21 +1471,21 @@ run it. `del` leaves a resource release alone: a call of `close`,
 `close_in`, `close_out`, their `_noerr` forms or `closedir`. `int`
 leaves alone an operand of `+` or `-`, which `add` and `sub` move
 already; an operand of `*`, `/` or `mod`, unless the file rebinds `*`,
-`/` or `mod`, or an `open` or `include` of another module is in scope;
-an argument of a function whose name ends in `create`, as the
-capacity of `Hashtbl.create 16`; the constant of a comparison in a
-condition when the nudge is the comparison's own boundary move, as the
-`0` of `x < 0`, since `x < 1` is `x <= 0`. `bool` leaves alone the
-argument of `~cloexec`. None of these five rewrites has a mutant in code
-that runs when the module is initialized, before any test, as in a
-top-level `let limit = 64` or `let () = setup (); main ()`, since no run
-can judge it. `none` and `tail` also leave alone the right-hand side of
-a `let rec` outside its functions and `lazy` bodies, as
-`let rec ones = 1 :: ones`, which the compiler accepts only as written.
-When the head of a `tail` site written as `h :: t` is a list, as in
-`[x] :: acc` or `(x :: cur) :: acc`, it starts at the first byte of the
-site and has no `tail` mutant of its own, since one identifier names one
-site.
+`/` or `mod`, or an `open` or `include` of another module, or an `open`
+of a module of the same file, is in scope; an argument of a function
+whose name ends in `create`, as the capacity of `Hashtbl.create 16`; the
+constant of a comparison in a condition when the nudge is the
+comparison's own boundary move, as the `0` of `x < 0`, since `x < 1` is
+`x <= 0`. `bool` leaves alone the argument of `~cloexec`. None of these
+five rewrites has a mutant in code that runs when the module is
+initialized, before any test, as in a top-level `let limit = 64` or
+`let () = setup (); main ()`, since no run can judge it. `none` and `tail`
+also leave alone the right-hand side of a `let rec` outside its
+functions and `lazy` bodies, as `let rec ones = 1 :: ones`, which the
+compiler accepts only as written. When the head of a `tail` site written
+as `h :: t` is a list, as in `[x] :: acc` or `(x :: cur) :: acc`, it
+starts at the first byte of the site and has no `tail` mutant of its
+own, since one identifier names one site.
 
 The rewriter also gives no mutant where the syntax shows the mutant
 equivalent to the original. It gives none where the mutant changes a
@@ -1554,17 +1554,20 @@ description as `external`. A file that declares a constructor `Some`,
 
 The rewrites of `*`, `/`, `mod`, `*.`, `/.` and the bit operators give
 no mutant where an `open`, a `let open`, an `M.( ... )` or an `include`
-of another module is in scope, as in `Float.(a * b)`. A
-`struct ... end` of the file, as the `include struct ... end` of a
-deriver, keeps them, unless it includes another module. An `open` of a
-module of the same file by its name, as `open Infix`, also removes
-them. The rewriter does not see a `-open` flag of the compiler. If such
-a flag gives one of these operators, or `+`, `-`, `+.` or `-.`, another
-type, or binds only the replacement, the mutant does not compile. The
-compiler shows the error at the expression, and `[@mutate off "reason"]`
-or `[@@@mutate exclude_file]` removes it. Under `-open Base`, each
-mutant compiles. Base deprecates `mod`. The original gives the same
-alert, and the guard takes the alert attributes of the site.
+of another module is in scope, as in `Float.(a * b)`. A `struct ... end`
+of the file, as the `include struct ... end` of a deriver, keeps them,
+unless it includes another module. An `open` of a module of the same
+file by its name, as `open Infix`, also removes them.
+
+The rewriter does not see a `-open` flag of the compiler. A flag can
+give one of these operators, or `+`, `-`, `+.` or `-.`, another type. It
+can also bind only the replacement. Then the instrumented file does not
+compile. The compiler shows the error at the expression, and
+`[@mutate off "reason"]` or `[@@@mutate exclude_file]` removes it.
+
+Under `-open Base`, each mutant compiles. Base deprecates `mod`. The
+original gives the same alert, and the guard takes the alert attributes
+of the site.
 
 The `none` mutant names `None` without a module, and the `tail` mutant
 gives `t` the type of `h :: t`. The rewriter does not see a `Some` or a

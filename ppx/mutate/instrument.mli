@@ -79,12 +79,12 @@
 
     The rewriter does not see a flag of the compiler, as [-open M]. If [M] gives
     an operator of [ari], [mul], [fmul] or [bit] another type, or binds only the
-    replacement, the arm can be ill-typed. The compiler then shows the error at
-    the expression, and [[@mutate off "reason"]] or [[@@@mutate exclude_file]]
-    is the way out. Under [-open Base], each arm compiles, because Base gives
-    these operators the types of Stdlib. Base deprecates [mod]. The original
-    gives the same alert, and the guard takes the alert attributes of the site.
-*)
+    replacement, the guard can be ill-typed. The compiler then shows the error
+    at the expression, and [[@mutate off "reason"]] or
+    [[@@@mutate exclude_file]] is the way out. Under [-open Base], each arm
+    compiles, because Base gives these operators the types of Stdlib. Base
+    deprecates [mod]. The original gives the same alert, and the guard takes the
+    alert attributes of the site. *)
 
 (** {1:sites Sites}
 

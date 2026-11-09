@@ -9,7 +9,8 @@
   another module. `x * 1`, `x / -1`, their float forms, a shift by or
   of `0`, `a land a` and `a lor a` give no mutant. A literal operand of
   `*`, `/` or `mod` gives no `int` mutant, unless the file rebinds `*`,
-  `/` or `mod`, or an `open` or `include` of another module is in scope
+  `/` or `mod`, or an `open` or `include` of another module, or an
+  `open` of a module of the same file, is in scope
   (doc/manual/mutation.md#what-is-mutated).
 - A file that binds an operator by an alias pattern, as
   `(_ as ( + ))`, loses the rewrites of that operator's family, as a
@@ -24,9 +25,9 @@
   such as `((match x with Some y -> y) + 1) [@ocaml.warning "-8"]`
   could fail to compile under fatal warnings.
 - The guards of `add`, `sub`, `fadd` and `fsub` give their operands the
-  type `int` or `float`, where no `open` or `include` of another module
-  is in scope. Before, a GADT `match` in an operand could fail to
-  compile under instrumentation. Under a compiler flag `-open M` where
+  type `int` or `float`, where no `open` or `include` is in scope.
+  Before, a GADT `match` in an operand could fail to compile under
+  instrumentation. Under a compiler flag `-open M` where
   `M` gives `+`, `-`, `+.` or `-.` another type, the instrumented file
   does not compile at this time. Use `[@mutate off "reason"]` or
   `[@@@mutate exclude_file]`.

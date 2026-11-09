@@ -88,7 +88,8 @@ what is non-obvious.
   module, a file that binds an operator, a GADT operand under
   `-principal`, the operators of Base under `-open Base` (where Base is
   installed), and a registration suite that arms each mutant and checks
-  that the library then behaves as the mutant's text says. An instrumenter change that cannot keep the semantics suites
+  that the library then behaves as the mutant's text says. An
+  instrumenter change that cannot keep the semantics suites
   green is rejected, not accommodated; grow the fixtures with every
   expression form the instrumenter learns.
 - `cram/`: cram sessions, one directory per subject. Cram pins stdout,
