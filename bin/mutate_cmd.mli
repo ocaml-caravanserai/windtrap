@@ -229,6 +229,52 @@
     result ({!Windtrap.Private.Report_sections.mutation_line}), and each measure
     with its two counts beside its rounding. *)
 
+(** {1:tests The tests}
+
+    [--tests] makes standard output the table of the tests
+    ({!Windtrap.Private.Report_sections.tests_report}), so the report is not
+    printed. It acts as [--json] does for the outcome line, the gates,
+    [--lines], [--diff] and the write. The table reads the records of each file,
+    before the {{!section-merge}merge}, after the skips are judged.
+
+    A test is the path of a test in one file, with the executable and the suite
+    of the file. It reaches a mutant when the file holds the mutant as a
+    survivor that names it. It also reaches a mutant when a kill of the file
+    names it among the killing tests. The same applies when the job of the kill
+    ran it ([Windtrap_runtime.Verdicts.type-matrix]). An unknown verdict, a skip
+    and a mutant out of a sample give no reach. A test that reaches no mutant
+    has no row.
+
+    A row gives:
+    - The label of the file. When two files of different executables have one
+      label, the label is the executable that the file records. When the file
+      records no executable, the label is the path of the file. The notes name a
+      file with the same label.
+    - The path of the test, with the suite when two suites of an executable have
+      that path, as in a survivor block.
+    - The number of mutants whose kill names the test.
+    - The number of mutants that only this test kills, or [None].
+
+    A mutant counts in the last number of a test when these conditions are true:
+    - The kills of all files that hold the mutant name only that test.
+    - Each such kill has a complete matrix, from a whole job under
+      [--full-matrix].
+    - Each other file holds the mutant as survived, not evaluated, unreached or
+      evaluated outside tests.
+
+    Thus an unknown mutant, a skip and a mutant out of a sample in a file stop
+    the count. A file has a full matrix when each of its kills has a matrix and
+    it holds no skip. A test of another file has [None] as its last number, and
+    the table does not list it among the tests that kill no mutant. The rows are
+    sorted by the label, then by the path of the test.
+
+    Before the table, standard error gives notes. One names each file that
+    tested its suite and has no full matrix, with the cause: a kill with no
+    matrix, or a skip. It names no file when each file that tested its suite has
+    no full matrix. One tells when a file that tested its suite records a
+    sample. One tells under [--crash-kills] that the counts leave out the
+    unknown mutants. [--tests] with [--json] or [--sarif] is a usage error. *)
+
 (** {1:format Machine format}
 
     [--json] makes standard output the document, so the report is not printed.
@@ -306,13 +352,19 @@
     - ["reused"] is [true], directly after ["verdict"], in the object of a
       reused mutant only ({{!section-merge}the merge}). The other objects do not
       have the key.
+    - ["full_matrix"] is [true], after ["verdict"] and ["reused"], in the object
+      of a killed mutant whose merged record is of a run under [--full-matrix]
+      only. The merged record has the flag when each file that kills the mutant
+      has it ([Windtrap_runtime.Verdicts.add]). The other objects do not have
+      the key.
     - ["tests"] is in the object of a survivor only. It is an array of the tests
       that reached the survivor.
     - ["killed_by"] is in the object of a killed mutant only. It is an array of
       the tests that killed the mutant: in each run that killed it, the first
       counted test that failed in or after the test that first evaluated the
-      armed site. It is empty when no kill names a test, as for a kill by a
-      fixture release or a mutant killed elsewhere.
+      armed site. Under [--full-matrix], it holds each counted test that failed
+      in or after that test. It is empty when no kill names a test, as for a
+      kill by a fixture release or a mutant killed elsewhere.
     - ["executable"], ["reason"] and ["reason_kind"] are in the object of an
       unknown mutant only. ["executable"] is the index in ["executables"] of the
       file that the report names for the mutant ({{!section-merge}the merge}),
@@ -375,9 +427,10 @@ val run : string list -> int
     and [-help] print the help page on standard output. [--min PCT],
     [--min-reach PCT], [--min-total PCT] and [--max-survivors N] are those of
     the {{!section-gate}gates}, [--json] is that of the
-    {{!section-format}machine format}, and [--sarif] is that of the
-    {{!section-sarif}SARIF document}. A repeated [--json] or [--sarif] is the
-    same as one. A [PCT] that is not a number from [0] to [100] is a usage
+    {{!section-format}machine format}, [--sarif] is that of the
+    {{!section-sarif}SARIF document}, and [--tests] is that of
+    {{!section-tests}the tests}. A repeated [--json], [--sarif] or [--tests] is
+    the same as one. A [PCT] that is not a number from [0] to [100] is a usage
     error, and so is an [N] that is not a non-negative integer of decimal
     digits. A repeated gate keeps its last value. [--lines SPEC] and
     [--diff FILE] repeat and add up into a {!Windtrap.Private.Lines.t}, read by
@@ -402,8 +455,10 @@ val run : string list -> int
     - It judges the skips and says the notes of the mutants killed elsewhere
       ({{!section-merge}the merge}) on standard error, and then the note of
       mixed samples.
-    - It prints the report, the document or the SARIF document of the
-      {{!section-merge}merge} on standard output.
+    - Under [--tests], it says the notes of {{!section-tests}the tests} on
+      standard error.
+    - It prints the report, the document, the SARIF document or the table of the
+      tests of the {{!section-merge}merge} on standard output.
     - It runs the gate.
 
     A step before the gate that fails gives its code, and the steps after it do
@@ -440,9 +495,9 @@ val run : string list -> int
     - [2] for a usage error. A usage error is an unknown option, a flag that
       does not have its value, a [--min] that is not in the interval
       \[[0];[100]\], a malformed [--lines], an unreadable [--diff], a [--color]
-      value that the flag refuses, or [--json] with [--sarif]. It is also
-      [--max-survivors] with a file that tested a sample, after the files are
-      loaded.
+      value that the flag refuses, or two of [--json], [--sarif] and [--tests].
+      It is also [--max-survivors] with a file that tested a sample, after the
+      files are loaded.
     - [2] also for a [WINDTRAP_COLOR] that the flag would refuse, when [--color]
-      is absent and the report is printed. A document reads no [WINDTRAP_COLOR].
-*)
+      is absent and the report or the table of the tests is printed. A document
+      reads no [WINDTRAP_COLOR]. *)

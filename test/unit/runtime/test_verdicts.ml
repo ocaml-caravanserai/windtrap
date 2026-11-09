@@ -12,10 +12,13 @@ let strf = Printf.sprintf
 let read path = In_channel.with_open_bin path In_channel.input_all
 let id file line col rewrite = { Mutate.file; line; col; rewrite }
 let zeros = String.make 32 '0'
-let base_effort = { Verdicts.retries = 0; pass = 1; settings = zeros }
+
+let base_effort =
+  { Verdicts.full_matrix = false; retries = 0; pass = 1; settings = zeros }
 
 let record ?(before = "b") ?(after = "a") ?end_ ?source_digest ?previous
-    ?(effort = base_effort) ?prefix ?(reused = false) (id : Mutate.id) verdict =
+    ?(effort = base_effort) ?prefix ?matrix ?(reused = false) (id : Mutate.id)
+    verdict =
   let end_line, end_col =
     Option.value end_ ~default:(id.line, id.col + String.length before)
   in
@@ -30,6 +33,7 @@ let record ?(before = "b") ?(after = "a") ?end_ ?source_digest ?previous
     previous;
     effort;
     prefix;
+    matrix;
     reused;
   }
 
@@ -70,19 +74,24 @@ let outcome_row = function
   | `Survived -> "survived"
   | `Not_evaluated -> "not evaluated"
 
-(* The effort, the prefix and the mark show only when they are not those of
-   [record]. *)
+let matrix_row (m : Verdicts.matrix) =
+  strf " ran %s%s" (tests_row m.ran) (if m.complete then "" else " partial")
+
+(* The effort, the prefix, the matrix and the mark show only when they are not
+   those of [record]. *)
 let record_row (r : Verdicts.record) =
-  strf "%S:%d:%d:%s (to %d:%d) %S -> %S%s: %s%s%s%s%s" r.id.file r.id.line
+  strf "%S:%d:%d:%s (to %d:%d) %S -> %S%s: %s%s%s%s%s%s" r.id.file r.id.line
     r.id.col r.id.rewrite r.end_line r.end_col r.before r.after
     (Option.fold ~none:"" ~some:(strf " of %s") r.source_digest)
     (verdict_row r.verdict)
     (Option.fold ~none:"" ~some:(fun o -> " was " ^ outcome_row o) r.previous)
     (if r.effort = base_effort then ""
      else
-       strf " (retries %d, pass %d, settings %S)" r.effort.retries r.effort.pass
-         r.effort.settings)
+       strf " (retries %d, pass %d, settings %S%s)" r.effort.retries
+         r.effort.pass r.effort.settings
+         (if r.effort.full_matrix then ", full matrix" else ""))
     (Option.fold ~none:"" ~some:(strf " prefix %s") r.prefix)
+    (Option.fold ~none:"" ~some:matrix_row r.matrix)
     (if r.reused then " reused" else "")
 
 let rows t = List.map record_row (Verdicts.records t)
@@ -176,20 +185,31 @@ let hex_digest =
 let any_previous =
   Gen.option (Gen.of_list [ `Killed; `Survived; `Not_evaluated ])
 
-(* Any effort, prefix and mark, so that the laws cover each of them. *)
+(* Any effort, prefix, matrix and mark, so that the laws cover each of
+   them. *)
 let small_effort =
   Gen.map
-    (fun (retries, pass, settings) -> { Verdicts.retries; pass; settings })
-    (Gen.triple (Gen.int_range 0 1) (Gen.int_range 1 2)
+    (fun (full_matrix, retries, pass, settings) ->
+      { Verdicts.full_matrix; retries; pass; settings })
+    (Gen.quad Gen.bool (Gen.int_range 0 1) (Gen.int_range 1 2)
        (Gen.of_list [ zeros; String.make 32 'f' ]))
+
+let small_matrix =
+  Gen.option
+    (Gen.map
+       (fun (ran, complete) -> { Verdicts.ran; complete })
+       (Gen.pair
+          (Gen.list ~size:(Gen.int_range 0 3)
+             (Gen.list ~size:(Gen.int_range 1 2) (Gen.of_list [ "t"; "u" ])))
+          Gen.bool))
 
 let small_record =
   Gen.with_pp pp_record
     (Gen.map
        (fun ( (file, (line, stop), (before, after, source_digest), verdict),
-              (previous, effort, prefix, reused) ) ->
+              ((previous, effort, prefix, reused), matrix) ) ->
          record ~before ~after ~end_:(line, stop) ?source_digest ?previous
-           ~effort ?prefix ~reused (id file line 0 "lt") verdict)
+           ~effort ?prefix ?matrix ~reused (id file line 0 "lt") verdict)
        (Gen.pair
           (Gen.quad
              (Gen.of_list [ "lib/a.ml"; "lib/b.ml" ])
@@ -199,7 +219,9 @@ let small_record =
                 (Gen.of_list [ "a"; "b" ])
                 small_digest)
              small_verdict)
-          (Gen.quad any_previous small_effort small_digest Gen.bool)))
+          (Gen.pair
+             (Gen.quad any_previous small_effort small_digest Gen.bool)
+             small_matrix)))
 
 let small_collection =
   Gen.with_pp pp_records
@@ -254,17 +276,29 @@ let any_record =
              (lines, stop),
              (before, after, source_digest),
              verdict ),
-           (previous, (retries, pass, settings), prefix, reused) ) ->
+           ( (previous, (retries, pass, settings, full_matrix), prefix, reused),
+             matrix ) ) ->
       let end_ = (line + lines, if lines = 0 then col + stop else stop) in
       let effort =
         {
-          Verdicts.retries;
+          Verdicts.full_matrix;
+          retries;
           pass = 1 + (pass mod (retries + 1));
           settings = Option.value settings ~default:zeros;
         }
       in
+      (* A kill under the flag has a matrix, as load demands. *)
+      let matrix =
+        match verdict with
+        | Verdicts.Killed _ when full_matrix ->
+            Some
+              (Option.value matrix
+                 ~default:{ Verdicts.ran = []; complete = true })
+        | _ -> matrix
+      in
       record ~before ~after ~end_ ?source_digest ?previous ~effort
         ?prefix:(if killer verdict then prefix else None)
+        ?matrix
         ~reused:(reused && reusable verdict)
         (id file line col rewrite) verdict)
     (Gen.pair
@@ -276,9 +310,14 @@ let any_record =
           (Gen.pair Gen.nat Gen.nat)
           (Gen.triple name name digest)
           verdict)
-       (Gen.quad any_previous
-          (Gen.triple (Gen.int_range 0 100) Gen.nat digest)
-          digest Gen.bool))
+       (Gen.pair
+          (Gen.quad any_previous
+             (Gen.quad (Gen.int_range 0 100) Gen.nat digest Gen.bool)
+             digest Gen.bool)
+          (Gen.option
+             (Gen.map
+                (fun (ran, complete) -> { Verdicts.ran; complete })
+                (Gen.pair (Gen.list ~size:(Gen.int_range 0 3) path) Gen.bool)))))
 
 let any_identity =
   Gen.option
@@ -515,7 +554,9 @@ let record_of_mutant () =
       source_digest = Some (String.make 32 'a');
     }
   in
-  let effort = { Verdicts.retries = 2; pass = 3; settings = zeros } in
+  let effort =
+    { Verdicts.full_matrix = false; retries = 2; pass = 3; settings = zeros }
+  in
   equal string
     {|"lib/calc.ml":4:2:sub (to 4:7) "a - b" -> "a + b" of aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: killed (retries 2, pass 3, settings "00000000000000000000000000000000")|}
     (record_row (Verdicts.record_of_mutant ~effort m (Verdicts.killed [])));
@@ -555,6 +596,43 @@ let record_of_mutant () =
       (Verdicts.survived [ [ "t" ] ], {|survived by ["t"]|});
     ]
 
+(* Only a kill under --full-matrix keeps its matrix in a collection, with its
+   tests sorted. *)
+let matrices () =
+  let m = id "lib/calc.ml" 4 2 "sub" in
+  let full = { base_effort with full_matrix = true } in
+  let matrix =
+    { Verdicts.ran = [ [ "u" ]; [ "t" ]; [ "u" ] ]; complete = false }
+  in
+  let row ?(effort = full) verdict =
+    rows (collection [ record ~effort ~matrix m verdict ])
+  in
+  let settings = {|settings "00000000000000000000000000000000", full matrix|} in
+  equal (list string)
+    [
+      strf
+        {|"lib/calc.ml":4:2:sub (to 4:3) "b" -> "a": killed by ["t"] (retries 0, pass 1, %s) ran ["t"], ["u"] partial|}
+        settings;
+      strf
+        {|"lib/calc.ml":4:2:sub (to 4:3) "b" -> "a": killed (retries 0, pass 1, %s) ran ["t"], ["u"] partial|}
+        settings;
+      {|"lib/calc.ml":4:2:sub (to 4:3) "b" -> "a": killed by ["t"]|};
+      strf
+        {|"lib/calc.ml":4:2:sub (to 4:3) "b" -> "a": survived by ["t"] (retries 0, pass 1, %s)|}
+        settings;
+      strf
+        {|"lib/calc.ml":4:2:sub (to 4:3) "b" -> "a": unknown: x (retries 0, pass 1, %s)|}
+        settings;
+    ]
+    (List.concat
+       [
+         row (Verdicts.killed [ [ "t" ] ]);
+         row (Verdicts.killed []);
+         row ~effort:base_effort (Verdicts.killed [ [ "t" ] ]);
+         row (Verdicts.survived [ [ "t" ] ]);
+         row (Verdicts.Unknown (Other "x"));
+       ])
+
 let prefix_digests () =
   let digests =
     List.map Verdicts.prefix_digest
@@ -592,9 +670,18 @@ let kept_rendering (a, b) =
     (r.before, r.after, r.end_line, r.end_col, r.source_digest)
   in
   let bare (r : Verdicts.record) =
+    let r =
+      match r.verdict with
+      | Verdicts.Killed { by = _ :: _ } -> r
+      | _ -> { r with prefix = None }
+    in
     match r.verdict with
-    | Verdicts.Killed { by = _ :: _ } -> r
-    | _ -> { r with prefix = None }
+    | Verdicts.Killed _ when r.effort.full_matrix ->
+        let sort (m : Verdicts.matrix) =
+          { m with ran = List.sort_uniq (List.compare String.compare) m.ran }
+        in
+        { r with matrix = Option.map sort r.matrix }
+    | _ -> { r with matrix = None }
   in
   let a = bare { a with Verdicts.id = b.Verdicts.id } and b = bare b in
   let smaller = if compare (key a) (key b) <= 0 then a else b in
@@ -604,10 +691,12 @@ let kept_rendering (a, b) =
         rank r.verdict = max (rank a.verdict) (rank b.verdict))
       [ a; b ]
   in
-  let effort, prefix =
+  let effort, prefix, matrix =
     List.hd
       (List.sort compare
-         (List.map (fun (r : Verdicts.record) -> (r.effort, r.prefix)) top))
+         (List.map
+            (fun (r : Verdicts.record) -> (r.effort, r.prefix, r.matrix))
+            top))
   in
   let expected =
     [
@@ -617,6 +706,7 @@ let kept_rendering (a, b) =
         previous = join_previous a.previous b.previous;
         effort;
         prefix;
+        matrix;
         reused = List.for_all (fun (r : Verdicts.record) -> r.reused) top;
       };
     ]
@@ -714,7 +804,15 @@ let marks () =
     {|"lib/a.ml":1:0:lt (to 1:1) "b" -> "a": killed by ["t"] (retries 3, pass 1, settings "00000000000000000000000000000000")|}
     (row
        (record ~effort:low m (Verdicts.survived [ [ "s" ] ]))
-       (kill ~effort:high "t"))
+       (kill ~effort:high "t"));
+  (* The flag of the effort comes first, so a merged kill has it only when
+     each kill has it. *)
+  let full = { base_effort with full_matrix = true } in
+  equal string {|"lib/a.ml":1:0:lt (to 1:1) "b" -> "a": killed by ["s"], ["t"]|}
+    (row (kill ~effort:full "s") (kill "t"));
+  equal string
+    {|"lib/a.ml":1:0:lt (to 1:1) "b" -> "a": killed by ["s"], ["t"] (retries 0, pass 1, settings "00000000000000000000000000000000", full matrix)|}
+    (row (kill ~effort:full "s") (kill ~effort:full "t"))
 
 let source = String.make 32 'a'
 
@@ -911,11 +1009,16 @@ let collections =
         ~id:(fun (name, _, _, _) -> name)
         changed_cases changed;
       test "changed is None for a reused verdict" changed_reused;
+      test
+        "add keeps the matrix of a kill under --full-matrix only, with its \
+         tests sorted"
+        matrices;
       test "prefix_digest gives each list of tests its own digest"
         prefix_digests;
       test
         "add keeps the mark when each record of the higher rank has it, and \
-         the smaller effort of these records"
+         the smaller effort of these records, which has the flag of \
+         --full-matrix only when each has it"
         marks;
       cases
         "with_previous takes the outcome of the same mutant, with the same \
@@ -954,8 +1057,8 @@ let collections =
 
 (* Reuse *)
 
-let effort ?(pass = 1) ?(settings = zeros) retries =
-  { Verdicts.retries; pass; settings }
+let effort ?(full_matrix = false) ?(pass = 1) ?(settings = zeros) retries =
+  { Verdicts.full_matrix; retries; pass; settings }
 
 let covers_cases =
   let other = String.make 32 'f' in
@@ -983,6 +1086,36 @@ let covers_cases =
       effort 0,
       effort ~settings:other 0,
       false );
+    ( "a full kill, asked a full kill",
+      `Killed,
+      effort ~full_matrix:true 0,
+      effort ~full_matrix:true 0,
+      true );
+    ( "a full kill, asked a first kill",
+      `Killed,
+      effort ~full_matrix:true 0,
+      effort 0,
+      false );
+    ( "a first kill, asked a full kill",
+      `Killed,
+      effort 0,
+      effort ~full_matrix:true 0,
+      false );
+    ( "a full kill of pass 2, asked 1",
+      `Killed,
+      effort ~full_matrix:true ~pass:2 1,
+      effort ~full_matrix:true 1,
+      true );
+    ( "a survivor of a full run, asked a first run",
+      `Survived,
+      effort ~full_matrix:true 0,
+      effort 0,
+      true );
+    ( "a survivor of a first run, asked a full run",
+      `Survived,
+      effort 0,
+      effort ~full_matrix:true 0,
+      true );
   ]
 
 let covers (_, kind, judged, asked, expected) =
@@ -1020,10 +1153,11 @@ let last ?refused ?(test_digests = digests) records =
     test_digests;
   }
 
-let kill ?(effort = effort 0) ?(source_digest = Some src) ?reused ~prefix by =
+let kill ?(effort = effort 0) ?(source_digest = Some src) ?matrix ?reused
+    ~prefix by =
   record ?source_digest ~effort
     ~prefix:(Verdicts.prefix_digest prefix)
-    ?reused at_mutant (Verdicts.killed by)
+    ?matrix ?reused at_mutant (Verdicts.killed by)
 
 let survivor ?(effort = effort 0) ?(source_digest = Some src) ?reused tests =
   record ?source_digest ~effort ?reused at_mutant (Verdicts.survived tests)
@@ -1042,6 +1176,13 @@ let other_digest = Some (String.make 32 'e')
    reaching tests and the mutant, and whether the last record is reused. *)
 let reuse_cases =
   let k = kill ~prefix:[ t1 ] [ t1 ] in
+  let full = effort ~full_matrix:true 0 in
+  let full_kill by =
+    kill ~effort:full ~prefix:[ t1; t2; t3 ]
+      ~matrix:{ ran = [ t1; t2; t3 ]; complete = true }
+      by
+  in
+  let fk = full_kill [ t1; t3 ] in
   let s = survivor [ t1; t2 ] in
   let case ?(digest = fun t -> now t) ?(asked = effort 0) ?(m = mutant ()) name
       file reaching expected =
@@ -1163,6 +1304,42 @@ let reuse_cases =
       (last [ kill ~effort:(effort 3) ~reused:true ~prefix:[ t1 ] [ t1 ] ])
       [ t1 ]
       (Some (kill ~effort:(effort 3) ~prefix:[ t1 ] [ t1 ]));
+    case "a full kill by two tests, asked a full kill" ~asked:full (last [ fk ])
+      [ t1; t2; t3 ] (Some fk);
+    case "a full kill by one test, asked a full kill" ~asked:full
+      (last [ full_kill [ t2 ] ])
+      [ t1; t2; t3 ]
+      (Some (full_kill [ t2 ]));
+    case "a full kill, asked a first kill" (last [ fk ]) [ t1; t2; t3 ] None;
+    case "a first kill, asked a full kill" ~asked:full (last [ k ]) [ t1 ] None;
+    case "a first kill of its whole job, asked a full kill" ~asked:full
+      (last [ kill ~prefix:[ t1; t2; t3 ] [ t3 ] ])
+      [ t1; t2; t3 ] None;
+    case "a full kill whose job has one test less now" ~asked:full (last [ fk ])
+      [ t1; t3 ] None;
+    case "a full kill whose job order changed" ~asked:full (last [ fk ])
+      [ t3; t2; t1 ] None;
+    case "a full kill whose last test has another digest" ~asked:full
+      ~digest:(now ~changes:[ (t3, other_digest) ])
+      (last [ fk ]) [ t1; t2; t3 ] None;
+    case "a full kill whose test that kills nothing has another digest"
+      ~asked:full
+      ~digest:(now ~changes:[ (t2, other_digest) ])
+      (last [ fk ]) [ t1; t2; t3 ] None;
+    case "a full kill whose job did not run each test" ~asked:full
+      (last
+         [
+           kill ~effort:full ~prefix:[ t1; t2; t3 ]
+             ~matrix:{ ran = [ t1 ]; complete = false }
+             [ t1 ];
+         ])
+      [ t1; t2; t3 ] None;
+    case "a full kill that names no test" ~asked:full
+      (last
+         [
+           record ~source_digest:src ~effort:full at_mutant (Verdicts.killed []);
+         ])
+      [ t1 ] None;
   ]
 
 let reused (_, (file, digest, asked, reaching, m, expected)) =
@@ -1179,7 +1356,9 @@ let reused (_, (file, digest, asked, reaching, m, expected)) =
 let reuse =
   group "Reuse"
     [
-      cases "effort_covers compares the retries and the settings"
+      cases
+        "effort_covers compares the retries, the settings, and the flag of \
+         --full-matrix of a kill"
         ~id:(fun (n, _, _, _, _) -> n)
         covers_cases covers;
       cases "reuse gives the last verdict only when its evidence did not change"
@@ -1318,7 +1497,9 @@ let round_trip ((identity, suite, t, test_digests), sample) =
    prefix and effort. *)
 let marked_round_trip () =
   let d c = String.make 32 c in
-  let effort retries pass = { Verdicts.retries; pass; settings = d 'e' } in
+  let effort ?(full_matrix = false) retries pass =
+    { Verdicts.full_matrix; retries; pass; settings = d 'e' }
+  in
   let t =
     collection
       [
@@ -1331,6 +1512,20 @@ let marked_round_trip () =
           (Verdicts.survived [ [ "t" ]; [ "u" ] ]);
         record ~effort:(effort 1 1) (id "lib/a.ml" 4 0 "lt")
           (Verdicts.Unknown (Other "x"));
+        record
+          ~effort:(effort ~full_matrix:true 0 1)
+          ~prefix:(d 'c')
+          ~matrix:{ ran = [ [ "t" ]; [ "g"; "u" ] ]; complete = true }
+          ~reused:true (id "lib/a.ml" 5 0 "lt")
+          (Verdicts.killed [ [ "t" ]; [ "g"; "u" ] ]);
+        record
+          ~effort:(effort ~full_matrix:true 0 1)
+          ~matrix:{ ran = [ [ "t" ] ]; complete = false }
+          (id "lib/a.ml" 6 0 "lt") (Verdicts.killed []);
+        record
+          ~effort:(effort ~full_matrix:true 0 1)
+          (id "lib/a.ml" 7 0 "lt")
+          (Verdicts.survived [ [ "t" ] ]);
       ]
   in
   let test_digests =
@@ -1416,7 +1611,7 @@ let refusal () =
     (String.concat "\n"
        (List.filteri (fun i _ -> i < 3) (String.split_on_char '\n' (read path))))
   @@ __POS_OF__
-       {|windtrap-mutants-v16
+       {|windtrap-mutants-v17
 refused 44 the suite is not deterministic:
 failed twice|};
   equal (option string) (Some reason)
@@ -1456,14 +1651,15 @@ let headers =
     ("the empty file", "");
     ("a coverage file", "windtrap-coverage-v3\n1\n");
     ("the upstream version before", "windtrap-mutants-v5\ntested\n0\n");
-    ("the version before", "windtrap-mutants-v15\ntested\n0\n0\n");
-    ("two versions before", "windtrap-mutants-v14\ntested\n0\n");
-    ("three versions before", "windtrap-mutants-v13\ntested\n0\n");
-    ("four versions before", "windtrap-mutants-v12\ntested\n0\n");
+    ("the version before", "windtrap-mutants-v16\ntested\nsample none\n0\n0\n");
+    ("two versions before", "windtrap-mutants-v15\ntested\n0\n0\n");
+    ("three versions before", "windtrap-mutants-v14\ntested\n0\n");
+    ("four versions before", "windtrap-mutants-v13\ntested\n0\n");
+    ("five versions before", "windtrap-mutants-v12\ntested\n0\n");
     ("a fork version before", "windtrap-mutants-v11\ntested\n0\n");
-    ("a later version", "windtrap-mutants-v17\ntested\nsample none\n0\n0\n");
+    ("a later version", "windtrap-mutants-v18\ntested\nsample none\n0\n0\n");
     ("the magic in uppercase", "WINDTRAP-MUTANTS-V1\n0\n");
-    ("the magic and a digit", "windtrap-mutants-v160\ntested\n0\n0\n");
+    ("the magic and a digit", "windtrap-mutants-v170\ntested\n0\n0\n");
     ("plain text", "hello\nworld\n");
   ]
 
@@ -1476,17 +1672,18 @@ let unknown_format (_, text) =
        loaded)
 
 (* The header of a tested file with no identity and no sample. *)
-let tested = "windtrap-mutants-v16\ntested\nsample none\n"
+let tested = "windtrap-mutants-v17\ntested\nsample none\n"
 let record_prefix = tested ^ "0\n1\n8 lib/a.ml "
 
 (* The fields after the previous outcome of a valid record. *)
-let tail = " 0 1 " ^ zeros ^ " none fresh"
+let tail = " 0 1 " ^ zeros ^ " first none none fresh"
 
-(* A file of one record with [verdict], no previous outcome, a valid effort,
-   [prefix] and [mark]. *)
-let with_tail ?(prefix = "none") ?(mark = "fresh") verdict =
-  strf "%s1 2 1 5 3 add 1 b 1 a 0  %s none 0 1 %s %s %s\n" record_prefix verdict
-    zeros prefix mark
+(* A file of one record with [verdict], no previous outcome, a valid effort
+   with [kills], [prefix], [ran] and [mark]. *)
+let with_tail ?(kills = "first") ?(prefix = "none") ?(ran = "none")
+    ?(mark = "fresh") verdict =
+  strf "%s1 2 1 5 3 add 1 b 1 a 0  %s none 0 1 %s %s %s %s %s\n" record_prefix
+    verdict zeros kills prefix ran mark
 
 (* A file of one valid record, up to its effort. *)
 let effort_prefix =
@@ -1496,19 +1693,19 @@ let effort_prefix =
 let with_digests lines = tested ^ lines ^ "0\n"
 
 (* A file with the sample line [line] and no record. *)
-let with_sample line = "windtrap-mutants-v16\ntested\n" ^ line ^ "\n0\n0\n"
+let with_sample line = "windtrap-mutants-v17\ntested\n" ^ line ^ "\n0\n0\n"
 let seed_42 = "s1:000000000000002a"
 
 let corrupt_files =
   [
-    ("no sample line", "windtrap-mutants-v16\ntested\n0\n0\n");
-    ("a sample line with no percent", "windtrap-mutants-v16\ntested\nsample");
+    ("no sample line", "windtrap-mutants-v17\ntested\n0\n0\n");
+    ("a sample line with no percent", "windtrap-mutants-v17\ntested\nsample");
     ("a sample of 0%", with_sample ("sample 0 " ^ seed_42));
     ("a sample of 100%", with_sample ("sample 100 " ^ seed_42));
     ("a negative sample", with_sample ("sample -1 " ^ seed_42));
     ("a sample that is not a number", with_sample ("sample nan " ^ seed_42));
     ("a sample word", with_sample ("sample half " ^ seed_42));
-    ("no sample seed", "windtrap-mutants-v16\ntested\nsample 50");
+    ("no sample seed", "windtrap-mutants-v17\ntested\nsample 50");
     ("a short sample seed", with_sample "sample 50 s1:2a");
     ("an uppercase sample seed", with_sample "sample 50 s1:00000000000000AA");
     ( "a sample seed of another version",
@@ -1516,10 +1713,10 @@ let corrupt_files =
     ("a decimal sample seed", with_sample "sample 50 42");
     ("a not_sampled record with no sample", with_tail "not_sampled");
     ( "a reused mutant that was not sampled",
-      "windtrap-mutants-v16\ntested\nsample 50 " ^ seed_42
+      "windtrap-mutants-v17\ntested\nsample 50 " ^ seed_42
       ^ "\n0\n1\n8 lib/a.ml 1 2 1 5 3 add 1 b 1 a 0  not_sampled none 0 1 "
-      ^ zeros ^ " none reused\n" );
-    ("the magic line alone", "windtrap-mutants-v16");
+      ^ zeros ^ " first none none reused\n" );
+    ("the magic line alone", "windtrap-mutants-v17");
     ("a negative record count", tested ^ "0\n-1\n");
     ("a record count past the input", tested ^ "0\n99999999\n");
     ( "fewer records than the count",
@@ -1613,17 +1810,17 @@ let corrupt_files =
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 was\n" );
     ( "a previous verdict that is no outcome",
       record_prefix ^ "1 2 1 5 3 add 1 b 1 a 0  killed 0 was unreached\n" );
-    ("a short identity digest", "windtrap-mutants-v16\nexe abcd 1 a\n0\n");
-    ("an empty identity exe", "windtrap-mutants-v16\nexe " ^ digest ^ " 0 \n0\n");
-    ("no status", "windtrap-mutants-v16\n0\n");
-    ("an unknown status", "windtrap-mutants-v16\nwhole\n0\n");
-    ("a refusal past the input", "windtrap-mutants-v16\nrefused 80 r\n0\n");
-    ("a suite past the input", "windtrap-mutants-v16\nsuite 80 s\ntested\n0\n");
-    ("a suite and no status", "windtrap-mutants-v16\nsuite 1 s\n0\n");
+    ("a short identity digest", "windtrap-mutants-v17\nexe abcd 1 a\n0\n");
+    ("an empty identity exe", "windtrap-mutants-v17\nexe " ^ digest ^ " 0 \n0\n");
+    ("no status", "windtrap-mutants-v17\n0\n");
+    ("an unknown status", "windtrap-mutants-v17\nwhole\n0\n");
+    ("a refusal past the input", "windtrap-mutants-v17\nrefused 80 r\n0\n");
+    ("a suite past the input", "windtrap-mutants-v17\nsuite 80 s\ntested\n0\n");
+    ("a suite and no status", "windtrap-mutants-v17\nsuite 1 s\n0\n");
     ( "two suite lines",
-      "windtrap-mutants-v16\nsuite 1 s\nsuite 1 t\ntested\n0\n" );
+      "windtrap-mutants-v17\nsuite 1 s\nsuite 1 t\ntested\n0\n" );
     ( "a suite before the identity",
-      "windtrap-mutants-v16\nsuite 1 s\nexe " ^ digest ^ " 1 a\ntested\n0\n" );
+      "windtrap-mutants-v17\nsuite 1 s\nexe " ^ digest ^ " 1 a\ntested\n0\n" );
     ("bytes after the last record", tested ^ "0\n0\nextra\n");
     ("a negative test count", with_digests "-1\n");
     ("a test count past the input", with_digests "99999999\n");
@@ -1646,13 +1843,28 @@ let corrupt_files =
     ("a short settings word", effort_prefix ^ "0 1 abc none fresh\n");
     ( "an uppercase settings word",
       effort_prefix ^ "0 1 " ^ String.make 32 'A' ^ " none fresh\n" );
-    ("no prefix", effort_prefix ^ "0 1 " ^ zeros ^ "\n");
-    ("a short prefix", effort_prefix ^ "0 1 " ^ zeros ^ " abc fresh\n");
+    ("no kills word", effort_prefix ^ "0 1 " ^ zeros ^ "\n");
+    ("an unknown kills word", with_tail ~kills:"all" "killed 0");
+    ("no prefix", effort_prefix ^ "0 1 " ^ zeros ^ " first\n");
+    ("a short prefix", effort_prefix ^ "0 1 " ^ zeros ^ " first abc fresh\n");
     ( "a prefix on a kill that names no test",
       with_tail ~prefix:digest "killed 0" );
     ("a prefix on a survivor", with_tail ~prefix:digest "survived 1 1 1 t");
-    ("no mark", effort_prefix ^ "0 1 " ^ zeros ^ " none\n");
-    ("an unknown mark", effort_prefix ^ "0 1 " ^ zeros ^ " none maybe\n");
+    ("no ran tests", effort_prefix ^ "0 1 " ^ zeros ^ " full none\n");
+    ("an unknown ran word", with_tail ~kills:"full" ~ran:"whole 0" "killed 0");
+    ("ran tests on a first kill", with_tail ~ran:"complete 0" "killed 0");
+    ("a full kill with no ran tests", with_tail ~kills:"full" "killed 0");
+    ( "ran tests on a survivor",
+      with_tail ~kills:"full" ~ran:"complete 0" "survived 1 1 1 t" );
+    ( "ran tests on an unknown verdict",
+      with_tail ~kills:"full" ~ran:"partial 0" "unknown other 1 x" );
+    ( "a ran test count past the input",
+      with_tail ~kills:"full" ~ran:"complete 99999999" "killed 0" );
+    ( "a ran test name past the input",
+      with_tail ~kills:"full" ~ran:"partial 1 1 80 g" "killed 0" );
+    ("no mark", effort_prefix ^ "0 1 " ^ zeros ^ " first none none\n");
+    ( "an unknown mark",
+      effort_prefix ^ "0 1 " ^ zeros ^ " first none none maybe\n" );
     ("a reused kill that names no test", with_tail ~mark:"reused" "killed 0");
     ("a reused unknown verdict", with_tail ~mark:"reused" "unknown other 1 x");
     ("a reused skip", with_tail ~mark:"reused" "killed_elsewhere 1 x");
@@ -1691,7 +1903,7 @@ let corrupt_reasons () =
     the magic line alone: expected status at offset 20
     a negative record count: negative record count
     a record count past the input: record count exceeds data
-    fewer records than the count: expected file name length at offset 143
+    fewer records than the count: expected file name length at offset 154
     an empty file name: empty file name
     a file name past the input: truncated file name
     line 0: line 0 is not 1-based
@@ -1762,11 +1974,21 @@ let corrupt_reasons () =
     no settings: expected settings digest at offset 104
     a short settings word: "abc" is not a settings digest
     an uppercase settings word: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" is not a settings digest
-    no prefix: expected prefix at offset 137
+    no kills word: expected kills at offset 137
+    an unknown kills word: unknown kills "all"
+    no prefix: expected prefix at offset 143
     a short prefix: "abc" is not a prefix
     a prefix on a kill that names no test: a prefix on a verdict that names no killing test
     a prefix on a survivor: a prefix on a verdict that names no killing test
-    no mark: expected mark at offset 142
+    no ran tests: expected ran tests at offset 147
+    an unknown ran word: unknown ran tests "whole"
+    ran tests on a first kill: ran tests on a verdict that is no full kill
+    a full kill with no ran tests: a full kill with no ran tests
+    ran tests on a survivor: ran tests on a verdict that is no full kill
+    ran tests on an unknown verdict: ran tests on a verdict that is no full kill
+    a ran test count past the input: ran test count exceeds data
+    a ran test name past the input: truncated test name
+    no mark: expected mark at offset 153
     an unknown mark: unknown mark "maybe"
     a reused kill that names no test: a reused verdict that cannot be reused
     a reused unknown verdict: a reused verdict that cannot be reused
@@ -1790,7 +2012,7 @@ let error_messages () =
        ])
   @@ __POS_OF__
        {|
-    f.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v16", found "junk"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
+    f.mutants: not a windtrap verdict file (expected header "windtrap-mutants-v17", found "junk"); files written by other windtrap versions are not readable - delete the stale verdict files, then re-run the mutation tests
     f.mutants: cannot read verdict file: No such file or directory
     f.mutants: corrupt verdict file: unknown verdict "errored"
     |}
@@ -1813,45 +2035,45 @@ let files =
         "format is the magic line, the mutants directory and extension, and \
          the verdict kind" (fun () ->
           equal (list string)
-            [ "windtrap-mutants-v16"; "mutants"; "mutants"; "verdict" ]
+            [ "windtrap-mutants-v17"; "mutants"; "mutants"; "verdict" ]
             Verdicts.[ format.magic; format.dir; format.ext; format.kind ]);
       test
         "save writes the magic line, the count, then the records by identifier"
         (fun () ->
           expect_exact (saved sample)
           @@ __POS_OF__
-               {|windtrap-mutants-v16
+               {|windtrap-mutants-v17
 tested
 sample none
 0
 7
-8 lib/a.ml 1 2 1 7 3 add 5 a - b 5 a + b 0  unreached none 0 1 00000000000000000000000000000000 none fresh
-8 lib/b.ml 3 4 3 10 3 not 6 p && q 12 not (p && q) 0  killed 0 was not_evaluated 0 1 00000000000000000000000000000000 none fresh
-8 lib/b.ml 5 0 5 6 2 or 6 a || b 6 a && b 0  survived 2 1 1 x 2 1 y 1 z was killed 0 1 00000000000000000000000000000000 none fresh
-8 lib/c.ml 7 1 7 6 3 sub 5 a + b 5 a - b 0  not_evaluated none 0 1 00000000000000000000000000000000 none fresh
-8 lib/c.ml 9 0 9 5 3 add 5 a - b 5 a + b 0  outside_tests none 0 1 00000000000000000000000000000000 none fresh
-8 lib/c.ml 11 3 11 8 2 le 5 a < b 6 a <= b 0  unknown other 29 its run was killed by SIGSEGV none 0 1 00000000000000000000000000000000 none fresh
-8 lib/d.ml 1 0 1 5 3 add 5 a - b 5 a + b 32 cccccccccccccccccccccccccccccccc killed_elsewhere 18 default/test/a.exe none 0 1 00000000000000000000000000000000 none fresh
+8 lib/a.ml 1 2 1 7 3 add 5 a - b 5 a + b 0  unreached none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/b.ml 3 4 3 10 3 not 6 p && q 12 not (p && q) 0  killed 0 was not_evaluated 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/b.ml 5 0 5 6 2 or 6 a || b 6 a && b 0  survived 2 1 1 x 2 1 y 1 z was killed 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/c.ml 7 1 7 6 3 sub 5 a + b 5 a - b 0  not_evaluated none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/c.ml 9 0 9 5 3 add 5 a - b 5 a + b 0  outside_tests none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/c.ml 11 3 11 8 2 le 5 a < b 6 a <= b 0  unknown other 29 its run was killed by SIGSEGV none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/d.ml 1 0 1 5 3 add 5 a - b 5 a + b 32 cccccccccccccccccccccccccccccccc killed_elsewhere 18 default/test/a.exe none 0 1 00000000000000000000000000000000 first none none fresh
 |});
       test "save writes each kill and each reason" (fun () ->
           expect_exact (saved kills_and_reasons)
           @@ __POS_OF__
-               {|windtrap-mutants-v16
+               {|windtrap-mutants-v17
 tested
 sample none
 0
 11
-8 lib/k.ml 1 0 1 5 3 add 5 a - b 5 a + b 0  killed 0 none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 2 0 2 5 3 add 5 a - b 5 a + b 0  killed 1 2 4 calc 4 adds none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 3 0 3 5 3 add 5 a - b 5 a + b 0  killed 3 1 4 adds 2 4 calc 4 adds 2 4 calc 4 subs none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 4 0 4 5 3 add 5 a - b 5 a + b 0  unknown deadline 0x1.4p+1 none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 5 0 5 5 3 add 5 a - b 5 a + b 0  unknown deadline 0x1.999999999999ap-4 none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 6 0 6 5 3 add 5 a - b 5 a + b 0  unknown crashed -10 none 21 was killed by SIGSEGV none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 7 0 7 5 3 add 5 a - b 5 a + b 0  unknown crashed none 3 38 ended when code under test called exit none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 8 0 8 5 3 add 5 a - b 5 a + b 0  unknown crashed none none 5 ended none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 9 0 9 5 3 add 5 a - b 5 a + b 0  unknown memory 512 none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 10 0 10 5 3 add 5 a - b 5 a + b 0  unknown flaky_kill 2 4 calc 4 adds 37 its killing test calc adds also fails none 0 1 00000000000000000000000000000000 none fresh
-8 lib/k.ml 11 0 11 5 3 add 5 a - b 5 a + b 0  unknown other 30 the suite is not deterministic none 0 1 00000000000000000000000000000000 none fresh
+8 lib/k.ml 1 0 1 5 3 add 5 a - b 5 a + b 0  killed 0 none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 2 0 2 5 3 add 5 a - b 5 a + b 0  killed 1 2 4 calc 4 adds none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 3 0 3 5 3 add 5 a - b 5 a + b 0  killed 3 1 4 adds 2 4 calc 4 adds 2 4 calc 4 subs none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 4 0 4 5 3 add 5 a - b 5 a + b 0  unknown deadline 0x1.4p+1 none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 5 0 5 5 3 add 5 a - b 5 a + b 0  unknown deadline 0x1.999999999999ap-4 none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 6 0 6 5 3 add 5 a - b 5 a + b 0  unknown crashed -10 none 21 was killed by SIGSEGV none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 7 0 7 5 3 add 5 a - b 5 a + b 0  unknown crashed none 3 38 ended when code under test called exit none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 8 0 8 5 3 add 5 a - b 5 a + b 0  unknown crashed none none 5 ended none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 9 0 9 5 3 add 5 a - b 5 a + b 0  unknown memory 512 none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 10 0 10 5 3 add 5 a - b 5 a + b 0  unknown flaky_kill 2 4 calc 4 adds 37 its killing test calc adds also fails none 0 1 00000000000000000000000000000000 first none none fresh
+8 lib/k.ml 11 0 11 5 3 add 5 a - b 5 a + b 0  unknown other 30 the suite is not deterministic none 0 1 00000000000000000000000000000000 first none none fresh
 |});
       test "load reads back each kill and each reason" (fun () ->
           let path = Filename.concat (temp_dir ()) "saved.mutants" in
@@ -1877,7 +2099,7 @@ sample none
           expect_exact
             (saved ~identity:{ exe = "test/a.exe"; digest } Verdicts.empty)
           @@ __POS_OF__
-               {|windtrap-mutants-v16
+               {|windtrap-mutants-v17
 exe aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 10 test/a.exe
 tested
 sample none
@@ -1890,7 +2112,7 @@ sample none
                ~identity:{ exe = "test/a.exe"; digest }
                ~suite:"lib/a b.ml\n" Verdicts.empty)
           @@ __POS_OF__
-               {|windtrap-mutants-v16
+               {|windtrap-mutants-v17
 exe aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 10 test/a.exe
 suite 11 lib/a b.ml
 
@@ -1933,8 +2155,8 @@ sample none
          and below 100, and writes nothing"
         ~id:fst bad_samples refused_sample;
       test
-        "load reads back each mark, prefix and effort, and the test digests \
-         sorted"
+        "load reads back each mark, prefix, matrix and effort, and the test \
+         digests sorted"
         marked_round_trip;
       cases
         "save raises Invalid_argument on a malformed or repeated test digest \

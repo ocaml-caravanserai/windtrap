@@ -1524,8 +1524,15 @@ let elsewhere =
     source_digest = None;
     verdict = Verdicts.killed [];
     previous = Some `Survived;
-    effort = { retries = 0; pass = 1; settings = String.make 32 '0' };
+    effort =
+      {
+        full_matrix = false;
+        retries = 0;
+        pass = 1;
+        settings = String.make 32 '0';
+      };
     prefix = None;
+    matrix = None;
     reused = false;
   }
 
@@ -2744,7 +2751,7 @@ let plant_old p =
 let old_warning p =
   strf
     "windtrap: warning: --skip-killed ignores %s/%s: not a windtrap verdict \
-     file (expected header \"windtrap-mutants-v16\", found \
+     file (expected header \"windtrap-mutants-v17\", found \
      \"windtrap-mutants-v13\"); files written by other windtrap versions are \
      not readable - delete the stale verdict files, then re-run the mutation \
      tests\n"
@@ -3452,8 +3459,9 @@ let refused_between () =
    run replaces it. *)
 let unloadable_earlier =
   [
-    ("a file of the format before", "windtrap-mutants-v14\ntested\n0\n");
-    ("a corrupt file", "windtrap-mutants-v16\ntested\nsample none\n0\n1\njunk\n");
+    ( "a file of the format before",
+      "windtrap-mutants-v16\ntested\nsample none\n0\n0\n" );
+    ("a corrupt file", "windtrap-mutants-v17\ntested\nsample none\n0\n1\njunk\n");
   ]
 
 let unloadable_earlier_file (_, text) =
@@ -3464,7 +3472,7 @@ let unloadable_earlier_file (_, text) =
   equal (option (list string)) None (unstable r.out);
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option (list string)) (Some none_rows) (previous_rows r);
-  starts_with ~prefix:"windtrap-mutants-v16\n" (read path)
+  starts_with ~prefix:"windtrap-mutants-v17\n" (read path)
 
 let narrowed_run () =
   let path = verdicts_path () in
@@ -5298,12 +5306,12 @@ let last_files () =
   equal string "exited 0" r.status;
   equal text
     (ignored_warning
-       "not a windtrap verdict file (expected header \"windtrap-mutants-v16\", \
+       "not a windtrap verdict file (expected header \"windtrap-mutants-v17\", \
         found \"windtrap-mutants-v14\")")
     r.err;
   equal (option (list string)) (Some green_rows) (rows r);
   equal (option string) (Some (reused_line 0)) (reused_of r.out);
-  write path "windtrap-mutants-v16\ntested\nsample none\n0\n1\njunk\n";
+  write path "windtrap-mutants-v17\ntested\nsample none\n0\n1\njunk\n";
   let r = second_run () in
   equal string "exited 0" r.status;
   contains ~sub:"windtrap: warning: --incremental ignores " r.err;
@@ -5464,6 +5472,219 @@ let incremental_reuse =
         "a signal during the probe commits no reused verdict, and the same run \
          without the signal reuses the survivor"
         probe_stopped;
+    ]
+
+(* The full matrix *)
+
+let full = "--full-matrix"
+
+(* The records of the verdict file that [r] left. *)
+let file_records r =
+  let path = Filename.concat (temp_dir ()) "run.mutants" in
+  write path (Option.get r.file).raw;
+  match Verdicts.load path with
+  | Ok f -> Verdicts.records f.verdicts
+  | Error e -> failwith (Format.asprintf "%a" Verdicts.pp_error e)
+
+let path_row = String.concat " \u{203a} "
+
+(* The tests that the job of each kill ran, as the file of [r] records them. *)
+let matrices r =
+  List.filter_map
+    (fun (record : Verdicts.record) ->
+      Option.map
+        (fun (m : Verdicts.matrix) ->
+          strf "%s:%d ran %s%s" (local record.id.file) record.id.line
+            (String.concat "; " (List.map path_row m.ran))
+            (if m.complete then "" else ", partial"))
+        record.matrix)
+    (file_records r)
+
+(* The flag of --full-matrix of each record of the file of [r]. *)
+let kill_kinds r =
+  List.map
+    (fun (record : Verdicts.record) ->
+      strf "%s:%d %s" (local record.id.file) record.id.line
+        (if record.effort.full_matrix then "full" else "first"))
+    (file_records r)
+
+let strong_tests =
+  String.concat "; " (List.map path_row [ negatives; positives; to_zero ])
+
+(* Each of the three tests of [strong] kills the mutant of [sub]. *)
+let each_kill_recorded () =
+  let r = spawn [ mutate; full ] in
+  whole r;
+  equal (option (list string)) (Some green_rows) (rows r);
+  equal
+    (option (list string))
+    (Some [ "subject.ml:15 killed by " ^ strong_tests ])
+    (kills r);
+  equal (list string) [ "subject.ml:15 ran " ^ strong_tests ] (matrices r);
+  equal (list string)
+    (List.map (strf "subject.ml:%d full") [ 15; 18; 21; 27 ])
+    (kill_kinds r);
+  let r = spawn [ mutate ] in
+  whole r;
+  equal (list string) [] (matrices r);
+  equal (list string)
+    (List.map (strf "subject.ml:%d first") [ 15; 18; 21; 27 ])
+    (kill_kinds r)
+
+let first_pins = ("MUTATE_FIRST_PINS", "1")
+
+(* The kill of the mutant of [widen] by [by], and the matrix [ran], in the
+   file of [k]. *)
+let killed_and_ran (k : kill_ran) ~by ~ran =
+  equal
+    (option (list string))
+    (Some [ "subject.ml:18 killed by " ^ by ])
+    (kills k.r);
+  equal (list string) [ "subject.ml:18 ran " ^ ran ] (matrices k.r)
+
+(* [a] and then [b] kill the mutant of [widen]. Without the flag the job
+   stops after [a], and [b] runs only in the dry run and the probe. *)
+let two_killing_tests () =
+  let k = kill_run ~env:[ first_pins; fail_armed ] [ full ] in
+  ended_well k.r;
+  equal string killed_outcome (outcome k.r.out);
+  killed_and_ran k ~by:(strf "%s; %s" b a) ~ran:(strf "%s; %s" b a);
+  equal (pair int int) (3, 3) (k.a_runs, k.b_runs);
+  let k = kill_run ~env:[ first_pins; fail_armed ] [] in
+  ended_well k.r;
+  equal
+    (option (list string))
+    (Some [ strf "subject.ml:18 killed by %s" a ])
+    (kills k.r);
+  equal (pair int int) (3, 2) (k.a_runs, k.b_runs)
+
+(* [b] fails under the mutant when [a] ran in its worker. A fresh worker runs
+   [b] after the kill by [a], so [b] passes. *)
+let fresh_worker_after_a_kill () =
+  let k = kill_run ~env:[ first_pins; ("MUTATE_LEAK", "1") ] [ full ] in
+  ended_well k.r;
+  killed_and_ran k ~by:a ~ran:(strf "%s; %s" b a);
+  equal int 3 k.b_runs
+
+(* The first reaching test fails before the first evaluation, and the last
+   pins [widen]. *)
+let failure_before_the_evaluation () =
+  let r = spawn ~env:[ suite "unprimed_kill" ] [ mutate; full ] in
+  ended_well r;
+  equal
+    (option (list string))
+    (Some [ "subject.ml:18 killed by unprimed \u{203a} widen adds" ]) (kills r);
+  equal (list string)
+    [
+      "subject.ml:18 ran unprimed \u{203a} fails unless primed; unprimed \
+       \u{203a} widen adds";
+    ]
+    (matrices r)
+
+(* [a] kills the mutant, and then [b] ends its job at run 3, the job, by
+   [ending]. *)
+let kill_before_an_end ending () =
+  let k = kill_run ~env:[ first_pins; (ending, "3") ] [ full ] in
+  ended_well k.r;
+  equal string killed_outcome (outcome k.r.out);
+  killed_and_ran k ~by:a ~ran:(a ^ ", partial")
+
+(* [b] kills the mutant at run 3, and then the release of its fixture hangs.
+   Without the flag the run is unknown. *)
+let kill_before_a_hanging_release () =
+  let env = [ fail_at "3"; ("MUTATE_RELEASE_HANG_AT", "3") ] in
+  let k = kill_run ~env [] in
+  ended_well k.r;
+  equal string unknown_outcome (outcome k.r.out);
+  let k = kill_run ~env [ full ] in
+  ended_well k.r;
+  equal string killed_outcome (outcome k.r.out);
+  killed_and_ran k ~by:b ~ran:(strf "%s; %s, partial" b a)
+
+(* The check runs [a] alone, three times with no mutant, and keeps the two
+   killing tests. *)
+let check_of_the_first_kill () =
+  let k = kill_run ~env:[ first_pins; fail_armed ] [ full; retry_once ] in
+  ended_well k.r;
+  equal string killed_outcome (outcome k.r.out);
+  killed_and_ran k ~by:(strf "%s; %s" b a) ~ran:(strf "%s; %s" b a);
+  equal (pair int int) (6, 3) (k.a_runs, k.b_runs)
+
+(* [b] kills at run 3, and fails with no mutant in the check run 4. *)
+let flaky_first_kill () =
+  let k = kill_run ~env:[ fail_at "3,4" ] [ full; retry_once ] in
+  ended_well k.r;
+  equal int 4 k.b_runs;
+  equal (option (list string)) (flaky_rows 4) (rows k.r);
+  equal (list string) [] (matrices k.r)
+
+(* A kill is reused only when the two runs have the flag, or neither has
+   it. A survivor is reused in each case. *)
+let full_reuse () =
+  ignore (first_run ~args:[ full ] ());
+  let r = second_run ~args:[ full ] () in
+  as_green 2 r;
+  equal (option (list string)) both_reused (marks r);
+  equal
+    (option (list string))
+    (Some [ "subject.ml:15 killed by " ^ strong_tests ])
+    (kills r);
+  equal (list string) [ "subject.ml:15 ran " ^ strong_tests ] (matrices r);
+  let r = second_run ~args:[ full ] () in
+  as_green 2 r;
+  let r = second_run () in
+  as_green 1 r;
+  equal (option (list string)) (marked "fresh" "reused") (marks r);
+  equal (list string) [] (matrices r);
+  let r = second_run ~args:[ full ] () in
+  as_green 1 r;
+  equal (option (list string)) (marked "fresh" "reused") (marks r)
+
+(* A test after the killing test in the job changed. *)
+let full_reuse_compares_each_test () =
+  ignore (first_run ~args:[ full ] ());
+  rewrite ~tests:(digest_of to_zero (String.make 32 'e')) Fun.id;
+  let r = second_run ~args:[ full ] () in
+  as_green 1 r;
+  equal (option (list string)) (marked "fresh" "reused") (marks r);
+  ignore (first_run ());
+  rewrite ~tests:(digest_of to_zero (String.make 32 'e')) Fun.id;
+  let r = second_run () in
+  as_green 2 r
+
+let full_matrix =
+  group "Full matrix"
+    [
+      test
+        "each reaching test that kills a mutant is in its kill, with the tests \
+         of its job and the flag of each record"
+        each_kill_recorded;
+      test "two tests that kill a mutant are both in its kill" two_killing_tests;
+      test "a fresh worker runs the tests after a kill"
+        fresh_worker_after_a_kill;
+      test "a failure before the first evaluation does not kill"
+        failure_before_the_evaluation;
+      test "a kill before an expiry stays a kill"
+        (kill_before_an_end "MUTATE_HANG_AT");
+      test
+        "a kill before a release that hangs stays a kill, and is unknown \
+         without the flag"
+        kill_before_a_hanging_release;
+      test "a kill before a crash stays a kill"
+        (kill_before_an_end "MUTATE_EXIT_AT");
+      test
+        "under --mutate-retry the check runs only up to the first killing test"
+        check_of_the_first_kill;
+      test "a first kill that its check does not trust is unknown"
+        flaky_first_kill;
+      test
+        "--incremental reuses a kill only from a run with the same flag, and a \
+         survivor from each run"
+        full_reuse;
+      test
+        "under the flag, a change of a test after the first killing test stops \
+         the reuse of the kill"
+        full_reuse_compares_each_test;
     ]
 
 (* The rewrite filter *)
@@ -6002,6 +6223,7 @@ let () =
          memory_records;
          killing_tests;
          incremental_reuse;
+         full_matrix;
          rewrite_filter;
          sampling;
          evidence;

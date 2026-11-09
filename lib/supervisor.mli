@@ -128,7 +128,8 @@ type job = {
   bail : bool;
       (** Whether the job stops at its first counted failure in or after the
           test that first evaluated the armed site, or at its first counted
-          failure when a worker is not [witnessed]. *)
+          failure when a worker is not [witnessed]. When [bail] is [false] and
+          the job is [armed], its worker retires after each such failure. *)
   armed : (Windtrap_runtime.Mutate.id * int) option;
       (** The mutant that each of its workers arms before its first case, with
           its budget ([Windtrap_runtime.Mutate.arm]). *)
@@ -200,8 +201,11 @@ val fresh :
     parent sends the job's cases one at a time, and [Finish] after the last, or
     under [bail] after the first counted failure in or after the test that first
     evaluated the armed site. A worker that retires leaves the rest of the job
-    to a fresh worker, which arms the mutant again. Coverage counted by a worker
-    is dropped, since a mutant changed what the program does.
+    to a fresh worker, which arms the mutant again with its budget. A worker of
+    an [armed] job without [bail] retires after each such failure, so the
+    failure leaves no state to the next case. The first evaluation of the job
+    stays that of its first worker that evaluated the site. Coverage counted by
+    a worker is dropped, since a mutant changed what the program does.
 
     At most each 0.25 s, the parent reads the resident memory of each worker
     ({!Os.memory_of_pid}). It kills a worker above [config.mutate_memory] MB

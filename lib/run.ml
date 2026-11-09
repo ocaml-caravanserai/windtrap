@@ -70,6 +70,7 @@ type config = {
   mutate_memory : int;
   crash_kills : bool;
   incremental : bool;
+  full_matrix : bool;
   github : bool;
   invocation : invocation;
   broadcast : broadcast;
@@ -108,6 +109,7 @@ let default_config () =
     mutate_memory = 1024;
     crash_kills = false;
     incremental = false;
+    full_matrix = false;
     github = false;
     invocation = `Mirrors;
     broadcast = not_broadcast;
