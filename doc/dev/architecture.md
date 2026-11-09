@@ -439,6 +439,14 @@ a lossy `%g` spelling is asked for at the call site.
   verdict does, because the suite reached the mutant and did not test it.
   A skip that stands in a merge is an exact kill that the hash did not
   judge, so the estimate adds it as it is and does not scale it.
+- The flag of `--full-matrix` is a field of the effort of each record,
+  not of the file, for the reason of the other parts of the effort. It
+  is the first field of the effort, so the smallest effort of a merge has
+  the flag only when each kill has it. A kill under the flag keeps the
+  tests that its job ran. `windtrap mutants --tests` needs them to find
+  the tests that reach a killed mutant and kill nothing. Under the flag,
+  a fresh worker runs the tests after each kill, so a failing test
+  leaves no state and no count of evaluations to the next test.
 
 **The runtime (`Windtrap_runtime.Mutate`, `.Coverage`).**
 
