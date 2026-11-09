@@ -111,6 +111,23 @@ let family (m : Mutate.mutant) =
 
 let families mutants = List.sort_uniq String.compare (List.map family mutants)
 
+(* Each family of the rewriter, as [family] names it. *)
+let every_family =
+  [
+    "ari";
+    "bit";
+    "bool";
+    "cmp";
+    "con";
+    "del";
+    "fmul";
+    "int";
+    "mul";
+    "neg";
+    "none";
+    "tail";
+  ]
+
 let duplicates names =
   let rec loop acc = function
     | a :: (b :: _ as rest) ->
@@ -145,22 +162,7 @@ let catalogue =
   group "The catalogue"
     [
       test "each family is catalogued" (fun () ->
-          equal (list string)
-            [
-              "ari";
-              "bit";
-              "bool";
-              "cmp";
-              "con";
-              "del";
-              "fmul";
-              "int";
-              "mul";
-              "neg";
-              "none";
-              "tail";
-            ]
-            (families (fixture_catalogue ())));
+          equal (list string) every_family (families (fixture_catalogue ())));
       test "an identifier names one site" (fun () ->
           let id (m : Mutate.mutant) = Mutate.id_to_string m.id in
           equal (list string) []
@@ -231,22 +233,7 @@ let observable_families () =
         String.equal (Filename.basename m.id.file) "mutsem_order.ml")
       (fixture_catalogue ())
   in
-  equal (list string)
-    [
-      "ari";
-      "bit";
-      "bool";
-      "cmp";
-      "con";
-      "del";
-      "fmul";
-      "int";
-      "mul";
-      "neg";
-      "none";
-      "tail";
-    ]
-    (families (List.filter changes mutants));
+  equal (list string) every_family (families (List.filter changes mutants));
   equal ~msg:"after disarming"
     (list (pair string string))
     original (instrumented_battery ())

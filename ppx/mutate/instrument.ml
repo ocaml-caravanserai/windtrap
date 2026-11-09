@@ -128,6 +128,9 @@ let operators =
     ("||", (Con, "and", "&&"));
   ]
 
+let family_of name =
+  Option.map (fun (family, _, _) -> family) (List.assoc_opt name operators)
+
 (* A family keeps its sites only where its operators are Stdlib's: [ari],
    [mul], [fmul] and [bit] name their replacement, [con] turns [&&] into an
    [if], and [cmp] swaps operands of one type. A binding that this pass sees
@@ -492,15 +495,16 @@ let same a b =
    [int], but on floats [-0. +. 0.] is [0.] and [-0. -. 0.] is [-0.]. [x * 1]
    and [x / 1] are [x], and [x * -1] and [x / -1] are [-x], [min_int] too.
    IEEE 754 gives the same rule for floats. A shift by [0] is [x], and a
-   shift of [0] is [0]. [a land a] and [a lor a] are [a]. [x mod 1] is [0] but
-   [x * 1] is [x], and [a lxor a] is [0] but [a land a] is [a]. *)
+   shift of [0] is [0]. [a land a], [a lor a], [a && a] and [a || a] are [a].
+   [x mod 1] is [0] but [x * 1] is [x], and [a lxor a] is [0] but [a land a]
+   is [a]. *)
 let neutral app =
   match app.name with
   | "+" | "-" -> is_int 0 app.right
   | "*" | "/" -> is_int 1 app.right || is_int (-1) app.right
   | "*." | "/." -> is_float 1. app.right || is_float (-1.) app.right
   | "lsl" | "lsr" | "asr" -> is_int 0 app.right || is_int 0 app.left
-  | "land" | "lor" -> is_pure app.left && same app.left app.right
+  | "land" | "lor" | "&&" | "||" -> is_pure app.left && same app.left app.right
   | _ -> false
 
 (* Stdlib scope *)
@@ -657,8 +661,7 @@ type pin = Operands | Ints | Floats
 
 (* The pin of a Stdlib operator of [ari], [mul], [fmul] or [bit], from the
    type of its operands. *)
-let numbers name =
-  match name with "+." | "-." | "*." | "/." -> Floats | _ -> Ints
+let numbers name = if String.ends_with ~suffix:"." name then Floats else Ints
 
 let pin_type ~loc ~module_name pin =
   let name, args =
@@ -899,8 +902,7 @@ class instrumenter ~keeps ~module_name =
       || (message && (mutant.rewrite = "int" || mutant.rewrite = "bool"))
       ||
       match mutant.guard with
-      | Operator (app, Replace _) -> neutral app
-      | Operator (app, Branch) -> is_pure app.left && same app.left app.right
+      | Operator (app, (Replace _ | Branch)) -> neutral app
       | Neg | Operator (_, (Negate | Swap)) -> branches
       | Literal _ | Nothing | Tail _ | Delete -> false
 
@@ -956,8 +958,7 @@ class instrumenter ~keeps ~module_name =
                   | Some (_, _, app) when app.name = "+" || app.name = "-" ->
                       true
                   | Some (_, _, app)
-                    when List.mem app.name [ "*"; "/"; "mod" ] && self#kept Mul
-                    ->
+                    when family_of app.name = Some Mul && self#kept Mul ->
                       true
                   | Some (_, c, app) when keeps Cmp && c <> Ordinary ->
                       boundary_move ~constant_right:(is_child app.right)
@@ -1105,7 +1106,6 @@ class instrumenter ~keeps ~module_name =
           | None -> value
           | Some index -> negation ~loc ~module_name ~index value)
       | Operator (app, guard) -> (
-          let stdlib = opens = [] in
           let context =
             match guard with
             | Branch -> Boolean
@@ -1137,7 +1137,7 @@ class instrumenter ~keeps ~module_name =
               | Branch -> branch ~loc ~module_name ~index e app left right
               | Replace replacement ->
                   let pin =
-                    if stdlib then self#pin (numbers app.name) else None
+                    if opens = [] then self#pin (numbers app.name) else None
                   in
                   binary ~loc ~module_name ~index ~pin e app left right
                     ~armed_arm:(fun l r -> apply ~loc replacement [ l; r ])))
@@ -1395,7 +1395,7 @@ class instrumenter ~keeps ~module_name =
     (* An [open] or an [include] is open for the items that follow it, to
        the end of its structure. *)
     method! structure items =
-      let outer = (suppressed, opens) in
+      let outer_suppressed = suppressed and outer_opens = opens in
       let items =
         List.map
           (fun si ->
@@ -1408,9 +1408,8 @@ class instrumenter ~keeps ~module_name =
             si)
           items
       in
-      let s, o = outer in
-      suppressed <- s;
-      opens <- o;
+      suppressed <- outer_suppressed;
+      opens <- outer_opens;
       items
 
     method! extension extension = extension
