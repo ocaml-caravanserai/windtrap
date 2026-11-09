@@ -128,10 +128,12 @@ val execute_and_report :
     The [by] of the kill holds each such failing test that is not marked xfail.
     A failure before the first evaluation does not count, as without the flag. A
     kill stays a kill when the job then passes its deadline or its memory limit,
-    or loses its worker. Without the flag, such a job is unknown. The record of
-    the kill keeps the tests that ran in its job, and if the job ran each of
-    them ({!Windtrap_runtime.Verdicts.type-matrix}). The effort of each record
-    of the run has the flag. A survivor costs the same as without the flag.
+    or loses its worker. Without the flag, such a job is unknown.
+
+    The record of the kill keeps the tests that ran in its job, and if the job
+    ran each of them ({!Windtrap_runtime.Verdicts.type-matrix}). The effort of
+    each record of the run has the flag. A survivor costs the same as without
+    the flag.
 
     {b Retries.} Each pass after the first runs again the jobs of the mutants
     that survived the pass before it, with the same cases, deadline and budget,

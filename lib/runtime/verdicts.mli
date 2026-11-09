@@ -388,12 +388,12 @@ val reuse :
       [through t reaching] is [p.prefix], and {!effort_covers} [`Killed] holds
       for [~judged:p.effort ~asked:effort]. The compared tests are
       [through t reaching]. A kill that names several tests is not reused. Under
-      [effort.full_matrix], [p.verdict] is a {!Killed} that names a test, each
-      of its tests is in [reaching], its matrix is complete, the
+      [effort.full_matrix], [p.verdict] is a {!Killed} that names a test, and
+      each of its tests is in [reaching]. Also, its matrix is complete, the
       {!prefix_digest} of [reaching] is [p.prefix], and {!effort_covers}
       [`Killed] holds. The compared tests are [reaching]. A kill whose job did
-      not run each of its tests is not reused, so a later run completes its
-      matrix. Or [p.verdict] is a {!Survived} whose reaching tests are those of
+      not run each of its tests is not reused, so a later run tests the mutant
+      again. Or [p.verdict] is a {!Survived} whose reaching tests are those of
       [reaching], as sets, and {!effort_covers} [`Survived] holds. The compared
       tests are [reaching].
     + For each compared test [t], [recorded t] is [Some d] and [digest t] is

@@ -992,7 +992,7 @@ without it. Under the flag, each killing test reaches the mutant in this
 dry run. The tests of the job of this run are all the tests of the job
 of the kill, in the same order, and their source files did not change.
 The job of the kill also ran each of its tests. Thus a kill before an
-expiry or a crash gets a job again, and the next run records all its
+expiry or a crash gets a job again, and the next run can record all its
 tests. The run uses a survivor again with or without the flag.
 
 A kill by a fixture release or by an `at_exit` function names no test.
@@ -1458,11 +1458,11 @@ reaching tests, up to the deadline of the job. A survivor costs the
 same as without the flag, because its job runs all its reaching tests
 in each case.
 
-Each kill starts a fresh worker, which releases the fixtures of the
-last worker and sets them up again. This time is part of the deadline
-of the job. Thus a slow shared fixture with many killing tests can
-pass the deadline, and the record of the kill then holds only a part
-of the tests of its job.
+After each kill, the worker releases its fixtures and ends, and a fresh
+worker sets them up again. This time is part of the deadline of the
+job. Thus a slow shared fixture with many killing tests can pass the
+deadline. The record of the kill then holds only a part of the tests of
+its job.
 
 After each kill, a fresh worker runs the rest of the job, with the
 mutant armed again. Thus a failing test leaves no state to the next
@@ -1540,13 +1540,15 @@ sample in another file stops this count. A test of that file can kill
 the mutant.
 
 The counts come from the verdict files. A kill with no full matrix names
-only its first killing test, for example a kill of a run without
-`--full-matrix`, or a kill that a scoped run kept from an earlier run. A
-mutant that a run skipped (`--skip-killed`) names no test. Thus the
-tests of a file with such a kill or skip have `-` in `only`, and they
-are not in the section of the tests that kill no mutant. A note on
-standard error names these files and tells the cause. When each file
-has such a kill, the note names no file.
+only its first killing test. An example is a kill of a run without
+`--full-matrix`, also when a later scoped run kept it. A mutant that a
+run skipped (`--skip-killed`) names no test. Thus the tests of such a
+file have `-` in `only`. They are not in the section of the tests that
+kill no mutant.
+
+A note on standard error names these files and tells the cause. When
+each file that tested its suite has such a kill or skip, the note names
+no file.
 
 A file with no kill gives exact counts also without the flag, because
 no job of its run stopped at a kill. Another note tells when a suite

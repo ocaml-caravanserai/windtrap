@@ -239,16 +239,17 @@
 
     A test is the path of a test in one file, with the executable and the suite
     of the file. It reaches a mutant when the file holds the mutant as a
-    survivor that names it. It also reaches a mutant when the file holds the
-    mutant as a kill that names it in its killing tests or in the tests that its
-    job ran ([Windtrap_runtime.Verdicts.type-matrix]). An unknown verdict, a
-    skip and a mutant out of a sample give no reach. A test that reaches no
-    mutant has no row.
+    survivor that names it. It also reaches a mutant when a kill of the file
+    names it among the killing tests. The same applies when the job of the kill
+    ran it ([Windtrap_runtime.Verdicts.type-matrix]). An unknown verdict, a skip
+    and a mutant out of a sample give no reach. A test that reaches no mutant
+    has no row.
 
     A row gives:
     - The label of the file. When two files of different executables have one
-      label, it is the executable that the file records, or the path of the file
-      when it records none.
+      label, the label is the executable that the file records. When the file
+      records no executable, the label is the path of the file. The notes name a
+      file with the same label.
     - The path of the test, with the suite when two suites of an executable have
       that path, as in a survivor block.
     - The number of mutants whose kill names the test.
