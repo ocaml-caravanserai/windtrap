@@ -349,10 +349,12 @@ let rec unary_minus e =
       | Some { fname = ("~-" | "~-.") as name; _ } -> Some name
       | Some _ | None -> None)
 
-(* [apply ~loc name args] applies the bare operator [name] to [args]. *)
-let apply ~loc name args =
+(* [apply ~loc name args] applies the bare operator [name], with the
+   attributes [attributes], to [args]. *)
+let apply ~loc ?(attributes = []) name args =
+  let operator = pexp_ident ~loc { txt = Lident name; loc } in
   pexp_apply ~loc
-    (pexp_ident ~loc { txt = Lident name; loc })
+    { operator with pexp_attributes = attributes }
     (List.map (fun arg -> (Nolabel, arg)) args)
 
 (* A text is printed from the parsetree, since a preprocessor cannot rely on
@@ -419,10 +421,18 @@ let mutant ~keeps ~declares context e =
           | Ldot (path, _) -> Ldot (path, rewrite)
           | _ -> Lident rewrite
         in
-        let replaced =
-          pexp_apply ~loc (pexp_ident ~loc { txt; loc }) [ (Nolabel, u.arg) ]
+        let replaced attributes =
+          let fn = pexp_ident ~loc { txt; loc } in
+          pexp_apply ~loc
+            { fn with pexp_attributes = attributes }
+            [ (Nolabel, u.arg) ]
         in
-        Some { guard = Recount replaced; rewrite; after = render replaced }
+        Some
+          {
+            guard = Recount (replaced u.fn.pexp_attributes);
+            rewrite;
+            after = render (replaced []);
+          }
     | Some (Pos, rewrite) when keeps Pos -> (
         match u.arg.pexp_desc with
         | Pexp_constant _ -> neg ()
@@ -780,7 +790,8 @@ let negation ~loc ~module_name ~index value =
 (* [cmp] on an ordering, [ari], [mul], [fmul], [bit] and [left]:
    [let l, r = left, right in if armed then ... else l op r], where the
    disarmed arm is the application of [e] rebuilt over the binders, with its
-   location and its attributes.
+   location and its attributes. The replacement operator of the armed arm has
+   the attributes of the source operator.
 
    The type-checker reads the tuple left to right, as it reads the arguments
    of an application, so a qualified field of the left operand still resolves
@@ -951,8 +962,8 @@ let tail ~loc ~module_name ~index e value t =
     else [%e copy]]
 
 (* A counter: [if armed then decr r' else incr r], where [r'] is a copy of
-   the pure operand [r], as in [tail], and [decr] has the path of the source.
-   The disarmed arm is the site, with its location and its attributes. The
+   the pure operand [r], as in [tail], and [decr] has the path and the
+   attributes of the source [incr]. The disarmed arm is the site, with its location and its attributes. The
    application gives [r'] the expected type of [r], so the guard has no
    constraint, which would name [Stdlib.ref] or [Stdlib.Atomic.t]. *)
 let recount ~loc ~module_name ~index e replaced =
@@ -1378,7 +1389,9 @@ class instrumenter ~keeps ~declares ~module_name =
                     if opens = [] then self#pin (numbers app.name) else None
                   in
                   binary ~loc ~module_name ~index ~pin e app left right
-                    ~armed_arm:(fun l r -> apply ~loc replacement [ l; r ])
+                    ~armed_arm:(fun l r ->
+                      apply ~loc ~attributes:app.operator.pexp_attributes
+                        replacement [ l; r ])
               | Keep_left ->
                   binary ~loc ~module_name ~index ~pin:(self#pin Lists) e app
                     left right ~armed_arm:(fun l _ -> l)))

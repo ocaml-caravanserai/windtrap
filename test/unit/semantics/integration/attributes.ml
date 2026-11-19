@@ -27,3 +27,15 @@ let below x y =
 
 let negated y = -(match y with Some z -> z) [@ocaml.warning "-8"]
 let appended x y = (x @ match y with Some z -> z) [@ocaml.warning "-8"]
+
+(* A warning attribute on the operator or the counter of a site covers the
+   operator or the counter of the armed arm too. Warning 44 reports the
+   [open] that shadows the replacement. *)
+
+let opened_operator x y =
+  let open Bound_operators in
+  (( + ) [@warning "-44"]) x y
+
+let opened_counter (a : int Atomic.t) =
+  let open Atomic in
+  (incr [@warning "-44"]) a

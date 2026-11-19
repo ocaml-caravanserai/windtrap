@@ -4,6 +4,7 @@
   aliased
   arid
   attributes
+  bound_operators
   forced
   logs
   no_guard
@@ -74,6 +75,30 @@
  (preprocess
   (pps ppx_windtrap.mutate)))
 
+; The counters of a module that deprecates them, under the flag -open,
+; with all alerts fatal.
+
+(library
+ (name windtrap_mutate_deprecated)
+ (modules windtrap_mutate_deprecated))
+
+(library
+ (name windtrap_mutate_alerted)
+ (modules alerted)
+ (libraries windtrap_mutate_deprecated)
+ (flags
+  (:standard
+   -open
+   Windtrap_mutate_deprecated
+   -alert
+   ++all
+   -w
+   +a-70
+   -warn-error
+   +a))
+ (preprocess
+  (pps ppx_windtrap.mutate)))
+
 ; The operators of Base under the flag -open Base, which the rewriter does
 ; not see. Only where Base is installed.
 
@@ -119,4 +144,5 @@
   windtrap_mutate_loose
   windtrap_mutate_scoped
   windtrap_mutate_listed
+  windtrap_mutate_alerted
   windtrap_mutate_both))
