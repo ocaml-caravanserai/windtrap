@@ -26,3 +26,7 @@ let partial a = List.map (( @ ) a)
 (* No site on a list literal under a type constraint. *)
 let constrained a = a @ ([] : int list)
 let constrained_tail a x = a @ (x :: ([] : int list))
+
+(* Code that runs when the module is initialized has [left] sites. *)
+let base = [ 1 ]
+let all = base @ base

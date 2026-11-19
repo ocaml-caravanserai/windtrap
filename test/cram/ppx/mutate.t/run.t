@@ -537,6 +537,7 @@ before and after, and the reason of a dismissed site.
     11: 38:20-38:33 "pos" "- (- x : int)" -> "(- x : int)"
     12: 42:20-42:30 "add" "(a - (- b)) - c" -> "(a - (- b)) + c"
     13: 42:24-42:26 "pos" "- b" -> "b"
+    14: 46:13-46:19 "pos" "- (!top)" -> "!top"
   let negate x =
     let __windtrap_mut_0_p : Stdlib.Int.t = x in
     if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 0
@@ -613,6 +614,12 @@ before and after, and the reason of a dismissed site.
     if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 12
     then __windtrap_mut_12_l + __windtrap_mut_12_r
     else __windtrap_mut_12_l - __windtrap_mut_12_r
+  let top = ref 1
+  let loaded =
+    let __windtrap_mut_14_p : Stdlib.Int.t = !top in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 14
+    then __windtrap_mut_14_p
+    else - __windtrap_mut_14_p
 
   $ mut --impl ./fixture_left.ml | ../elide.exe
   mutation sites of "./fixture_left.ml" in Windtrap_mut_________fixture_left___ml, with type 'a lists:
@@ -629,6 +636,7 @@ before and after, and the reason of a dismissed site.
     10: 18:21-18:29 "tail" "x :: t" -> "t"
     11: 19:14-19:20 "left" "[] @ b" -> "[]"
     12: 28:31-28:53 "tail" "x :: ([] : int list)" -> "([] : int list)"
+    13: 32:10-32:21 "left" "base @ base" -> "base"
   let append a b =
     let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
       ((a, b) : _ Windtrap_mut_________fixture_left___ml.lists) in
@@ -713,6 +721,13 @@ before and after, and the reason of a dismissed site.
            (Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 12)
        then x :: ([] : int list)
        else ([] : int list))
+  let base = [1]
+  let all =
+    let (__windtrap_mut_13_l, __windtrap_mut_13_r) =
+      ((base, base) : _ Windtrap_mut_________fixture_left___ml.lists) in
+    if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 13
+    then __windtrap_mut_13_l
+    else __windtrap_mut_13_l @ __windtrap_mut_13_r
 
   $ mut --impl ./fixture_del.ml | ../elide.exe
   mutation sites of "./fixture_del.ml" in Windtrap_mut_________fixture_del___ml:
@@ -2833,6 +2848,29 @@ and keeps its reason:
     if Windtrap_mut_________fixture_lost_pos___ml.___windtrap_armed___ 0
     then __windtrap_mut_0_l - __windtrap_mut_0_r
     else __windtrap_mut_0_l + __windtrap_mut_0_r
+
+  $ mut --impl ./fixture_lost_ari_pos.ml | ../elide.exe
+  mutation sites of "./fixture_lost_ari_pos.ml" in Windtrap_mut_________fixture_lost_ari_pos___ml:
+    0: 5:15-5:17 "pos" "- x" -> "x"
+    1: 6:16-6:19 "pos" "-. x" -> "x"
+    2: 7:19-7:23 "pos" "- b" -> "b"
+  let (-) a b = a + b
+  let negate x =
+    let __windtrap_mut_0_p : Stdlib.Int.t = x in
+    if Windtrap_mut_________fixture_lost_ari_pos___ml.___windtrap_armed___ 0
+    then __windtrap_mut_0_p
+    else - __windtrap_mut_0_p
+  let fnegate x =
+    let __windtrap_mut_1_p : Stdlib.Float.t = x in
+    if Windtrap_mut_________fixture_lost_ari_pos___ml.___windtrap_armed___ 1
+    then __windtrap_mut_1_p
+    else -. __windtrap_mut_1_p
+  let diff a b =
+    a -
+      (let __windtrap_mut_2_p : Stdlib.Int.t = b in
+       if Windtrap_mut_________fixture_lost_ari_pos___ml.___windtrap_armed___ 2
+       then __windtrap_mut_2_p
+       else - __windtrap_mut_2_p)
 
   $ mut --impl ./fixture_lost_left.ml | ../elide.exe
   mutation sites of "./fixture_lost_left.ml" in Windtrap_mut_________fixture_lost_left___ml, with type ints:

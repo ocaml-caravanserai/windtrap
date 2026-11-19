@@ -40,3 +40,7 @@ let constrained x = -((-x) : int)
 (* In [(a - (-b)) - c], the inner [-] has no site, so the minus keeps its
    site. *)
 let chained a b c = a - -b - c
+
+(* Code that runs when the module is initialized has [pos] sites. *)
+let top = ref 1
+let loaded = - !top
