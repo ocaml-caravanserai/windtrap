@@ -1621,8 +1621,9 @@ these names (see
 - `incr r` becomes `decr r` (`decr`), and `decr r` becomes `incr r`
   (`incr`). `Atomic.incr a` and `Atomic.decr a` swap in the same way.
   The mutant uses the path of the source: `Atomic.(incr c)` gives
-  `decr c`. The operand must be a name, a constructor without
-  an argument or a field, so `incr (f x)` carries no mutant.
+  `decr c`. The operand must be a name, a constructor without an
+  argument, or a field of such an operand. Thus `incr (f x)` and
+  `incr (f x).c` carry no mutant.
   `Stdlib.incr r`, `r |> incr` and `List.iter incr l` carry no mutant.
   A statement `incr r` carries `del` and `decr`.
 - `pos` drops a unary minus: `-x` and `-.x` become `x`. A minus on a
@@ -1769,9 +1770,9 @@ rewriter reads only the name of the module in each `open`. Thus in
 
 A module of the file with one of these names removes the `decr` and
 `incr` mutants under an `open` of it. `Atomic.incr a` has no mutant in
-a file that declares a module `Atomic`. A class body with an `inherit` has no
-`decr` or `incr` mutant, because the parent class can give an instance
-variable named `incr`.
+a file that declares a module `Atomic`. A class body with an `inherit`
+has no `decr` or `incr` mutant, because the parent class can give an
+instance variable named `incr`.
 
 The rewriter does not see a `-open` flag of the compiler. A flag can
 give `*`, `/`, `mod`, `*.`, `/.`, a bit operator, `+`, `-`, `+.`,
@@ -1788,7 +1789,8 @@ the list, which `-open` makes visible. Then `Int.( incr r )` or
 
 Under `-open Base`, each mutant compiles. Base deprecates `mod`, `incr`
 and `decr`. The original gives the same alert, and the guard takes the
-alert attributes of the site.
+alert attributes of the site. The armed `decr` or `incr` takes the
+attributes of the source counter, as in `(incr [@alert "-deprecated"]) r`.
 
 The `none` mutant names `None` without a module, and the `tail` mutant
 gives `t` the type of `h :: t`. The rewriter does not see a `Some` or a
@@ -1837,8 +1839,9 @@ the file.
 The mutation backend is applied without dune as
 [the coverage backend](coverage.md#instrumenting-without-dune) is, and
 the suite then runs with `--mutate`. If the coverage rewriter runs
-first, the rewrites of `*`, `/`, `mod`, `*.`, `/.`, the bit operators,
-the unary minus, `@`, `incr` and `decr` give no mutant.
+first, some rewrites give no mutant. These are the rewrites of `*`, `/`,
+`mod`, `*.`, `/.`, the bit operators, the unary minus, `@`, `incr` and
+`decr`.
 
 ## When a run cannot mutate
 

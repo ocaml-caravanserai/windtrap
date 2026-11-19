@@ -196,13 +196,13 @@ type facts = { lost : family list; modules : string list }
    [&&] into an [if], and [cmp] swaps operands of one type. The guards of
    [pos] and [left] pin the type of their operands.
 
-   A binding that this pass sees loses the family of its name. A binding is a variable pattern, an
-   alias pattern, a value description or an instance variable. What an
-   [open] brings in is not seen, so a site of a family with a [scope] must
-   also be in Stdlib scope. The guards of [none] and [tail] name the
-   predefined [None] and give [t] the type of [h :: t], so a file that
-   declares a constructor [Some], [None] or [(::)], in a type or as an
-   extension constructor, loses them. A file that binds [failwith] or
+   A binding that this pass sees loses the family of its name. A binding is
+   a variable pattern, an alias pattern, a value description or an instance
+   variable. What an [open] brings in is not seen, so a site of a family
+   with a [scope] must also be in Stdlib scope. The guards of [none] and
+   [tail] name the predefined [None] and give [t] the type of [h :: t], so a
+   file that declares a constructor [Some], [None] or [(::)], in a type or as
+   an extension constructor, loses them. A file that binds [failwith] or
    [invalid_arg] loses [Message], and one that declares a module [Logs]
    loses [Log].
 
@@ -963,9 +963,10 @@ let tail ~loc ~module_name ~index e value t =
 
 (* A counter: [if armed then decr r' else incr r], where [r'] is a copy of
    the pure operand [r], as in [tail], and [decr] has the path and the
-   attributes of the source [incr]. The disarmed arm is the site, with its location and its attributes. The
-   application gives [r'] the expected type of [r], so the guard has no
-   constraint, which would name [Stdlib.ref] or [Stdlib.Atomic.t]. *)
+   attributes of the source [incr]. The disarmed arm is the site, with its
+   location and its attributes. The application gives [r'] the expected type
+   of [r], so the guard has no constraint, which would name [Stdlib.ref] or
+   [Stdlib.Atomic.t]. *)
 let recount ~loc ~module_name ~index e replaced =
   let replaced = ghost#expression replaced in
   {

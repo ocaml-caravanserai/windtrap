@@ -63,10 +63,10 @@
     - [left] for [@].
 
     [neg] names [Stdlib.not] and [Stdlib.Bool.t] alone and is never lost. A
-    rebinding is seen when a variable pattern or an alias pattern anywhere in
-    the file, a value description such as an [external], or an instance variable
-    bears the name of the operator. A binding of [-] or [-.] does not lose
-    [pos].
+    rebinding is seen when a binding anywhere in the file bears the name of the
+    operator. A binding is a variable pattern, an alias pattern, a value
+    description such as an [external], or an instance variable. A binding of [-]
+    or [-.] does not lose [pos].
 
     For [ari], [cmp] and [con], what an [open] brings into scope is not seen.
     When such an operator does not fit an arm, the file fails to compile under
@@ -113,10 +113,10 @@
     [atomic.ml], can give the counters another type.
 
     The rewriter does not see a flag of the compiler, as [-open M]. If [M] gives
-    [~-], [~-.], [@], [incr], [decr] or an operator of [ari], [mul], [fmul] or
-    [bit] another type, or binds only the replacement, the guard can be
-    ill-typed. For example, an [@] of [M] on two values of one type that is not
-    a list breaks the pin of [left].
+    another type to [~-], [~-.], [@], [incr], [decr] or an operator of [ari],
+    [mul], [fmul] or [bit], the guard can be ill-typed. The guard can also be
+    ill-typed if [M] binds only the replacement. For example, an [@] of [M] on
+    two values of one type that is not a list breaks the pin of [left].
 
     When a guard is ill-typed, the compiler shows the error at the expression,
     and [[@mutate off "reason"]] or [[@@@mutate exclude_file]] is the way out.
@@ -131,11 +131,11 @@
 
 (** {2:operators Operators}
 
-    Each operator rewrites its sites in one way, and the name of the rewrite
-    says what replaces the original, but for [mod], [xor] and [asr], which name
-    the original, and [pos] and [left], which name what stays. The sites of
-    [cmp], [con], [ari], [mul], [fmul], [bit] and [left] are applications of a
-    bare operator to two unlabelled arguments. A qualified spelling such as
+    Each operator rewrites its sites in one way. The name of the rewrite says
+    what replaces the original, but for [mod], [xor] and [asr], which name the
+    original, and [pos] and [left], which name what stays. The sites of [cmp],
+    [con], [ari], [mul], [fmul], [bit] and [left] are applications of a bare
+    operator to two unlabelled arguments. A qualified spelling such as
     [Float.( < )], a labelled application and a partial one are not sites.
     - [neg] negates a condition, under the name [not]. Its sites are the
       condition of an [if] or of a [while] and the guard of an arm, when the
@@ -498,9 +498,11 @@
     disarmed arm of an ordering, [ari], [mul], [fmul], [bit], [pos] or [left]
     guard is the original application rebuilt over the binders. It keeps its
     location and its attributes. The disarmed arm of a counter guard is the
-    site. The operands and the armed arm are outside the disarmed arm, so the
+    site. The operands and the armed arm are outside the disarmed arm. Thus the
     whole guard of these rewrites also takes the [ocaml.warning], [warning],
-    [ocaml.alert] and [alert] attributes of the site.
+    [ocaml.alert] and [alert] attributes of the site. The armed counter and the
+    replacement operator of [ari], [mul], [fmul] and [bit] take the attributes
+    of the source identifier.
 
     The disarmed arm of the [del] guard of a statement or a loop body is
     [e; ()], whose [()] has a location of zero width at the end of [e]. On a

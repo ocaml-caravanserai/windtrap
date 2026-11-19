@@ -3,7 +3,8 @@
 - Four rewrites join the catalogue. `incr r` becomes `decr r` (`decr`),
   and `decr r` becomes `incr r` (`incr`), also for `Atomic.incr` and
   `Atomic.decr`. The mutant uses the path of the source. A counter is a
-  site only on a name, a constructor without an argument or a field.
+  site only on a name, a constructor without an argument, or a field of
+  such an operand.
 - `pos` drops a unary minus: `-x` and `-.x` become `x`. A minus on the
   right operand of `+`, `-`, `+.` or `-.` has no mutant when that
   operator has one. Thus `x - (-y)` has only the `add` mutant, because
