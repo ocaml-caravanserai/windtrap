@@ -5893,6 +5893,31 @@ let end_check_runs_the_prefix () =
   crash_kill [];
   crash_kill [ fast ]
 
+(* The fast test kills the mutant of [widen], and the release of its fixture
+   then ends the worker. The check of the end runs only the fast test, so the
+   slow test, which the job did not run, does not change the verdict. *)
+let end_check_after_a_kill () =
+  let crash_kill args =
+    let r =
+      spawn ~env:[ suite "bail_end" ] (mutate :: "--crash-kills" :: args)
+    in
+    ended_well r;
+    equal string
+      "mutants: 1 reached by this suite, 1 killed (1 by --crash-kills), 3 \
+       never reached, score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
+      (outcome r.out);
+    contains
+      ~sub:
+        (strf
+           "  %s  a + b \u{2192} a - b\n\
+           \    its run exited with code 3 (counted as killed)\n"
+           (site 18))
+      r.out;
+    not_contains ~sub:"also fails with no mutant" r.out
+  in
+  crash_kill [];
+  crash_kill [ fast ]
+
 (* A fixture release kills the mutant, and does not fail with no mutant. The
    test runs in the dry run, the probe and the job, and under the fast order
    also in the three runs of the check. *)
@@ -6026,6 +6051,10 @@ let job_order =
         "under the fast order, the check of an early end runs the tests up to \
          the end"
         end_check_runs_the_prefix;
+      test
+        "under the fast order, the check of an end after a kill runs the tests \
+         up to the kill"
+        end_check_after_a_kill;
       test
         "under the fast order, a kill by a fixture release that its check \
          trusts stays"

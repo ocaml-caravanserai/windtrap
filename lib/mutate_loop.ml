@@ -1023,9 +1023,8 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
     in
     let matrix = matrix ~full_matrix verdict ran in
     (* The check runs the tests up to the first killing test, the whole job
-       for a kill by a fixture release, or the tests up to the end. When the
-       replacement of a retired worker ends before it serves, that prefix
-       holds one test that did not run. *)
+       for a kill by a fixture release, or the tests up to the end. After a
+       kill, the job bails, so the check of an end stops at the killing test. *)
     let await goal paths =
       await_check goal paths { i; run; held = verdict; matrix }
     in
@@ -1037,9 +1036,13 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
     | Verdicts.Killed { by = [] }, None when fast ->
         await Release paths;
         `Done
-    | Verdicts.Unknown (Deadline _ | Crashed _ | Memory _), _ when fast ->
-        let ran_to = List.length ran.results in
-        await End (List.filteri (fun k _ -> k <= ran_to) paths);
+    | Verdicts.Unknown (Deadline _ | Crashed _ | Memory _), killing when fast ->
+        await End
+          (match killing with
+          | Some test when not full_matrix -> Verdicts.through test paths
+          | Some _ | None ->
+              let ran_to = List.length ran.results in
+              List.filteri (fun k _ -> k <= ran_to) paths);
         `Done
     | verdict, _ ->
         commit ~failed:(uncaused ran) ~run ?matrix i verdict;

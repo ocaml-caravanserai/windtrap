@@ -959,6 +959,26 @@ let end_prefix =
     test "x fast ends" (fun () -> if Subject.widen 2 2 <> 4 then Unix._exit 3);
   ]
 
+(* The fast test kills the mutant of [widen], and then the release of its
+   fixture ends the worker. The slow test fails when it runs after the fast
+   test. *)
+let ender =
+  fixture
+    ~teardown:(fun () -> if Subject.widen 2 2 <> 4 then Unix._exit 3)
+    Fun.id
+
+let bail_end =
+  [
+    test "b slow refuses the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        if !state then fail "the state is set");
+    test "a fast kills" (fun () ->
+        ender ();
+        state := true;
+        equal int 4 (Subject.widen 2 2));
+  ]
+
 (* As [state_first], but the fast test fails before it evaluates [widen] only
    at the runs in MUTATE_FAIL_AT. It counts its runs in the file of
    MUTATE_RUNS, as in [flaky_kill]. *)
@@ -1081,6 +1101,7 @@ let () =
   | "state_first" -> exit @@ run "calc" [ group "order" state_first ]
   | "exit_order" -> exit @@ run "calc" [ group "order" exit_order ]
   | "end_prefix" -> exit @@ run "calc" [ group "order" end_prefix ]
+  | "bail_end" -> exit @@ run "calc" [ group "order" bail_end ]
   | "retry_order" -> exit @@ run "calc" [ group "order" retry_order ]
   | "start_hangs" ->
       (match Sys.getenv_opt "MUTATE_STARTS" with

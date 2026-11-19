@@ -763,7 +763,8 @@ as in the catalogue order.
 The order can also make a job end early, at its deadline, by a crash
 or at its memory limit. Under `--mutate-order=fast`, each early end
 gets a check of the tests of the job, up to and with the test that ran
-at the end. The check fails when one of its runs ends early, or has a
+at the end. When the end comes after a kill, for example in a fixture
+release, the check stops at the killing test. The check fails when one of its runs ends early, or has a
 failure. Then the mutant is unknown, with the
 reason `the job also ends with no mutant in the fast order:` and the
 end of the check. For a failure, the reason names the test or the

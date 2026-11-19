@@ -224,9 +224,10 @@ val execute_and_report :
 
     Under the fast order, a job can end early at its deadline, by a lost worker
     or at its memory limit. Each such end waits for a check of the tests of the
-    job, up to and with the test that ran at the end. That check fails when one
-    of its runs ends early, or has a counted failure or a release failure. Then
-    the mutant is {!Windtrap_runtime.Verdicts.Unknown}, with the reason
+    job, up to and with the test that ran at the end. When the end comes after a
+    kill, the check stops at the killing test. That check fails when one of its
+    runs ends early, or has a counted failure or a release failure. Then the
+    mutant is {!Windtrap_runtime.Verdicts.Unknown}, with the reason
     ["the job also ends with no mutant in the fast order: <reason>"], or
     ["<what> also fails with no mutant in the fast order: <failure>"]. These
     reasons are [Other], so [--crash-kills] does not count them. When the check
