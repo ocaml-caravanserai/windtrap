@@ -516,7 +516,8 @@ reason, and a kill in a retry then leaves the survivor.
 tests of each mutant by their time in the dry run, the fastest first,
 so a kill comes earlier. The default is `catalogue`, because a test can
 depend on the state that an earlier test leaves. The flag without
-`--mutate` is a usage error. The run reuses no verdict across orders.
+`--mutate` is a usage error. Under `--incremental`, the run reuses no
+verdict of a run with the other order.
 
 Under `fast`, the run does the check of each kill also at
 `--mutate-retry=0`, with the tests of the job in the same order. A kill

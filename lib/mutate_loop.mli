@@ -218,14 +218,15 @@ val execute_and_report :
     [Not_evaluated]. It is {!Windtrap_runtime.Verdicts.Unknown}, with the reason
     ["<what> fails before the site in the fast order: <failure>"]. [<what>] is
     ["test <path>"] for the first test with a counted failure, or
-    ["a fixture release"] when no test has one. A retry keeps the rule of the
+    ["a fixture release"] when no test has one. This rule applies only to the
+    first run. In a retry, a failure before the site gives the verdict of the
     catalogue order.
 
     Under the fast order, a job can end early at its deadline, by a lost worker
-    or at its memory limit. Such an end waits for a check of the whole job, as a
-    kill by a fixture release does. That check fails when one of its runs ends
-    early, or has a counted failure or a release failure. Then the mutant is
-    {!Windtrap_runtime.Verdicts.Unknown}, with the reason
+    or at its memory limit. Each such end waits for a check of the tests of the
+    job, up to and with the test that ran at the end. That check fails when one
+    of its runs ends early, or has a counted failure or a release failure. Then
+    the mutant is {!Windtrap_runtime.Verdicts.Unknown}, with the reason
     ["the job also ends with no mutant in the fast order: <reason>"], or
     ["<what> also fails with no mutant in the fast order: <failure>"]. These
     reasons are [Other], so [--crash-kills] does not count them. When the check

@@ -634,8 +634,8 @@ Under `--mutate-retry N` with `N` above 0, or under
 `--mutate-order=fast`, the loop does a check of each kill that names a
 test. The killing test is the first test that fails in or after the
 test that first evaluates the site. The check runs the tests of the job
-that killed the mutant, which are its reaching tests, up to and with the
-killing test, in the order of the job. It runs them with no mutant, in
+that killed the mutant, in the order of the job. These are its reaching
+tests, up to and with the killing test. It runs them with no mutant, in
 a fresh worker. A failure of an earlier test does not stop this run. The
 check does this run up to 3 times:
 
@@ -723,7 +723,7 @@ The order uses the time of each test in whole milliseconds, truncated.
 Thus a change of some microseconds between two runs does not change the
 order. Two tests with the same time keep the catalogue order. A test
 with no time in the dry run comes after all the others. A reaching test
-always has a time, so this rule does not usually apply. The dry run and
+always has a time, so this rule has no effect in a run. The dry run and
 the determinism probe keep the catalogue order. Under `-j` above 1, the
 dry run measures the times on a loaded machine.
 
@@ -756,13 +756,15 @@ test calc › needs the state fails before the site in the fast order: the state
 ```
 
 When no test fails before the site but a fixture release fails, the
-reason starts with `a fixture release`. A retry keeps the rule of the
-catalogue order.
+reason starts with `a fixture release`. This rule applies only to the
+first run. In a retry, a failure before the site gives the same verdict
+as in the catalogue order.
 
 The order can also make a job end early, at its deadline, by a crash
-or at its memory limit. Under `--mutate-order=fast`, such an end gets a
-check of all the tests of the job. The check fails when one of its
-runs ends early, or has a failure. Then the mutant is unknown, with the
+or at its memory limit. Under `--mutate-order=fast`, each early end
+gets a check of the tests of the job, up to and with the test that ran
+at the end. The check fails when one of its runs ends early, or has a
+failure. Then the mutant is unknown, with the
 reason `the job also ends with no mutant in the fast order:` and the
 end of the check. For a failure, the reason names the test or the
 fixture release, and then has `also fails with no mutant in the fast
@@ -787,9 +789,9 @@ sample. Under `--skip-killed`, the order acts only on the mutants that
 the run does not skip.
 
 An invalid value is a usage error, from the flag and from the mirror.
-If neither the command line nor a mirror gives
-`--mutate`, the flag on the command line is a usage error. The mirror
-alone has no effect on a suite that does not mutate.
+If neither the command line nor a mirror gives `--mutate`, the flag on
+the command line is a usage error. The mirror alone has no effect on a
+suite that does not mutate.
 
 ## Stateful tests on several domains
 
@@ -1338,8 +1340,9 @@ unknown, one such reason in a mutation-tested suite is sufficient. A
 flaky kill stays unknown, because the test that killed it also fails
 with no mutant. An unknown mutant with another reason stays unknown too.
 
-Under `--mutate-order=fast`, an end that also occurs with no mutant has
-another reason. Thus `--crash-kills` does not count it.
+Under `--mutate-order=fast`, the check of an early end can find the end
+again with no mutant. The reason of that mutant is then not a crash
+reason, so `--crash-kills` does not count it.
 
 The score, the total and each gate then count these mutants with the
 killed mutants. The reach does not change, because it counts a killed
@@ -1594,18 +1597,18 @@ The verdict file records the flag of the run for each verdict. For each
 kill, it also records the tests that ran in its job, and if the job ran
 each of them. Under `--mutate-retry N` with `N` above 0, or under
 `--mutate-order=fast`, the check of a kill runs only up to the first
-killing test in the order of the job, as without `--full-matrix` (see [Flaky
-kills](#flaky-kills)). When the check trusts the kill, the kill keeps
-each killing test. Thus `killed_by` can hold a later test that also
-fails with no mutant.
+killing test in the order of the job, as without `--full-matrix`
+(see [Flaky kills](#flaky-kills)). When the check trusts the kill, the
+kill keeps each killing test. Thus `killed_by` can hold a later test
+that also fails with no mutant.
 
 Under `--full-matrix` with `--mutate-order=fast`, the job runs all its
-reaching tests in the fast order. The record keeps the tests that ran sorted, and not in the
-order of the job. Only the first killing test in the job order has a
-check, and `by` does not show which test that is. A test that fails
-only after an earlier test in the fast order can be a later killing
-test. Thus `windtrap mutants --tests` can count a kill that the order
-caused.
+reaching tests in the fast order. The record keeps the tests that ran
+sorted, and not in the order of the job. Only the first killing test in
+the job order has a check, and `by` does not show which test that is.
+A test that fails only after an earlier test in the fast order can be a
+later killing test. Thus `windtrap mutants --tests` can count a kill
+that the order caused.
 
 `--full-matrix` with `--skip-killed` is a usage error, from the command
 line and from the mirrors, also without `--mutate`. A skipped mutant
