@@ -2851,10 +2851,11 @@ and keeps its reason:
 
   $ mut --impl ./fixture_lost_ari_pos.ml | ../elide.exe
   mutation sites of "./fixture_lost_ari_pos.ml" in Windtrap_mut_________fixture_lost_ari_pos___ml:
-    0: 5:15-5:17 "pos" "- x" -> "x"
-    1: 6:16-6:19 "pos" "-. x" -> "x"
-    2: 7:19-7:23 "pos" "- b" -> "b"
+    0: 6:15-6:17 "pos" "- x" -> "x"
+    1: 7:16-7:19 "pos" "-. x" -> "x"
+    2: 8:19-8:23 "pos" "- b" -> "b"
   let (-) a b = a + b
+  let (-.) a b = a +. b
   let negate x =
     let __windtrap_mut_0_p : Stdlib.Int.t = x in
     if Windtrap_mut_________fixture_lost_ari_pos___ml.___windtrap_armed___ 0
