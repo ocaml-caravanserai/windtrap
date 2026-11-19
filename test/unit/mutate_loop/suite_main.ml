@@ -914,6 +914,32 @@ let release_order =
         is_true (Subject.widen 1 2 <> 99));
   ]
 
+(* As [order], but the fast test fails before it evaluates [widen] when it
+   runs first, and pins [widen] when it runs after the slow test. *)
+let state_first =
+  [
+    test "sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "needs the state" (fun () ->
+        if not !state then fail "the state is not set";
+        equal int 3 (Subject.widen 1 2));
+  ]
+
+(* As [order], but the fast test ends its worker after it evaluates [widen]
+   when it runs first. *)
+let exit_order =
+  [
+    test "sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "needs the state" (fun () ->
+        is_true (Subject.widen 1 2 <> 99);
+        if not !state then Unix._exit 3);
+  ]
+
 let retried = ref 0
 let handle = fixture ~teardown:(fun () -> ignore (Subject.crasher 3 1)) Fun.id
 
@@ -1019,6 +1045,8 @@ let () =
   | "speed" -> exit @@ run "calc" [ group "speed" speed ]
   | "order" -> exit @@ run "calc" [ group "order" order ]
   | "release_order" -> exit @@ run "calc" [ group "order" release_order ]
+  | "state_first" -> exit @@ run "calc" [ group "order" state_first ]
+  | "exit_order" -> exit @@ run "calc" [ group "order" exit_order ]
   | "start_hangs" ->
       (match Sys.getenv_opt "MUTATE_STARTS" with
       | Some path when start_index path = 5 -> Unix.sleepf 60.

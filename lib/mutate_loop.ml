@@ -506,14 +506,47 @@ let killed_by ~full_matrix (ran : Supervisor.ran) =
 (* The runs of the check of a kill, at most. *)
 let check_runs = 3
 
-(* The failure of [test] in a run of a check, as one line. A run that ended
-   before [test] ended has no row of it, and gives none. *)
-let check_failure order test (ran : Supervisor.ran) =
+(* The reason of a run that ended before its tests did. *)
+let end_reason ~deadline : Supervisor.ended -> Verdicts.unknown_reason option =
+  function
+  | Ran -> None
+  | Expired -> Some (Deadline { seconds = deadline })
+  | Lost { signal; status; how } -> Some (Crashed { signal; status; how })
+  | Outgrown mb -> Some (Memory { mb })
+
+(* The first counted failure of a run, as what failed and its headline. *)
+let first_failure (ran : Supervisor.ran) =
+  match
+    List.find_map
+      (fun (r : Run.result) ->
+        match r.outcome with
+        | Failure.Fail (f :: _) when kills r ->
+            Some ("test " ^ Test_tree.path_to_string r.path, f)
+        | Pass | Fail _ | Skip _ -> None)
+      ran.results
+  with
+  | Some (what, f) -> Some (what, Report_sections.headline f)
+  | None -> (
+      match ran.release_failures with
+      | f :: _ -> Some ("a fixture release", Report_sections.headline f)
+      | [] -> None)
+
+(* What a check looks for in its runs. *)
+type goal =
+  | Killing of string list (* a counted failure of this killing test *)
+  | Release (* a failure of a fixture release *)
+  | End (* an early end, or a failure *)
+
+(* The failure that [goal] finds in a run of a check, as one line. A run that
+   ended before the killing test ended has no row of it, and gives none. A
+   run that ended before its releases has no release failure, and gives
+   none for [Release]. [deadline] is the deadline of the run. *)
+let check_failure order ~deadline goal (ran : Supervisor.ran) =
   let in_order =
     match order with Run.Catalogue -> "" | Run.Fast -> " in the fast order"
   in
-  match test with
-  | Some test ->
+  match goal with
+  | Killing test ->
       List.find_map
         (fun (r : Run.result) ->
           match r.outcome with
@@ -526,12 +559,24 @@ let check_failure order test (ran : Supervisor.ran) =
                    (Report_sections.headline f))
           | Pass | Fail _ | Skip _ -> None)
         ran.results
-  | None ->
-      Option.map
-        (fun f ->
-          strf "a fixture release also fails with no mutant%s: %s" in_order
-            (Report_sections.headline f))
-        (List.nth_opt ran.release_failures 0)
+  | Release -> (
+      match ran.release_failures with
+      | f :: _ ->
+          Some
+            (strf "a fixture release also fails with no mutant%s: %s" in_order
+               (Report_sections.headline f))
+      | [] -> None)
+  | End -> (
+      match end_reason ~deadline ran.ended with
+      | Some reason ->
+          Some
+            (strf "the job also ends with no mutant%s: %s" in_order
+               (Verdicts.reason_text reason))
+      | None ->
+          Option.map
+            (fun (what, failure) ->
+              strf "%s also fails with no mutant%s: %s" what in_order failure)
+            (first_failure ran))
 
 (* The failure of a job that did not evaluate the armed site. *)
 let uncaused (ran : Supervisor.ran) =
@@ -544,14 +589,11 @@ let uncaused (ran : Supervisor.ran) =
    not evaluate the armed site tested nothing: neither is a survivor. Under
    [full_matrix], a kill before such an end stays a kill. *)
 let verdict ~full_matrix ~deadline paths (ran : Supervisor.ran) =
-  match (ran.ended, killed_by ~full_matrix ran) with
+  match (end_reason ~deadline ran.ended, killed_by ~full_matrix ran) with
   | _, Some by when full_matrix -> Verdicts.killed by
-  | Supervisor.Expired, _ -> Verdicts.Unknown (Deadline { seconds = deadline })
-  | Lost { signal; status; how }, _ ->
-      Verdicts.Unknown (Crashed { signal; status; how })
-  | Outgrown mb, _ -> Verdicts.Unknown (Memory { mb })
-  | Ran, Some by -> Verdicts.killed by
-  | Ran, None -> (
+  | Some reason, _ -> Verdicts.Unknown reason
+  | None, Some by -> Verdicts.killed by
+  | None, None -> (
       match ran.evaluated with
       | None -> Verdicts.Not_evaluated
       | Some _ -> Verdicts.survived paths)
@@ -803,20 +845,19 @@ let pass ?(on_stop = ignore) (config : Run.config) ~suite tests jobs ~on_ran =
       end)
 
 (* A mutant that waits for a check, with the run, the verdict and the matrix
-   of its kill. *)
+   of its job. *)
 type waiter = {
   i : int;
   run : int;
-  kill : Verdicts.verdict;
+  held : Verdicts.verdict;
   matrix : Verdicts.matrix option;
 }
 
-(* The check of the kills whose jobs ran [paths], which end with the killing
-   test [test]. [None] is the check of a kill by a fixture release, whose
-   [paths] are the whole job. *)
+(* The check of the verdicts whose jobs ran [paths]. For [Killing test], the
+   paths end with [test]. For [Release] and [End], they are the whole job. *)
 type check = {
   paths : string list list;
-  test : string list option;
+  goal : goal;
   mutable waiting : waiter list;
 }
 
@@ -826,8 +867,8 @@ type check = {
    survivor waits for its verdict until its last run. Under a retry or the
    fast order, a kill with a killing test waits for the check of its tests,
    which runs in up to [check_runs] passes after the last retry. Under the
-   fast order, a kill by a fixture release waits for the check of its whole
-   job. The loop starts no pass after a signal. [reached] holds a reused
+   fast order, a kill by a fixture release and an early end wait for the
+   check of the whole job. The loop starts no pass after a signal. [reached] holds a reused
    verdict in place of the job of its mutant, and each job has its tests in
    the order of the job. *)
 let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
@@ -918,17 +959,17 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   (* The checks by their paths, and the mutants that wait for one. *)
   let checks = Hashtbl.create 16 in
   let checking = Array.make total false in
-  let await_check test waiter =
+  let await_check goal waiter =
     checking.(waiter.i) <- true;
     let paths =
-      match test with
-      | Some test -> Verdicts.through test (paths waiter.i)
-      | None -> paths waiter.i
+      match goal with
+      | Killing test -> Verdicts.through test (paths waiter.i)
+      | Release | End -> paths waiter.i
     in
-    match Hashtbl.find_opt checks (paths, test) with
+    match Hashtbl.find_opt checks (paths, goal) with
     | Some check -> check.waiting <- waiter :: check.waiting
     | None ->
-        Hashtbl.add checks (paths, test) { paths; test; waiting = [ waiter ] }
+        Hashtbl.add checks (paths, goal) { paths; goal; waiting = [ waiter ] }
   in
   let measured point =
     match meter with
@@ -958,7 +999,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   in
   (* After the first run, only a kill replaces the survivor, and a retry that
      ended early gives a line of the survivor's block. The mutant [i] waits
-     for another run when it survived and [run] is not its last. *)
+     for another run when it survived and [run] is not its last. Under the
+     fast order, a first run with a failure before the site gives no survivor
+     and no [Not_evaluated], because the order can cause that failure. *)
   let judge ~run i (ran : Supervisor.ran) =
     let paths = paths i in
     let ended_early why =
@@ -981,41 +1024,65 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
                   what)
       | verdict -> verdict
     in
+    let verdict =
+      match (verdict, first_failure ran) with
+      | (Verdicts.Survived _ | Not_evaluated), Some (what, failure)
+        when fast && run = 1 ->
+          Verdicts.Unknown
+            (Other
+               (strf "%s fails before the site in the fast order: %s" what
+                  failure))
+      | verdict, _ -> verdict
+    in
     let matrix = matrix ~full_matrix verdict ran in
     (* The check runs the tests up to the first killing test, or the whole job
-       for a kill by a fixture release. *)
+       for a kill by a fixture release or an early end. *)
+    let await goal = await_check goal { i; run; held = verdict; matrix } in
     match (verdict, killing_test ran) with
     | Verdicts.Survived _, _ when run < last -> `Again
-    | Verdicts.Killed _, (Some _ as test) when config.mutate_retry > 0 || fast
-      ->
-        await_check test { i; run; kill = verdict; matrix };
+    | Verdicts.Killed _, Some test when config.mutate_retry > 0 || fast ->
+        await (Killing test);
         `Done
     | Verdicts.Killed { by = [] }, None when fast ->
-        await_check None { i; run; kill = verdict; matrix };
+        await Release;
+        `Done
+    | Verdicts.Unknown (Deadline _ | Crashed _ | Memory _), _ when fast ->
+        await End;
         `Done
     | verdict, _ ->
         commit ~failed:(uncaused ran) ~run ?matrix i verdict;
         `Done
   in
   (* A kill in a retry that the check does not trust leaves the survivor of
-     the first run. *)
+     the first run. An early end that the check finds again gives a reason
+     that [--crash-kills] does not count. *)
   let settle check failure =
     List.iter
-      (fun { i; run; kill; matrix } ->
-        match failure with
-        | None -> commit ~failed:None ~run ?matrix i kill
-        | Some failure when run = 1 ->
+      (fun { i; run; held; matrix } ->
+        match (failure, check.goal) with
+        | None, _ -> commit ~failed:None ~run ?matrix i held
+        | Some failure, Killing test when run = 1 ->
             commit ~failed:None ~run i
-              (Verdicts.Unknown
-                 (Flaky_kill
-                    { test = Option.value check.test ~default:[]; failure }))
-        | Some reason ->
+              (Verdicts.Unknown (Flaky_kill { test; failure }))
+        | Some failure, Release when run = 1 ->
+            commit ~failed:None ~run i
+              (Verdicts.Unknown (Flaky_kill { test = []; failure }))
+        | Some failure, End when run = 1 ->
+            commit ~failed:None ~run i (Verdicts.Unknown (Other failure))
+        | Some reason, _ ->
             early.(i) <- (run, reason) :: early.(i);
             commit ~failed:None ~run i (Verdicts.survived (paths i)))
       (List.sort (fun a b -> Int.compare a.i b.i) check.waiting)
   in
   let first check =
     List.fold_left (fun m waiter -> Int.min m waiter.i) total check.waiting
+  in
+  (* A run of a check has the longest deadline of the jobs that wait for it,
+     so a killing test that fails at its own timeout fails in time. *)
+  let longest check =
+    List.fold_left
+      (fun d waiter -> Float.max d (deadline (paths waiter.i)))
+      0. check.waiting
   in
   let rec check_passes ~run = function
     | [] -> ()
@@ -1026,7 +1093,10 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
         let on_ran j ran =
           given ran;
           let check = due.(j) in
-          (match check_failure config.mutate_order check.test ran with
+          (match
+             check_failure config.mutate_order ~deadline:(longest check)
+               check.goal ran
+           with
           | Some _ as failure -> settle check failure
           | None when run < check_runs -> clean := check :: !clean
           | None -> settle check None);
@@ -1034,15 +1104,8 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
           if j + 1 < Array.length due then testing (first due.(j + 1))
         in
         testing (first due.(0));
-        (* A run of a check has the longest deadline of the jobs that wait for
-           it, so a killing test that fails at its own timeout fails in time. *)
         let job check =
-          let longest =
-            List.fold_left
-              (fun d waiter -> Float.max d (deadline (paths waiter.i)))
-              0. check.waiting
-          in
-          unarmed_job ~deadline:(fun _ -> longest) ~pooled check.paths
+          unarmed_job ~deadline:(fun _ -> longest check) ~pooled check.paths
         in
         let jobs = Array.to_list (Array.map job due) in
         starting jobs;

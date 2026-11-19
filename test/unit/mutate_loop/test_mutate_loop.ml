@@ -5808,6 +5808,46 @@ let order_causes_a_release_failure () =
       failf "rows: %s"
         (Option.fold ~none:"none" ~some:(String.concat " | ") rows)
 
+(* [needs the state] fails before it evaluates [widen] when it runs before
+   [sets the state], and pins [widen] after it. *)
+let order_fails_before_the_site () =
+  let r = spawn ~env:[ suite "state_first" ] [ mutate ] in
+  ended_well r;
+  equal string killed_outcome (outcome r.out);
+  equal (option (list string)) (intermittent_rows "killed") (rows r);
+  let r = spawn ~env:[ suite "state_first" ] [ mutate; fast ] in
+  ended_well r;
+  equal string unknown_outcome (outcome r.out);
+  let reason =
+    "test order \u{203a} needs the state fails before the site in the fast \
+     order: the state is not set"
+  in
+  equal
+    (option (list string))
+    (intermittent_rows ("unknown: " ^ reason))
+    (rows r);
+  contains ~sub:(strf "\n    %s\n" reason) r.out;
+  not_contains ~sub:"none failed" r.out
+
+(* [needs the state] ends its worker when it runs before [sets the state]. *)
+let order_ends_the_job () =
+  let r = spawn ~env:[ suite "exit_order" ] [ mutate; "--crash-kills" ] in
+  ended_well r;
+  equal string survived_outcome (outcome r.out);
+  let r = spawn ~env:[ suite "exit_order" ] [ mutate; fast; "--crash-kills" ] in
+  ended_well r;
+  equal string unknown_outcome (outcome r.out);
+  let reason =
+    "the job also ends with no mutant in the fast order: its run exited with \
+     code 3"
+  in
+  equal
+    (option (list string))
+    (intermittent_rows ("unknown: " ^ reason))
+    (rows r);
+  contains ~sub:(strf "\n    %s\n" reason) r.out;
+  not_contains ~sub:"counted as killed" r.out
+
 (* A fixture release kills the mutant, and does not fail with no mutant. *)
 let release_kill_checked () =
   let r = spawn ~env:[ suite "release"; measured () ] [ mutate; fast ] in
@@ -5884,6 +5924,14 @@ let job_order =
         "a release failure that the fast order causes gives unknown, and a \
          survivor in the catalogue order"
         order_causes_a_release_failure;
+      test
+        "a failure before the site that the fast order causes gives unknown, \
+         and a kill in the catalogue order"
+        order_fails_before_the_site;
+      test
+        "an early end that the fast order causes gives unknown that \
+         --crash-kills does not count, and a survivor in the catalogue order"
+        order_ends_the_job;
       test
         "under the fast order, a kill by a fixture release that its check \
          trusts stays"

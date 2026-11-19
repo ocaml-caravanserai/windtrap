@@ -84,6 +84,7 @@ val execute_and_report :
     + Under [config.mutate_retry = n] above [0], it runs up to [n] more passes
       ({b Retries} below). Under [config.mutate_retry] above [0] or the fast
       order, it then runs up to [3] passes that check the kills ({b Flaky kills}
+      below), and under the fast order the early ends ({b Order failures}
       below).
     + Once the last job is given it writes the verdict file.
 
@@ -193,8 +194,9 @@ val execute_and_report :
     A check fails when the killing test has a counted failure in one of its
     runs, also when the run then passes its deadline or loses its worker. A run
     that ends before the killing test ends gives no failure. The check of a kill
-    by a fixture release fails when a release fails in one of its runs. When the
-    check fails, a kill in the first run is
+    by a fixture release fails when a release fails in one of its runs. A run
+    that ends before its releases has no release failure, and gives no failure.
+    When the check fails, a kill in the first run is
     {!Windtrap_runtime.Verdicts.Unknown}, with the reason
     ["its killing test <path> also fails with no mutant: <failure>"], or
     ["a fixture release also fails with no mutant: <failure>"]. Under the fast
@@ -208,6 +210,25 @@ val execute_and_report :
     the loop runs no more retries of it. Its block prints after the blocks of
     the last retry pass. The report gives the survivors in the order of their
     blocks, and [reproduce:] arms the first.
+
+    {b Order failures.} Under the fast order, a test can fail only because an
+    earlier test did not run first. Thus a first run with a counted failure
+    before the first evaluation of the site gives no survivor and no
+    [Not_evaluated]. It is {!Windtrap_runtime.Verdicts.Unknown}, with the reason
+    ["<what> fails before the site in the fast order: <failure>"]. [<what>] is
+    ["test <path>"] for the first test with a counted failure, or
+    ["a fixture release"] when no test has one. A retry keeps the rule of the
+    catalogue order.
+
+    Under the fast order, an early end of a job (a deadline, a lost worker or
+    the memory limit) waits for a check of the whole job, as a kill by a fixture
+    release does. That check fails when one of its runs ends early, or has a
+    counted failure or a release failure. Then the mutant is
+    {!Windtrap_runtime.Verdicts.Unknown}, with the reason
+    ["the job also ends with no mutant in the fast order: <reason>"], or
+    ["<what> also fails with no mutant in the fast order: <failure>"]. These
+    reasons are [Other], so [--crash-kills] does not count them. When the check
+    passes, the end keeps its reason.
 
     {b Killed elsewhere.} Under the [skip_killed] of {!Run.scope}
     ([--skip-killed]), the loop reads the regular files with the extension

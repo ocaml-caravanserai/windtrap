@@ -745,6 +745,28 @@ For a kill by a fixture release, the reason is
 `a fixture release also fails with no mutant in the fast order:`, and
 then the failure of the release.
 
+The order can also make a test fail before the mutant runs. Thus under
+`--mutate-order=fast`, a job with a failure before the first evaluation
+of the site gives no survivor and no not-evaluated mutant. The mutant
+is unknown, and the reason names the first such failure:
+
+```
+test calc › needs the state fails before the site in the fast order: the state is not set
+```
+
+When no test fails before the site but a fixture release fails, the
+reason starts with `a fixture release`. A retry keeps the rule of the
+catalogue order.
+
+The order can also make a job end early, at its deadline, by a crash
+or at its memory limit. Under `--mutate-order=fast`, such an end gets a
+check of all the tests of the job. The check fails when one of its
+runs ends early, or has a failure. Then the mutant is unknown, with the
+reason `the job also ends with no mutant in the fast order:` and the
+end of the check. `--crash-kills` does not count this reason (see
+[Counting a crash as a kill](#counting-a-crash-as-a-kill)). When the
+check passes, the end keeps its reason.
+
 A worker keeps a fixture until it ends. Thus the first test of the job
 that uses a fixture pays its setup, and no fixture is set up two times,
 unless the worker retires (a test that spawned, a timeout, or a kill
@@ -1309,6 +1331,8 @@ passed its memory limit. When more than one suite holds the mutant as
 unknown, one such reason in a mutation-tested suite is sufficient. A
 flaky kill stays unknown, because the test that killed it also fails
 with no mutant. An unknown mutant with another reason stays unknown too.
+Under `--mutate-order=fast`, an end that also occurs with no mutant has
+another reason.
 
 The score, the total and each gate then count these mutants with the
 killed mutants. The reach does not change, because it counts a killed
