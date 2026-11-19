@@ -1338,7 +1338,7 @@ flaky kill stays unknown, because the test that killed it also fails
 with no mutant. An unknown mutant with another reason stays unknown too.
 
 Under `--mutate-order=fast`, the order can cause an early end. Thus
-the reason of such a mutant has `in the fast order`, and
+each early end has `in the fast order` in its reason, and
 `--crash-kills` does not count it. In the catalogue order, the same
 end keeps its crash reason, and the option counts it.
 
