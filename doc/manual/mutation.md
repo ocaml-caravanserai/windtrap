@@ -1629,8 +1629,8 @@ these names (see
   literal, as `-1`, is part of the literal and carries no mutant. In
   `-(-x)` and in `-((-x) : int)`, the outer minus alone carries a
   mutant. A minus on the right operand of `+`, `-`, `+.` or `-.` carries
-  no mutant when that operator carries one: `x - (-y)` carries only
-  `add`, because the two mutants give `x + y`.
+  no mutant when that operator carries one. Thus `x - (-y)` carries only
+  `add`, because the two mutants give `x - y`.
 - `left` drops the right operand of `@`: `a @ b` becomes `a`. `b` also
   runs in the mutant. In a chain, as `(a @ b) @ c`, the outermost `@`
   alone is a site. `a @ b @ c` is `a @ (b @ c)`, with two sites.

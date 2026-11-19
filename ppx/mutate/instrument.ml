@@ -109,7 +109,8 @@ type family =
 
 (* Where a site of a family is in Stdlib scope. [Bare]: no opaque module is
    open. [Listed]: each opaque module is a module of [listed] that the file
-   does not declare, and the site is not in a class body with an [inherit]. *)
+   does not declare. The site is also not in a class body with an
+   [inherit]. *)
 type scope = Anywhere | Bare | Listed
 
 let scope = function

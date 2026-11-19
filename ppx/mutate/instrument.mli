@@ -367,7 +367,7 @@
       site. A type constraint between the two, as in [-((-x) : int)], does not
       change this.
     - A unary minus on the right operand of an [ari] site, as in [x - (-y)], has
-      no [pos] site. Its mutant gives [x + y], as [add] does. Where the operator
+      no [pos] site. Its mutant gives [x - y], as [add] does. Where the operator
       has no site, as the inner [-] of [(a - (-b)) - c], the minus keeps its
       site.
     - Two sites can start at one byte under two rewrites, as [mod] and [mul] in
