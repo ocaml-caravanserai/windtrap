@@ -106,7 +106,9 @@ let family (m : Mutate.mutant) =
   | "div" | "mul" | "mod" -> "mul"
   | "fdiv" | "fmul" -> "fmul"
   | "lor" | "land" | "xor" | "lsr" | "lsl" | "asr" -> "bit"
-  | ("del" | "int" | "bool" | "none" | "tail") as rewrite -> rewrite
+  | "decr" | "incr" -> "counter"
+  | ("del" | "int" | "bool" | "none" | "tail" | "pos" | "left") as rewrite ->
+      rewrite
   | other -> "unknown " ^ other
 
 let families mutants = List.sort_uniq String.compare (List.map family mutants)
@@ -119,12 +121,15 @@ let every_family =
     "bool";
     "cmp";
     "con";
+    "counter";
     "del";
     "fmul";
     "int";
+    "left";
     "mul";
     "neg";
     "none";
+    "pos";
     "tail";
   ]
 
@@ -188,6 +193,7 @@ let compiler_order =
       fun () -> Twin.show (Twin.ari_exception_order ()) );
     ("a = b", "f | r,l", fun () -> Twin.show (Twin.cmp_eq 1 2));
     ("h :: t", "a,b | t,h", fun () -> Twin.show (Twin.ret_cons "a" "b"));
+    ("a @ b", "a,b | r,l", fun () -> Twin.show (Twin.left_order "a" "b"));
   ]
 
 let as_twin (name, f) =
@@ -455,6 +461,7 @@ let loops =
           ("lt", 11);
           ("del", 10);
           ("sub", 10);
+          ("decr", 10);
           ("del", 10);
         ] ) );
     (0, (0, [ ("int", 1); ("int", 1); ("del", 1); ("lt", 1) ]));

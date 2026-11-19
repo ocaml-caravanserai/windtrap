@@ -43,6 +43,10 @@ let rewrites =
     "bool";
     "none";
     "tail";
+    "decr";
+    "incr";
+    "pos";
+    "left";
   ]
 
 let is_rewrite r = List.exists (String.equal r) rewrites

@@ -20,8 +20,14 @@ let () =
       B.shifted_left 8 1;
       B.shifted_right 8 1;
       B.shifted_arith (-8) 1;
+      B.negated 3;
+      B.counted (ref 4);
     ]
   in
   let floats = [ B.fproduct 7. 2.; B.fquotient 7. 2. ] in
-  if ints <> [ 21; 2; 1; 8; 14; 6; 16; 4; -4 ] || floats <> [ 14.; 3.5 ] then
-    exit 1
+  let floats = floats @ [ B.fnegated 1.5 ] in
+  if
+    ints <> [ 21; 2; 1; 8; 14; 6; 16; 4; -4; -3; 5 ]
+    || floats <> [ 14.; 3.5; -1.5 ]
+    || B.appended [ 1 ] [ 2 ] <> [ 1; 2 ]
+  then exit 1

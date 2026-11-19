@@ -25,3 +25,7 @@ let listed (type a) (t : a value) (v : a) x =
 let succ (type a) (w : a whole) (x : a) = (match w with Whole -> x) + 1
 let fsucc (type a) (w : a real) (x : a) = (match w with Real -> x) +. 1.
 let unpacked p = (match p with Packed (Whole, v) -> v) - 1
+
+(* The operand of a unary minus. *)
+let negated (type a) (w : a whole) (x : a) = -(match w with Whole -> x)
+let fnegated (type a) (w : a real) (x : a) = -.(match w with Real -> x)

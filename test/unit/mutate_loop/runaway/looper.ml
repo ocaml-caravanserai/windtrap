@@ -9,5 +9,5 @@
 
 let drain pending =
   while (!pending > 0) [@mutate off "the body is the site"] do
-    decr pending
+    pending := pred !pending
   done

@@ -56,6 +56,15 @@ let bit_asr a b = a asr b
 (* Armed, [n * d] is [n / d], which raises [Division_by_zero] at [d = 0]. *)
 let scale_by n d = n * d
 
+(* [decr], [incr], [pos] and [left]. *)
+let counter_incr r = incr r
+let counter_decr r = decr r
+let counter_atomic_incr a = Atomic.incr a
+let counter_atomic_decr a = Atomic.decr a
+let pos_int x = -x
+let pos_float x = -.x
+let left_append a b = a @ b
+
 (* [del], whose armed statement does not run, [int] up and down, and
    [bool]. *)
 let dropped = ref 0
@@ -138,3 +147,4 @@ let con_short a b = a && note "r" b
    alone. *)
 let none_order x = Some (note "e" x)
 let tail_order h t = note "h" h :: note "t" t
+let left_order a b = note "l" a @ note "r" b

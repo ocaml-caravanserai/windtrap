@@ -19,3 +19,4 @@ let div_minus x = x / -1
 let fmul_one x = x *. 1.
 let fdiv_minus x = x /. -1.
 let same_bits a = a land a
+let appended a = a @ []

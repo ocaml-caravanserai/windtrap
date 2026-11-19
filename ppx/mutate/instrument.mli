@@ -46,45 +46,84 @@
     has another type, fails to compile under instrumentation. [[@mutate off]] on
     the expression is the way out.
 
-    [ari], [mul], [fmul] and [bit] are the exceptions, because [a + b] cannot
-    become [a - b] without naming [-]. A file that rebinds an operator where the
-    rewriter can see it thus loses the whole family of that operator:
+    [ari], [mul], [fmul], [bit] and the counters are the exceptions. [a + b]
+    cannot become [a - b] without naming [-], and [incr r] cannot become
+    [decr r] without naming [decr]. The guards of [pos] and [left] pin their
+    operands to a Stdlib type, and apply the operator of the source to them.
+    Thus a file that rebinds an operator where the rewriter can see it loses the
+    whole family of that operator:
     - [ari] for [+], [-], [+.] and [-.]
     - [mul] for [*], [/] and [mod]
     - [fmul] for [*.] and [/.]
     - [bit] for [land], [lor], [lxor], [lsl], [lsr] and [asr]
     - [cmp] for the six comparisons
-    - [con] for [&&] and [||].
+    - [con] for [&&] and [||]
+    - [decr] and [incr] for [incr] and [decr], the [Atomic.] forms included
+    - [pos] for [~-] and [~-.]
+    - [left] for [@].
 
     [neg] names [Stdlib.not] and [Stdlib.Bool.t] alone and is never lost. A
-    rebinding is seen when a variable pattern or an alias pattern anywhere in
-    the file, or a value description such as an [external], bears the name of
-    the operator.
+    rebinding is seen when a binding anywhere in the file bears the name of the
+    operator. A binding is a variable pattern, an alias pattern, a value
+    description such as an [external], or an instance variable. A binding of [-]
+    or [-.] does not lose [pos].
 
     For [ari], [cmp] and [con], what an [open] brings into scope is not seen.
     When such an operator does not fit an arm, the file fails to compile under
     instrumentation, with the error at the expression in the source, and
     [[@@@mutate exclude_file]] is the way out.
 
-    A site of [mul], [fmul] or [bit] must also be in Stdlib scope, where no
-    opaque module is open. An opaque module is the module expression of an
-    [open], a [let open], an [M.( e )], a class [let open] or an [include]. A
-    structure of the file is not opaque, unless it includes another module. An
-    [open] or an [include] in a structure is open to the end of that structure.
-    In Stdlib scope, the operator and its replacement are those of Stdlib, and
-    each has one closed type: [int -> int -> int] or [float -> float -> float].
+    A site of [mul], [fmul], [bit], [pos] or [left] must also be in Stdlib
+    scope, where no opaque module is open. An opaque module is the module
+    expression of an [open], a [let open], an [M.( e )], a class [let open] or
+    an [include]. A structure of the file is not opaque, unless it includes
+    another module. An [open] or an [include] in a structure is open to the end
+    of that structure. In Stdlib scope, the operator and its replacement are
+    those of Stdlib, and each has one type, as [int -> int -> int],
+    [float -> float] or [ 'a list -> 'a list -> 'a list ].
 
     The guard pins its operands to that type, so the arm has the type of the
-    original. The guard of [ari] also pins its operands in Stdlib scope.
+    original. The guard of [ari] also pins its operands in Stdlib scope. The
+    guard of [pos] pins its operand to [Stdlib.Int.t] or [Stdlib.Float.t], and
+    the guard of [left] pins its two operands to one list type.
+
+    A counter has a site in a wider scope. Each opaque module must be a module
+    of this list, by a name of one part. The file must declare no module of that
+    name: [Int], [Float], [Int32], [Int64], [Nativeint], [Char], [String],
+    [Bytes], [List], [Array], [Option], [Result], [Bool], [Fun], [Seq],
+    [Hashtbl], [Printf], [Format], [Buffer] and [Atomic]. Of these modules, only
+    [Atomic] gives [incr] and [decr]. Thus a bare counter is that of Stdlib or
+    of [Atomic], and its replacement comes from the same module.
+
+    [Atomic.incr a] is a site only in a file that declares no module [Atomic]. A
+    longer path, as [Float.Array] or [Stdlib.Atomic], gives no site. The check
+    reads only the name of the module in each [open]. Thus in
+    [Float.( Array.( incr r ) )], [Array] counts as a module of the list. A
+    class body with an [inherit] has no counter site, because the parent class
+    can give an instance variable named [incr]. A file declares a module by a
+    module binding, a module declaration, a functor parameter, a [let module] or
+    a pattern of a first-class module.
+
+    The arm of a counter names the replacement with the path of the source:
+    [Atomic.( incr c )] gives [decr c], and [Atomic.incr a] gives
+    [Atomic.decr a]. The guard of a counter has no type constraint. Its armed
+    arm applies the replacement to a copy of the operand, which thus gets the
+    expected type of the original. A constraint would name [Stdlib.ref] or
+    [Stdlib.Atomic.t]. A module that the rewriter does not see, as a sibling
+    [atomic.ml], can give the counters another type.
 
     The rewriter does not see a flag of the compiler, as [-open M]. If [M] gives
-    an operator of [ari], [mul], [fmul] or [bit] another type, or binds only the
-    replacement, the guard can be ill-typed. The compiler then shows the error
-    at the expression, and [[@mutate off "reason"]] or
-    [[@@@mutate exclude_file]] is the way out. Under [-open Base], each arm
-    compiles, because Base gives these operators the types of Stdlib. Base
-    deprecates [mod]. The original gives the same alert, and the guard takes the
-    alert attributes of the site. *)
+    another type to [~-], [~-.], [@], [incr], [decr] or an operator of [ari],
+    [mul], [fmul] or [bit], the guard can be ill-typed. The guard can also be
+    ill-typed if [M] binds only the replacement. For example, an [@] of [M] on
+    two values of one type that is not a list breaks the pin of [left].
+
+    When a guard is ill-typed, the compiler shows the error at the expression,
+    and [[@mutate off "reason"]] or [[@@@mutate exclude_file]] is the way out.
+    Under [-open Base], each arm compiles, because Base gives these operators
+    the types of Stdlib. Base deprecates [mod], [incr] and [decr]. The original
+    gives the same alert, and the guard takes the alert attributes of the site.
+*)
 
 (** {1:sites Sites}
 
@@ -92,12 +131,12 @@
 
 (** {2:operators Operators}
 
-    Each operator rewrites its sites in one way, and the name of the rewrite
-    says what replaces the original, but for [mod], [xor] and [asr], which name
-    the original. The sites of [cmp], [con], [ari], [mul], [fmul] and [bit] are
-    applications of a bare operator to two unlabelled arguments. A qualified
-    spelling such as [Float.( < )], a labelled application and a partial one are
-    not sites.
+    Each operator rewrites its sites in one way. The name of the rewrite says
+    what replaces the original, but for [mod], [xor] and [asr], which name the
+    original, and [pos] and [left], which name what stays. The sites of [cmp],
+    [con], [ari], [mul], [fmul], [bit] and [left] are applications of a bare
+    operator to two unlabelled arguments. A qualified spelling such as
+    [Float.( < )], a labelled application and a partial one are not sites.
     - [neg] negates a condition, under the name [not]. Its sites are the
       condition of an [if] or of a [while] and the guard of an arm, when the
       expression is neither a comparison nor a connective.
@@ -116,6 +155,22 @@
       replaces [lxor] with [land] under the name [xor]. It swaps [lsl] and [lsr]
       under the names [lsr] and [lsl], and replaces [asr] with [lsl] under the
       name [asr].
+    - The counters swap [incr] and [decr], under the names [decr] and [incr]:
+      [incr r] becomes [decr r]. Their sites are [incr e], [decr e],
+      [Atomic.incr e] and [Atomic.decr e], with one unlabelled argument [e]. The
+      operand [e] must be pure: an identifier, a constructor without an
+      argument, or a field of such an expression, with or without a type
+      constraint. [Stdlib.incr r], [Stdlib.Atomic.incr a], [r |> incr],
+      [incr @@ r], a partial counter, as in [List.iter incr l], and a counter of
+      a call, as [incr (f x)], are no sites.
+    - [pos] drops a unary minus, under the name [pos]: [-e] and [-.e] become
+      [e]. Its sites are applications of a bare [~-] or [~-.] to one unlabelled
+      argument, as the parser gives [-e] and [( ~- ) e]. The parser makes a
+      minus on a literal, as [-1] or [-(1)], part of the literal, so it is no
+      site. A partial [( ~- )] and a qualified [Float.( ~-. )] are no sites.
+    - [left] drops the right operand of [@], under the name [left]: [a @ b]
+      becomes [a]. [Stdlib.( @ )], [List.append] and a partial [( @ ) a] are no
+      sites.
     - [del] drops a statement, under the name [del]: the statement does not run.
       A statement is [e1] in [e1; e2]. A statement is also the branch [e] of
       [if c then e] with no [else], and the body of a [while] or a [for]. In
@@ -136,6 +191,13 @@
 
     [mod], [xor] and [asr] name the original, because two sites at one byte with
     one name have one identifier, as [mod] and [mul] in [a / b mod c].
+
+    The guard of a counter is [if armed then decr r' else incr r], where [r'] is
+    a copy of [r], as in the guard of [tail]. The guard of [pos] is
+    [let (p : Stdlib.Int.t) = e in if armed then p else ~- p], with
+    [Stdlib.Float.t] for [~-.]. The guard of [left] is that of [ari], with the
+    pin [_ lists]. Thus the right operand of [@] also runs when the mutant is
+    armed.
 
     The guard of [del] in [e1; e2] is
     [(if armed then () else (e1; ()) : Stdlib.Unit.t); e2], which types [e1] as
@@ -167,7 +229,8 @@
     an arm, or a direct operand of [&&] or [||] in a file that keeps the [con]
     family. It does not reach through a sequence, a [let], a type constraint or
     [not], so the comparison of [let ok = a < b] has no mutant. [con], [ari],
-    [mul], [fmul] and [bit] have sites in every context.
+    [mul], [fmul], [bit], the counters, [pos] and [left] have sites in every
+    context.
 
     The armed arm of an ordering rewrite applies the original operator to the
     swapped operands under [Stdlib.not], so [a < b] armed is [not (b < a)]. On
@@ -217,6 +280,13 @@
       amount. The [0] keeps its [int] mutant. [bit] also skips [a land a] and
       [a lor a] under the rule of [con]. [a lxor a] keeps its mutant, because it
       is [0] and [a land a] is [a].
+    - [left] skips [a @ l] where [l] is a list literal, as [[]] or [[ x; y ]]. A
+      list literal is [[]], or [h :: t] with the constructor [(::)] and a list
+      literal [t]. A type constraint does not change this. [a @ []] is [a], and
+      in [acc @ [ x ]] [tail] gives the mutant [acc @ []]. Thus [acc @ [ x ]]
+      has no [left] site where [tail] has no site: at load, in the right-hand
+      side of a [let rec], and in a file that loses [tail]. [[] @ b] and
+      [a @ (x :: t)] keep their mutants.
     - [con] skips [a && a] and [a || a] when the two operands are one expression
       and [a] is an identifier, a constructor without an argument, as [true], or
       a field of such an expression, with or without a type constraint. Such an
@@ -265,7 +335,7 @@
 
     An arid site ends the chain of its operator. In [a + b + 0] the outermost
     site is arid, so [a + b] carries its own mutant, and so does [a * b] in
-    [a * b * 1].
+    [a * b * 1] and [a @ b] in [(a @ b) @ [ x ]].
 
     A [[@mutate off]] on a site that an equivalence rule or a message rule skips
     records the site as dismissed, as on any other site. The other rules make
@@ -284,17 +354,28 @@
       mutates [b && c] alone. Its operands are boolean contexts all the same.
     - In a file that lost the [con] or the [cmp] family, a condition of that
       family is no longer recognized as one, and carries [neg].
-    - In a chain of one operator of [ari], [mul], [fmul] or [bit], as
+    - In a chain of one operator of [ari], [mul], [fmul], [bit] or [left], as
       [a + b + c], the outermost application alone is a site. The rule reads the
       tree and not the layout, so [(a + b) + c] and [f (a + b + c)] carry one
       mutant too. [a + b - c] carries two, because [sub] and [add] are two
       rewrites, and so does [a + b + (c + d)]. [lsl] is right associative, so
-      [x lsl 1 lsl 2] carries two mutants and [(x lsl 1) lsl 2] carries one. An
+      [x lsl 1 lsl 2] carries two mutants and [(x lsl 1) lsl 2] carries one. In
+      the same way, [@] is right associative: [a @ b @ c] is [a @ (b @ c)] and
+      carries two mutants, and [(a @ b) @ c] carries one. An
       {{!section-arid}arid} site ends the chain.
-    - Two sites can start at one byte under two rewrites, as [mod] and [mul] in
-      [a / b mod c].
+    - In [-(-x)], the outer [pos] carries the mutant, and the inner one has no
+      site. A type constraint between the two, as in [-((-x) : int)], does not
+      change this.
+    - A unary minus on the right operand of an [ari] site, as in [x - (-y)], has
+      no [pos] site. Its mutant [x - y] has the value of the [add] mutant. Where
+      the operator has no site, as the inner [-] of [(a - (-b)) - c], the minus
+      keeps its site.
+    - Two sites can start at one byte under two rewrites. These are [mod] and
+      [mul] in [a / b mod c], [del] and [decr] in the statement [incr r], and
+      [sub] and [pos] in [-a + b]. The last one is [(-a) + b].
     - A guard binds its operands under the names [__windtrap_mut_<i>_<role>],
-      where [<i>] is the index of the site and [<role>] is [p], [l] or [r]. *)
+      where [<i>] is the index of the site and [<role>] is [p], [l] or [r]. The
+      guard of a counter binds no name. *)
 
 (** {2:exclusions Code that is never mutated}
 
@@ -406,21 +487,28 @@
       guards of [ari], [mul], [fmul] and [bit] do so in
       {{!section-law}Stdlib scope}. Thus a GADT [match] in an operand gets the
       expected type that the application gives it.
+    - [type 'a lists = 'a list * 'a list]. It is only in a file that holds the
+      guard of [left]. The guard annotates its pair of operands with it.
     - [___windtrap_armed___], bound to
       [Windtrap_runtime.Mutate.register ~file ~sites]. The call is made once,
       when the module is initialized, within the preconditions of [register].
       [file] is the input name and [sites] is the table in index order.
 
-    Every generated node has a ghost location, with two exceptions. The disarmed
-    arm of an ordering, [ari], [mul], [fmul] or [bit] guard is the original
-    application rebuilt over the binders, and keeps its location and its
-    attributes. The whole guard also takes the [ocaml.warning], [warning],
-    [ocaml.alert] and [alert] attributes of the site, because its operands are
-    outside the arm. The disarmed arm of the [del] guard of a statement or a
-    loop body is [e; ()], whose [()] has a location of zero width at the end of
-    [e]. On a loop body, the arm [e; ()] has the location of [e]. The copy [t']
-    in the guard of [tail] is generated code too, and each of its locations is
-    ghost, so that no two nodes share a location.
+    Every generated node has a ghost location, with three exceptions. The
+    disarmed arm of an ordering, [ari], [mul], [fmul], [bit], [pos] or [left]
+    guard is the original application rebuilt over the binders. It keeps its
+    location and its attributes. The disarmed arm of a counter guard is the
+    site. The operands and the armed arm are outside the disarmed arm. Thus the
+    whole guard of these rewrites also takes the [ocaml.warning], [warning],
+    [ocaml.warnerror], [warnerror], [ocaml.alert] and [alert] attributes of the
+    site. The armed counter and the replacement operator of [ari], [mul], [fmul]
+    and [bit] take these attributes of the source identifier.
+
+    The disarmed arm of the [del] guard of a statement or a loop body is
+    [e; ()], whose [()] has a location of zero width at the end of [e]. On a
+    loop body, the arm [e; ()] has the location of [e]. The copy [t'] in the
+    guard of [tail] is generated code too, and each of its locations is ghost,
+    so that no two nodes share a location.
 
     In the driver that dune builds for a stanza naming both backends this
     rewriter runs first, so its sites are those stated here and the coverage
@@ -450,7 +538,8 @@
       [___windtrap_post_visit___ 0 (f x)] for [f x].
     - the visits, their indices and the booleans of the [if] of [||] are that
       rewriter's generated code, at ghost locations, and carry no site.
-    - The [open] of the coverage module is opaque. Thus [mul], [fmul] and [bit]
+    - The [open] of the coverage module is opaque, and it is not in the list of
+      the counters. Thus [mul], [fmul], [bit], [pos], [left], [decr] and [incr]
       have no site in the file, and the guard of [ari] does not pin its
       operands.
 

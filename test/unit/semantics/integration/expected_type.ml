@@ -48,3 +48,23 @@ let below (p : Point.t) = if p < { x = 0; y = 10 } then 1 else 0
    the application - and the expected types it gives them - survives
    untouched. *)
 let is_green (c : Color.t) = if c = Green then 1 else 0
+
+(* The right operand of [@] gets the type of the left one. [A] is
+   declared after [Letter], so by scope alone it is a [late]. *)
+module Letter = struct
+  type t = A | B
+end
+
+type late = A | C
+
+let prepended (xs : Letter.t list) ys = xs @ (A :: ys)
+
+(* A GADT [match] as an operand of [@]. The guard pins the two operands to
+   one list type, so this compiles without [-principal]. *)
+type _ listed = Listed : int list listed
+
+let left_gadt (type a) (w : a listed) (x : a) (ys : int list) =
+  (match w with Listed -> x) @ ys
+
+let right_gadt (type a) (w : a listed) (x : a) (ys : int list) : int list =
+  ys @ match w with Listed -> x
