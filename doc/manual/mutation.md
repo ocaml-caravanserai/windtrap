@@ -1243,7 +1243,7 @@ crashed:
 
 ```
 $ dune exec windtrap -- mutants --crash-kills | tail -n 1
-mutants: 3 survived of 13 reached, 10 killed (2 by --crash-kills), 1 never reached, 1 executable, score 76.9% (10/13), reach 92.9% (13/14), total 71.4% (10/14)
+mutants: 3 survived of 14 reached, 11 killed (2 by --crash-kills), 1 never reached, 1 executable, score 78.6% (11/14), reach 93.3% (14/15), total 73.3% (11/15)
 ```
 
 The verdict of a suite that was not mutation-tested never counts a
