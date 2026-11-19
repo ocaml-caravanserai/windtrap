@@ -387,26 +387,23 @@ let deadline_multiplier = 10.
 
 (* The dry run's wall clock bounds what a job pays besides its tests: the
    start of its worker, and its share of a loaded machine. *)
-let deadline ~wall ~durations paths =
-  let took path = Option.value ~default:0. (Hashtbl.find_opt durations path) in
+let deadline ~wall ~rank paths =
+  let took path = Option.fold ~none:0. ~some:fst (rank path) in
   let scheduled = List.fold_left (fun acc path -> acc +. took path) 0. paths in
   wall +. Float.max 1. (deadline_multiplier *. scheduled)
 
 (* Whole milliseconds, so that a change of microseconds between two runs does
    not change the order. *)
-let job_order order ~timing paths =
+let job_order order ~rank paths =
   match order with
   | Run.Catalogue -> paths
   | Run.Fast ->
       let key path =
-        match timing path with
+        match rank path with
         | Some (duration, index) -> (0, Float.to_int (duration *. 1000.), index)
         | None -> (1, 0, 0)
       in
-      List.map snd
-        (List.stable_sort
-           (fun (a, _) (b, _) -> compare a b)
-           (List.map (fun path -> (key path, path)) paths))
+      List.stable_sort (fun a b -> compare (key a) (key b)) paths
 
 let budget_of hits =
   if hits > (max_int - 1000) / 8 then max_int else (hits * 8) + 1000
@@ -545,6 +542,9 @@ let check_failure order ~deadline goal (ran : Supervisor.ran) =
   let in_order =
     match order with Run.Catalogue -> "" | Run.Fast -> " in the fast order"
   in
+  let also what failure =
+    strf "%s also fails with no mutant%s: %s" what in_order failure
+  in
   match goal with
   | Killing test ->
       List.find_map
@@ -553,18 +553,14 @@ let check_failure order ~deadline goal (ran : Supervisor.ran) =
           | Failure.Fail (f :: _)
             when kills r && List.equal String.equal r.path test ->
               Some
-                (strf "its killing test %s also fails with no mutant%s: %s"
-                   (Test_tree.path_to_string test)
-                   in_order
+                (also
+                   ("its killing test " ^ Test_tree.path_to_string test)
                    (Report_sections.headline f))
           | Pass | Fail _ | Skip _ -> None)
         ran.results
   | Release -> (
       match ran.release_failures with
-      | f :: _ ->
-          Some
-            (strf "a fixture release also fails with no mutant%s: %s" in_order
-               (Report_sections.headline f))
+      | f :: _ -> Some (also "a fixture release" (Report_sections.headline f))
       | [] -> None)
   | End -> (
       match end_reason ~deadline ran.ended with
@@ -574,8 +570,7 @@ let check_failure order ~deadline goal (ran : Supervisor.ran) =
                (Verdicts.reason_text reason))
       | None ->
           Option.map
-            (fun (what, failure) ->
-              strf "%s also fails with no mutant%s: %s" what in_order failure)
+            (fun (what, failure) -> also what failure)
             (first_failure ran))
 
 (* The failure of a job that did not evaluate the armed site. *)
@@ -872,8 +867,8 @@ type check = {
    verdict in place of the job of its mutant, and each job has its tests in
    the order of the job. *)
 let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
-    ~dry_run ~durations ~pooled ~wall ~save reached =
-  let deadline = deadline ~wall ~durations in
+    ~dry_run ~rank ~pooled ~wall ~save reached =
+  let deadline = deadline ~wall ~rank in
   let locations = Hashtbl.create 256 in
   List.iter
     (fun (case : Test_tree.case) ->
@@ -1444,28 +1439,25 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   unreached
               in
               let wall = Float.max 0.01 (Os.count_s started) in
-              let durations = Hashtbl.create 256 in
+              (* The time in the dry run and the catalogue index of each test
+                 that the dry run ran. *)
+              let ranks = Hashtbl.create 256 in
               List.iter
                 (fun (r : Run.result) ->
-                  Hashtbl.replace durations r.path r.duration)
+                  Hashtbl.replace ranks r.path (r.duration, max_int))
                 dry_run;
-              let indices = Hashtbl.create 256 in
               List.iteri
                 (fun k (case : Test_tree.case) ->
-                  Hashtbl.replace indices case.path k)
+                  match Hashtbl.find_opt ranks case.path with
+                  | Some (duration, _) ->
+                      Hashtbl.replace ranks case.path (duration, k)
+                  | None -> ())
                 (Test_tree.flatten tests);
-              let timing path =
-                match
-                  ( Hashtbl.find_opt durations path,
-                    Hashtbl.find_opt indices path )
-                with
-                | Some duration, Some index -> Some (duration, index)
-                | _ -> None
-              in
+              let rank = Hashtbl.find_opt ranks in
               let job (m, site) =
                 ( m,
                   site,
-                  job_order config.mutate_order ~timing (List.rev site.tests) )
+                  job_order config.mutate_order ~rank (List.rev site.tests) )
               in
               let test_digests = test_digests tests in
               let skipped, to_test, skip_lines =
@@ -1543,7 +1535,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
               in
               match
                 test_mutants renderer ~meter ~suite config ~effort tests
-                  ~dry_run ~durations ~pooled ~wall ~save to_test
+                  ~dry_run ~rank ~pooled ~wall ~save to_test
               with
               | exception Sys_error _ when !signal = Some Sys.sigpipe ->
                   Os.die_by Sys.sigpipe

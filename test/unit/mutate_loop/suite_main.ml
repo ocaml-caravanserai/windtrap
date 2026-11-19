@@ -403,12 +403,28 @@ let probe_block =
      of its fixture, at the end of the run, checks the answer. Outside
      the process that measured the reach map the release also prints on
      both standard descriptors, which is what a child's /dev/null hides.
+     Each of its runs appends a line to the file of MUTATE_RUNS.
    - [budget] evaluates [sub] [k] times unarmed and [target] times armed
      (MUTATE_BUDGET="k target"), and pins nothing: the runaway budget
      alone decides the mutant.
    - [flip] fails where MUTATE_FLIP is set, so a first run can leave a
      failure for [--failed] to select.
    - [focused] holds a focused test. *)
+
+(* Appends a line to the file of [var], and gives its number of lines. It
+   gives 0 when [var] is not set. *)
+let count var =
+  match Sys.getenv_opt var with
+  | None | Some "" -> 0
+  | Some path ->
+      let fd = Unix.openfile path [ O_WRONLY; O_APPEND; O_CREAT ] 0o644 in
+      Fun.protect
+        ~finally:(fun () -> Unix.close fd)
+        (fun () ->
+          (* The offset after an appended write is atomic with the write, so
+             two processes never get the same count. *)
+          ignore (Unix.write_substring fd "run\n" 0 4);
+          Unix.lseek fd 0 SEEK_CUR / 4)
 
 let baseline =
   [
@@ -431,6 +447,7 @@ let released =
 let release =
   [
     test "holds a fixture and pins nothing about sub" (fun () ->
+        ignore (count "MUTATE_RUNS");
         released ();
         is_true (Subject.sub 10 4 < 100));
   ]
@@ -749,21 +766,6 @@ let start_index path =
    - Each worker appends a line to the file of MUTATE_WORKER_RUNS when it runs the
      first test: the dry run, the probe, and then each run of the mutant. At
      the line MUTATE_SKIP_AT, the two tests do not run [widen]. *)
-
-(* Appends a line to the file of [var], and gives its number of lines. It
-   gives 0 when [var] is not set. *)
-let count var =
-  match Sys.getenv_opt var with
-  | None | Some "" -> 0
-  | Some path ->
-      let fd = Unix.openfile path [ O_WRONLY; O_APPEND; O_CREAT ] 0o644 in
-      Fun.protect
-        ~finally:(fun () -> Unix.close fd)
-        (fun () ->
-          (* The offset after an appended write is atomic with the write, so
-             two processes never get the same count. *)
-          ignore (Unix.write_substring fd "run\n" 0 4);
-          Unix.lseek fd 0 SEEK_CUR / 4)
 
 let at var n = Sys.getenv_opt var = Some (string_of_int n)
 let skipped_widen = ref false

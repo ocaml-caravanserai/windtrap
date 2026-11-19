@@ -498,15 +498,15 @@ val settings : Run.config -> string
 
 val job_order :
   Run.mutate_order ->
-  timing:(string list -> (float * int) option) ->
+  rank:(string list -> (float * int) option) ->
   string list list ->
   string list list
-(** [job_order order ~timing paths] is the order of the reaching tests [paths]
-    in a job. [timing path] is the time of [path] in the dry run, in seconds,
-    and its index in the catalogue.
+(** [job_order order ~rank paths] is the order of the reaching tests [paths] in
+    a job. [rank path] is the time of [path] in the dry run, in seconds, and its
+    index in the catalogue.
     - Under {!Run.Catalogue} it is [paths].
     - Under {!Run.Fast} it is [paths] sorted by the time in whole milliseconds,
-      truncated, and then by the index. A test that [timing] does not know comes
+      truncated, and then by the index. A test that [rank] does not know comes
       after all the others, in the order of [paths]. *)
 
 val test_digest : string -> string option

@@ -5848,14 +5848,25 @@ let order_ends_the_job () =
   contains ~sub:(strf "\n    %s\n" reason) r.out;
   not_contains ~sub:"counted as killed" r.out
 
-(* A fixture release kills the mutant, and does not fail with no mutant. *)
+(* A fixture release kills the mutant, and does not fail with no mutant. The
+   test runs in the dry run, the probe and the job, and under the fast order
+   also in the three runs of the check. *)
 let release_kill_checked () =
-  let r = spawn ~env:[ suite "release"; measured () ] [ mutate; fast ] in
-  ended_well r;
-  equal string killed_outcome (outcome r.out)
+  let release_runs args =
+    let runs = Filename.concat (temp_dir ()) "runs" in
+    let r =
+      spawn ~env:[ suite "release"; measured (); ("MUTATE_RUNS", runs) ] args
+    in
+    ended_well r;
+    equal string killed_outcome (outcome r.out);
+    line_count runs
+  in
+  equal int 3 (release_runs [ mutate ]);
+  equal int 6 (release_runs [ mutate; fast ])
 
 (* Run 3 survives, run 4 is the retry and kills, and run 5 is the first check
-   run. *)
+   run. The fast order can change the order of the two tests, and these
+   assertions hold for the two orders. *)
 let fast_kill_in_a_retry () =
   let k = kill_run ~env:[ fail_at "4,5" ] [ fast; retry_once ] in
   ended_well k.r;
@@ -6453,11 +6464,11 @@ let job_orders =
   ]
 
 let job_order_case (_, order, tests, input, expected) =
-  let timing path = timed (List.map (fun (n, v) -> (t n, v)) tests) path in
+  let rank path = timed (List.map (fun (n, v) -> (t n, v)) tests) path in
   equal
     (list (list string))
     (List.map t expected)
-    (Loop.job_order order ~timing (List.map t input))
+    (Loop.job_order order ~rank (List.map t input))
 
 let file_digest path = Digest.to_hex (Digest.file path)
 
