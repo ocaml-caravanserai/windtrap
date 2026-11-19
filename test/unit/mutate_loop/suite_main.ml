@@ -34,6 +34,21 @@ let () =
           output_string oc (string_of_int (Unix.getpid ()) ^ "\n");
           close_out oc)
 
+(* Appends a line to the file of [var], and gives its number of lines. It
+   gives 0 when [var] is not set. *)
+let count var =
+  match Sys.getenv_opt var with
+  | None | Some "" -> 0
+  | Some path ->
+      let fd = Unix.openfile path [ O_WRONLY; O_APPEND; O_CREAT ] 0o644 in
+      Fun.protect
+        ~finally:(fun () -> Unix.close fd)
+        (fun () ->
+          (* The offset after an appended write is atomic with the write, so
+             two processes never get the same count. *)
+          ignore (Unix.write_substring fd "run\n" 0 4);
+          Unix.lseek fd 0 SEEK_CUR / 4)
+
 let strong =
   [
     test "sub of two positives" (fun () -> equal int 6 (Subject.sub 10 4));
@@ -112,6 +127,7 @@ let skippy =
 let crash =
   [
     test "crasher leaves without a word" (fun () ->
+        ignore (count "MUTATE_RUNS");
         if Subject.crasher 3 1 <> 2 then Unix._exit 3;
         equal int 2 (Subject.crasher 3 1));
   ]
@@ -410,21 +426,6 @@ let probe_block =
    - [flip] fails where MUTATE_FLIP is set, so a first run can leave a
      failure for [--failed] to select.
    - [focused] holds a focused test. *)
-
-(* Appends a line to the file of [var], and gives its number of lines. It
-   gives 0 when [var] is not set. *)
-let count var =
-  match Sys.getenv_opt var with
-  | None | Some "" -> 0
-  | Some path ->
-      let fd = Unix.openfile path [ O_WRONLY; O_APPEND; O_CREAT ] 0o644 in
-      Fun.protect
-        ~finally:(fun () -> Unix.close fd)
-        (fun () ->
-          (* The offset after an appended write is atomic with the write, so
-             two processes never get the same count. *)
-          ignore (Unix.write_substring fd "run\n" 0 4);
-          Unix.lseek fd 0 SEEK_CUR / 4)
 
 let baseline =
   [

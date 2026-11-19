@@ -5848,6 +5848,26 @@ let order_ends_the_job () =
   contains ~sub:(strf "\n    %s\n" reason) r.out;
   not_contains ~sub:"counted as killed" r.out
 
+(* The mutant of [crasher] ends its worker, and the check of the whole job
+   runs the test three times with no mutant. Under --crash-kills, the end
+   still counts as a kill. *)
+let mutant_ends_the_job () =
+  let crash_runs args =
+    let runs = Filename.concat (temp_dir ()) "runs" in
+    let r = spawn ~env:[ suite "crash"; ("MUTATE_RUNS", runs) ] args in
+    ended_well r;
+    contains
+      ~sub:
+        (strf
+           "  %s  a - b \u{2192} a + b\n\
+           \    its run exited with code 3 (counted as killed)\n"
+           (site 27))
+      r.out;
+    line_count runs
+  in
+  equal int 3 (crash_runs [ mutate; "--crash-kills" ]);
+  equal int 6 (crash_runs [ mutate; fast; "--crash-kills" ])
+
 (* A fixture release kills the mutant, and does not fail with no mutant. The
    test runs in the dry run, the probe and the job, and under the fast order
    also in the three runs of the check. *)
@@ -5943,6 +5963,10 @@ let job_order =
         "an early end that the fast order causes gives unknown that \
          --crash-kills does not count, and a survivor in the catalogue order"
         order_ends_the_job;
+      test
+        "under the fast order, an early end that its check does not find again \
+         keeps its reason"
+        mutant_ends_the_job;
       test
         "under the fast order, a kill by a fixture release that its check \
          trusts stays"
