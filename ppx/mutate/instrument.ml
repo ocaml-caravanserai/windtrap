@@ -955,7 +955,7 @@ let tail ~loc ~module_name ~index e value t =
 (* A counter: [if armed then decr r' else incr r], where [r'] is a copy of
    the pure operand [r], as in [tail], and [decr] has the path of the source.
    The disarmed arm is the site, with its location and its attributes. The
-   application gives [r'] the expected type of [r], so the guard needs no
+   application gives [r'] the expected type of [r], so the guard has no
    constraint, which would name [Stdlib.ref] or [Stdlib.Atomic.t]. *)
 let recount ~loc ~module_name ~index e u replacement =
   let replaced =
@@ -1058,8 +1058,8 @@ class instrumenter ~keeps ~declares ~module_name =
        which [kept] reads for the scope of a family. *)
     val mutable opens : opening list = []
 
-    (* Whether the code being rewritten is in a class body with an
-       [inherit], whose instance variables the rewriter does not see. *)
+    (* [true] in a class body with an [inherit], whose instance variables
+       the rewriter does not see. *)
     val mutable inherits = false
     method sites = List.rev sites
     method pins = pins

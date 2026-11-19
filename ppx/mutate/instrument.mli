@@ -94,8 +94,10 @@
     [Hashtbl], [Printf], [Format], [Buffer] and [Atomic]. Of these modules, only
     [Atomic] gives [incr] and [decr], and it gives the two. Thus a bare counter
     is that of Stdlib or of [Atomic], and its replacement comes from the same
-    module. [Atomic.incr a] also needs a file that declares no module [Atomic].
-    A longer path, as [Float.Array] or [Stdlib.Atomic], gives no site. A class
+    module.
+
+    [Atomic.incr a] is a site only in a file that declares no module [Atomic]. A
+    longer path, as [Float.Array] or [Stdlib.Atomic], gives no site. A class
     body with an [inherit] has no counter site, because the parent class can
     give an instance variable named [incr]. A file declares a module by a module
     binding, a module declaration, a functor parameter, a [let module] or a
