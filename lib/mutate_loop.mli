@@ -84,8 +84,7 @@ val execute_and_report :
     + Under [config.mutate_retry = n] above [0], it runs up to [n] more passes
       ({b Retries} below). Under [config.mutate_retry] above [0] or the fast
       order, it then runs up to [3] passes that check the kills ({b Flaky kills}
-      below). Under the fast order, these passes also check the early ends
-      ({b Order failures} below).
+      below).
     + Once the last job is given it writes the verdict file.
 
     A job starts from module initialization, so what the dry run left, a table
@@ -131,7 +130,8 @@ val execute_and_report :
     counts each failure, as when it could not tell. Under [config.crash_kills],
     the report counts an unknown mutant of a deadline, a crash or a memory limit
     as killed ({!Report_sections.val-counted_as_killed}). Its verdict stays
-    unknown.
+    unknown. Under the fast order, an early end has an [Other] reason
+    ({b Order failures} below), which does not count.
 
     {b Full matrix.} Under [config.full_matrix] ([--full-matrix]), the job of a
     mutant does not stop at a kill. After each counted failure in or after the
@@ -180,9 +180,8 @@ val execute_and_report :
     a kill by a fixture release. It runs them with no mutant and with no stop at
     a failure, in a fresh worker. Two checks that run the same cases in the same
     order and look for the same failure are one check. The failure is of one
-    killing test, of a release, or of an early end ({b Order failures} below).
-    Under [config.full_matrix], the check also runs only up to the first killing
-    test.
+    killing test or of a release. Under [config.full_matrix], the check also
+    runs only up to the first killing test.
 
     The checks run after the last retry pass, in up to [3] passes
     ([check_runs]). Each pass runs once each check that has not failed, up to
@@ -225,17 +224,10 @@ val execute_and_report :
     catalogue order.
 
     Under the fast order, a job can end early at its deadline, by a lost worker
-    or at its memory limit. Each such end waits for a check of the tests of the
-    job, up to and with the test that ran at the end. When the end comes after a
-    kill, the check stops at the killing test.
-
-    The check of an early end fails when one of its runs ends early, or has a
-    counted failure or a release failure. Then the mutant is
-    {!Windtrap_runtime.Verdicts.Unknown}, with the reason
-    ["the job also ends with no mutant in the fast order: <reason>"], or
-    ["<what> also fails with no mutant in the fast order: <failure>"]. These
-    reasons are [Other], so [--crash-kills] does not count them. When the check
-    passes, the end keeps its reason.
+    or at its memory limit. The order can cause such an end, and the loop does
+    no check of it. The mutant is {!Windtrap_runtime.Verdicts.Unknown}, with the
+    reason ["<reason> in the fast order"], where [<reason>] is the text of the
+    end. This reason is [Other], so [--crash-kills] does not count it.
 
     {b Killed elsewhere.} Under the [skip_killed] of {!Run.scope}
     ([--skip-killed]), the loop reads the regular files with the extension

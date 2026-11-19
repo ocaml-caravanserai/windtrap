@@ -634,7 +634,7 @@ Under `--mutate-retry N` with `N` above 0, or under
 `--mutate-order=fast`, the loop does a check of each kill that names a
 test. The killing test is the first test that fails in or after the
 test that first evaluates the site. The check runs the reaching tests
-of the job that killed the mutant, in the order of the job, up to and
+of the job that killed the mutant, in the job order, up to and
 with the killing test. It runs them with no mutant, in a fresh worker.
 A failure of an earlier test does not stop this run. The check does this
 run up to 3 times:
@@ -761,22 +761,13 @@ first run. In a retry, a failure before the site gives the same verdict
 as in the catalogue order.
 
 The order can also make a job end early, at its deadline, by a crash
-or at its memory limit. Under `--mutate-order=fast`, each early end
-gets a check of the tests of the job, up to and with the test that ran
-at the end. When the end comes after a kill, for example in a fixture
-release, the check stops at the killing test. The check fails when one
-of its runs ends early, or has a failure. Then the mutant is unknown,
-with the reason `the job also ends with no mutant in the fast order:`
-and the end of the check.
-
-For a failure, the reason names the test or the fixture release, and
-then has `also fails with no mutant in the fast order:`.
-`--crash-kills` does not count this reason (see
-[Counting a crash as a kill](#counting-a-crash-as-a-kill)). When the
-check passes, the end keeps its reason. A worker can retire before the
-end, and its replacement can end before it runs a test. Then the check
-also runs the next test of the job, which did not run in the job. This
-test can only add a failure or an early end to the check.
+or at its memory limit. Under `--mutate-order=fast`, an early end gets
+no check, and the mutant is unknown. Its reason has
+`in the fast order` after the end, as in
+`its run exited with code 3 in the fast order`. `--crash-kills` does
+not count this reason (see
+[Counting a crash as a kill](#counting-a-crash-as-a-kill)), and its
+`reason_kind` is `other`.
 
 A worker keeps a fixture until it ends. Thus the first test of the job
 that uses a fixture pays its setup. The worker sets up no fixture two
@@ -1346,9 +1337,10 @@ unknown, one such reason in a mutation-tested suite is sufficient. A
 flaky kill stays unknown, because the test that killed it also fails
 with no mutant. An unknown mutant with another reason stays unknown too.
 
-Under `--mutate-order=fast`, the check of an early end can find the end
-again with no mutant. The reason of that mutant is then not a crash
-reason, so `--crash-kills` does not count it.
+Under `--mutate-order=fast`, the order can cause an early end. Thus
+the reason of such a mutant has `in the fast order`, and
+`--crash-kills` does not count it. In the catalogue order, the same
+end keeps its crash reason, and the option counts it.
 
 The score, the total and each gate then count these mutants with the
 killed mutants. The reach does not change, because it counts a killed

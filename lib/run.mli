@@ -200,7 +200,8 @@ type config = {
       (** [--mutate-order]: under {!Loop}, the order of the reaching tests in
           the job of each mutant. Under {!Fast}, the loop does the check of each
           kill, also of a kill by a fixture release and when [mutate_retry] is
-          [0]. It also does the check of each early end (see [Mutate_loop]). *)
+          [0]. An early end gets no check, and [crash_kills] does not count it
+          (see [Mutate_loop]). *)
   mutate_memory : int;
       (** [--mutate-memory]: under {!Loop}, the limit of the resident memory of
           each worker of a mutant, in MB, from 1 to 1048576. On Linux, the loop
@@ -209,7 +210,8 @@ type config = {
   crash_kills : bool;
       (** [--crash-kills]: under {!Loop}, the report counts a mutant whose run
           passed its deadline, crashed or passed its memory limit as killed
-          ({!Report_sections.val-counted_as_killed}). The verdict file does not
+          ({!Report_sections.val-counted_as_killed}). Under {!Fast}, such a run
+          has another reason, and does not count. The verdict file does not
           change. *)
   incremental : bool;
       (** [--incremental]: under {!Loop}, a reached mutant whose evidence did
