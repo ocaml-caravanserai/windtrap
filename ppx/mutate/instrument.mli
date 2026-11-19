@@ -46,11 +46,11 @@
     has another type, fails to compile under instrumentation. [[@mutate off]] on
     the expression is the way out.
 
-    [ari], [mul], [fmul], [bit] and the counters are the exceptions, because
-    [a + b] cannot become [a - b] without naming [-], and [incr r] cannot become
-    [decr r] without naming [decr]. The disarmed arms of [pos] and [left] apply
-    the operator of the source to operands that the guard pins to a Stdlib type.
-    A file that rebinds an operator where the rewriter can see it thus loses the
+    [ari], [mul], [fmul], [bit] and the counters are the exceptions. [a + b]
+    cannot become [a - b] without naming [-], and [incr r] cannot become
+    [decr r] without naming [decr]. The guards of [pos] and [left] pin their
+    operands to a Stdlib type, and apply the operator of the source to them.
+    Thus a file that rebinds an operator where the rewriter can see it loses the
     whole family of that operator:
     - [ari] for [+], [-], [+.] and [-.]
     - [mul] for [*], [/] and [mod]
@@ -88,13 +88,12 @@
     the guard of [left] pins its two operands to one list type.
 
     A counter has a site in a wider scope. Each opaque module must be a module
-    of this list, by a name of one part, and the file must declare no module of
-    that name: [Int], [Float], [Int32], [Int64], [Nativeint], [Char], [String],
+    of this list, by a name of one part. The file must declare no module of that
+    name: [Int], [Float], [Int32], [Int64], [Nativeint], [Char], [String],
     [Bytes], [List], [Array], [Option], [Result], [Bool], [Fun], [Seq],
     [Hashtbl], [Printf], [Format], [Buffer] and [Atomic]. Of these modules, only
-    [Atomic] gives [incr] and [decr], and it gives the two. Thus a bare counter
-    is that of Stdlib or of [Atomic], and its replacement comes from the same
-    module.
+    [Atomic] gives [incr] and [decr]. Thus a bare counter is that of Stdlib or
+    of [Atomic], and its replacement comes from the same module.
 
     [Atomic.incr a] is a site only in a file that declares no module [Atomic]. A
     longer path, as [Float.Array] or [Stdlib.Atomic], gives no site. The check
@@ -110,19 +109,21 @@
     [Atomic.decr a]. The guard of a counter has no type constraint. Its armed
     arm applies the replacement to a copy of the operand, which thus gets the
     expected type of the original. A constraint would name [Stdlib.ref] or
-    [Stdlib.Atomic.t], and a module that the rewriter does not see, as a sibling
+    [Stdlib.Atomic.t]. A module that the rewriter does not see, as a sibling
     [atomic.ml], can give the counters another type.
 
     The rewriter does not see a flag of the compiler, as [-open M]. If [M] gives
-    an operator of [ari], [mul], [fmul] or [bit], or [~-], [~-.], [@], [incr] or
-    [decr], another type, or binds only the replacement, the guard can be
+    [~-], [~-.], [@], [incr], [decr] or an operator of [ari], [mul], [fmul] or
+    [bit] another type, or binds only the replacement, the guard can be
     ill-typed. For example, an [@] of [M] on two values of one type that is not
-    a list breaks the pin of [left]. The compiler then shows the error at the
-    expression, and [[@mutate off "reason"]] or [[@@@mutate exclude_file]] is
-    the way out. Under [-open Base], each arm compiles, because Base gives these
-    operators the types of Stdlib. Base deprecates [mod], [incr] and [decr]. The
-    original gives the same alert, and the guard takes the alert attributes of
-    the site. *)
+    a list breaks the pin of [left].
+
+    When a guard is ill-typed, the compiler shows the error at the expression,
+    and [[@mutate off "reason"]] or [[@@@mutate exclude_file]] is the way out.
+    Under [-open Base], each arm compiles, because Base gives these operators
+    the types of Stdlib. Base deprecates [mod], [incr] and [decr]. The original
+    gives the same alert, and the guard takes the alert attributes of the site.
+*)
 
 (** {1:sites Sites}
 
@@ -486,8 +487,8 @@
       guards of [ari], [mul], [fmul] and [bit] do so in
       {{!section-law}Stdlib scope}. Thus a GADT [match] in an operand gets the
       expected type that the application gives it.
-    - [type 'a lists = 'a list * 'a list], only in a file that holds the guard
-      of [left], which annotates its pair of operands with it.
+    - [type 'a lists = 'a list * 'a list]. It is only in a file that holds the
+      guard of [left]. The guard annotates its pair of operands with it.
     - [___windtrap_armed___], bound to
       [Windtrap_runtime.Mutate.register ~file ~sites]. The call is made once,
       when the module is initialized, within the preconditions of [register].
@@ -495,7 +496,7 @@
 
     Every generated node has a ghost location, with three exceptions. The
     disarmed arm of an ordering, [ari], [mul], [fmul], [bit], [pos] or [left]
-    guard is the original application rebuilt over the binders, and keeps its
+    guard is the original application rebuilt over the binders. It keeps its
     location and its attributes. The disarmed arm of a counter guard is the
     site. The whole guard of these rewrites also takes the [ocaml.warning],
     [warning], [ocaml.alert] and [alert] attributes of the site, because its

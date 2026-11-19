@@ -107,10 +107,9 @@ type family =
   | Log
   | Message
 
-(* Where a site of a family is in Stdlib scope. [Bare]: where no opaque
-   module is open. [Listed]: where each opaque module is a module of
-   [listed] by its name, which the file does not declare, outside a class
-   body with an [inherit]. *)
+(* Where a site of a family is in Stdlib scope. [Bare]: no opaque module is
+   open. [Listed]: each opaque module is a module of [listed] that the file
+   does not declare, and the site is not in a class body with an [inherit]. *)
 type scope = Anywhere | Bare | Listed
 
 let scope = function
@@ -118,8 +117,7 @@ let scope = function
   | Counter -> Listed
   | Ari | Cmp | Con | Ret | Log | Message -> Anywhere
 
-(* Of these modules, only [Atomic] gives [incr] and [decr]. It gives the
-   two. *)
+(* Of these modules, only [Atomic] gives [incr] and [decr]. *)
 let listed =
   [
     "Int";
@@ -387,8 +385,9 @@ and operator_guard =
 
 type mutant = { guard : guard; rewrite : string; after : string }
 
-(* An operand that gives one value each time and does nothing else, so that
-   [a && a] and [a || a] are [a]. *)
+(* An operand that gives one value each time and does nothing else: a name,
+   a constructor without an argument, or a field of such an operand, with or
+   without a type constraint. *)
 let rec is_pure e =
   match e.pexp_desc with
   | Pexp_ident _ | Pexp_construct (_, None) -> true

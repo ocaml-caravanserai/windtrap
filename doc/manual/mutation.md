@@ -1620,8 +1620,8 @@ these names (see
   a chain, as `a :: b :: t`, the outermost `::` alone is a site.
 - `incr r` becomes `decr r` (`decr`), and `decr r` becomes `incr r`
   (`incr`). `Atomic.incr a` and `Atomic.decr a` swap in the same way.
-  The mutant uses the path of the source: `Atomic.(incr c)` becomes
-  `Atomic.(decr c)`. The operand must be a name, a constructor without
+  The mutant uses the path of the source: `Atomic.(incr c)` gives
+  `decr c`. The operand must be a name, a constructor without
   an argument or a field, so `incr (f x)` carries no mutant.
   `Stdlib.incr r`, `r |> incr` and `List.iter incr l` carry no mutant.
   A statement `incr r` carries `del` and `decr`.
@@ -1631,8 +1631,8 @@ these names (see
   mutant. A minus on the right operand of `+`, `-`, `+.` or `-.` carries
   no mutant when that operator carries one: `x - (-y)` carries only
   `add`, because the two mutants give `x + y`.
-- `left` drops the right operand of `@`: `a @ b` becomes `a`. `b` runs
-  also in the mutant. In a chain, as `(a @ b) @ c`, the outermost `@`
+- `left` drops the right operand of `@`: `a @ b` becomes `a`. `b` also
+  runs in the mutant. In a chain, as `(a @ b) @ c`, the outermost `@`
   alone is a site. `a @ b @ c` is `a @ (b @ c)`, with two sites.
 
 Some code carries no mutant, because a test has no reason to pin it or
@@ -1730,10 +1730,12 @@ A file that rebinds an operator loses the rewrites of its family:
 - The six bit operators
 - The six comparisons
 - The two connectives
-- `incr` and `decr`, which removes `decr` and `incr`, the forms of
+- `incr` and `decr`, with the rewrites `decr` and `incr`, the forms of
   `Atomic` included
-- `~-` and `~-.`, which removes `pos`. A binding of `-` or `-.` does not
-- `@`, which removes `left`.
+- `~-` and `~-.`, with the rewrite `pos`
+- `@`, with the rewrite `left`.
+
+A binding of `-` or `-.` does not lose `pos`.
 
 A binding is a variable, an alias pattern as `(_ as ( + ))`, a value
 description as `external`, or an instance variable. A file that
@@ -1755,12 +1757,13 @@ the same file by its name, as `open Infix`, also removes them.
 `Format`, `Buffer` and `Atomic`. Of these modules, only `Atomic` gives
 `incr` and `decr`. A longer path, as `Float.Array`, removes them. The
 rewriter reads only the name of the module in each `open`. Thus in
-`Float.( Array.( incr r ) )`, `Array` counts as a module of the list. A
-module of the file with one of these names also removes them, and
-`Atomic.incr a` has no mutant in a file that declares a module
-`Atomic`. A class body with an `inherit` has no `decr` or `incr`
-mutant, because the parent class can give an instance variable named
-`incr`.
+`Float.( Array.( incr r ) )`, `Array` counts as a module of the list.
+
+A module of the file with one of these names removes the `decr` and
+`incr` mutants, and `Atomic.incr a` has no mutant in a file that
+declares a module `Atomic`. A class body with an `inherit` has no
+`decr` or `incr` mutant, because the parent class can give an instance
+variable named `incr`.
 
 The rewriter does not see a `-open` flag of the compiler. A flag can
 give `*`, `/`, `mod`, `*.`, `/.`, a bit operator, `+`, `-`, `+.`,
@@ -1769,10 +1772,11 @@ give only the replacement another type. For example, an `@` on two
 values of one type that is not a list breaks the `left` mutant. Then
 the instrumented file does not compile. The compiler shows the error at
 the expression, and `[@mutate off "reason"]` or
-`[@@@mutate exclude_file]` removes it. The rewriter also does not see
-a module of the library with a name of the list, which `-open` makes
-visible. Then `Int.( incr r )` or `Atomic.incr a` can apply the `incr`
-of that module.
+`[@@@mutate exclude_file]` removes it.
+
+The rewriter also does not see a module of the library with a name of
+the list, which `-open` makes visible. Then `Int.( incr r )` or
+`Atomic.incr a` can apply the `incr` of that module.
 
 Under `-open Base`, each mutant compiles. Base deprecates `mod`, `incr`
 and `decr`. The original gives the same alert, and the guard takes the

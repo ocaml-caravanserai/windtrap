@@ -87,13 +87,13 @@ what is non-obvious.
   and expected-type corpora, an operator under an open of another
   module, a file that binds an operator, a GADT operand under
   `-principal` and of `@` without it, a counter under a local open of
-  each module of the fixed list, the operators and counters of Base
-  under `-open Base` (where Base is installed), and a registration suite
-  that arms each mutant and checks that the library then behaves as the
-  mutant's text says. An
-  instrumenter change that cannot keep the semantics suites
-  green is rejected, not accommodated; grow the fixtures with every
-  expression form the instrumenter learns.
+  each module of the fixed list, and the operators and counters of Base
+  under `-open Base` (where Base is installed). `integration/` also has
+  a registration suite that arms each mutant and checks that the
+  library then behaves as the mutant's text says. An instrumenter
+  change that cannot keep the semantics suites green is rejected, not
+  accommodated; grow the fixtures with every expression form the
+  instrumenter learns.
 - `cram/`: cram sessions, one directory per subject. Cram pins stdout,
   stderr and the exit code natively, and `dune promote` is its
   acceptance.
