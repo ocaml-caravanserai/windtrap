@@ -191,11 +191,12 @@ let family_of name =
 (* What the file binds and declares, which [kept_families] reads. *)
 type facts = { lost : family list; modules : string list }
 
-(* A family keeps its sites only where its operators are Stdlib's: [ari],
-   [mul], [fmul], [bit] and the counters name their replacement, [con] turns
-   [&&] into an [if], [cmp] swaps operands of one type, and the guards of
-   [pos] and [left] pin the type of their operands. A binding that this pass
-   sees loses the family of its name. A binding is a variable pattern, an
+(* A family keeps its sites only where its operators are Stdlib's. [ari],
+   [mul], [fmul], [bit] and the counters name their replacement. [con] turns
+   [&&] into an [if], and [cmp] swaps operands of one type. The guards of
+   [pos] and [left] pin the type of their operands.
+
+   A binding that this pass sees loses the family of its name. A binding is a variable pattern, an
    alias pattern, a value description or an instance variable. What an
    [open] brings in is not seen, so a site of a family with a [scope] must
    also be in Stdlib scope. The guards of [none] and [tail] name the

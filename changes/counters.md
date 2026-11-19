@@ -7,7 +7,7 @@
 - `pos` drops a unary minus: `-x` and `-.x` become `x`. A minus on the
   right operand of `+`, `-`, `+.` or `-.` has no mutant when that
   operator has one. Thus `x - (-y)` has only the `add` mutant, because
-  the two mutants give `x - y`.
+  the `add` mutant has the value of the `pos` mutant `x - y`.
 - `left` drops the right operand of `@`: `a @ b` becomes `a`. `a @ l`
   gives no `left` mutant when `l` is a list literal, as `acc @ [ x ]`,
   where `tail` gives `acc @ []`. A type constraint on the literal does

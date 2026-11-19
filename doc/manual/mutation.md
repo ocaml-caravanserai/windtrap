@@ -1630,7 +1630,15 @@ these names (see
   `-(-x)` and in `-((-x) : int)`, the outer minus alone carries a
   mutant. A minus on the right operand of `+`, `-`, `+.` or `-.` carries
   no mutant when that operator carries one. Thus `x - (-y)` carries only
-  `add`, because the two mutants give `x - y`.
+  `add`, because the `add` mutant has the value of the `pos` mutant
+  `x - y`.
+
+  Some `pos` mutants have the behavior of another mutant or of the
+  original. In `-a * -b`, `-.a *. -.b`, `-.a /. -.b`, `-a = -b` and
+  `-a <> -b`, the two `pos` mutants have one behavior. In `abs (-x)`,
+  `Float.abs (-.x)` and `-(0 : int)`, the `pos` mutant has the behavior
+  of the original.
+
 - `left` drops the right operand of `@`: `a @ b` becomes `a`. `b` also
   runs in the mutant. In a chain, as `(a @ b) @ c`, the outermost `@`
   alone is a site. `a @ b @ c` is `a @ (b @ c)`, with two sites.
@@ -1681,7 +1689,7 @@ log message or a failure message alone. These cases are:
 - `a @ l` when `l` is a list literal, as `a @ []` or `acc @ [ x ]`,
   also with a type constraint, as `a @ ([] : int list)`.
   `a @ []` is `a`, and the `tail` mutant of `acc @ [ x ]` is
-  `acc @ []`. Thus `acc @ [ x ]` has no `left` mutant also where `tail`
+  `acc @ []`. Thus `acc @ [ x ]` has no `left` mutant where `tail`
   gives none, as at load. `[] @ b` and `a @ (x :: t)` keep their
   mutants.
 - The condition of `if c then e else e`, when the two branches are the
@@ -1742,8 +1750,8 @@ description as `external`, or an instance variable. A file that
 declares a constructor `Some`, `None` or `::` loses `none` and `tail`.
 
 The rewrites of `*`, `/`, `mod`, `*.`, `/.`, the bit operators, the
-unary minus and `@` give no mutant under some code of another module,
-as in `Float.(a * b)`.
+unary minus and `@` give no mutant under some code of another module.
+An example is `Float.(a * b)`.
 This code is an `open`, a `let open`, an `M.( ... )` or an `include` in
 scope. A `struct ... end` of the file, as the `include struct ... end`
 of a deriver, keeps them, unless it includes another module. An
@@ -1760,8 +1768,8 @@ rewriter reads only the name of the module in each `open`. Thus in
 `Float.( Array.( incr r ) )`, `Array` counts as a module of the list.
 
 A module of the file with one of these names removes the `decr` and
-`incr` mutants, and `Atomic.incr a` has no mutant in a file that
-declares a module `Atomic`. A class body with an `inherit` has no
+`incr` mutants under an `open` of it. `Atomic.incr a` has no mutant in
+a file that declares a module `Atomic`. A class body with an `inherit` has no
 `decr` or `incr` mutant, because the parent class can give an instance
 variable named `incr`.
 

@@ -79,8 +79,8 @@
     an [include]. A structure of the file is not opaque, unless it includes
     another module. An [open] or an [include] in a structure is open to the end
     of that structure. In Stdlib scope, the operator and its replacement are
-    those of Stdlib, and each has one closed type, as [int -> int -> int] or
-    [int -> int].
+    those of Stdlib, and each has one type, as [int -> int -> int],
+    [float -> float] or [ 'a list -> 'a list -> 'a list ].
 
     The guard pins its operands to that type, so the arm has the type of the
     original. The guard of [ari] also pins its operands in Stdlib scope. The
@@ -157,12 +157,12 @@
       name [asr].
     - The counters swap [incr] and [decr], under the names [decr] and [incr]:
       [incr r] becomes [decr r]. Their sites are [incr e], [decr e],
-      [Atomic.incr e] and [Atomic.decr e], with one unlabelled argument [e] that
-      is pure: an identifier or a constructor without an argument, or a field of
-      such an expression, with or without a type constraint. [Stdlib.incr r],
-      [Stdlib.Atomic.incr a], [r |> incr], [incr @@ r], a partial counter, as in
-      [List.iter incr l], and a counter of a call, as [incr (f x)], are no
-      sites.
+      [Atomic.incr e] and [Atomic.decr e], with one unlabelled argument [e]. The
+      operand [e] must be pure: an identifier, a constructor without an
+      argument, or a field of such an expression, with or without a type
+      constraint. [Stdlib.incr r], [Stdlib.Atomic.incr a], [r |> incr],
+      [incr @@ r], a partial counter, as in [List.iter incr l], and a counter of
+      a call, as [incr (f x)], are no sites.
     - [pos] drops a unary minus, under the name [pos]: [-e] and [-.e] become
       [e]. Its sites are applications of a bare [~-] or [~-.] to one unlabelled
       argument, as the parser gives [-e] and [( ~- ) e]. The parser makes a
@@ -196,7 +196,7 @@
     a copy of [r], as in the guard of [tail]. The guard of [pos] is
     [let (p : Stdlib.Int.t) = e in if armed then p else ~- p], with
     [Stdlib.Float.t] for [~-.]. The guard of [left] is that of [ari], with the
-    pin [_ lists]. Thus the right operand of [@] runs also when the mutant is
+    pin [_ lists]. Thus the right operand of [@] also runs when the mutant is
     armed.
 
     The guard of [del] in [e1; e2] is
@@ -280,13 +280,13 @@
       amount. The [0] keeps its [int] mutant. [bit] also skips [a land a] and
       [a lor a] under the rule of [con]. [a lxor a] keeps its mutant, because it
       is [0] and [a land a] is [a].
-    - [left] skips [a @ l] where [l] is a list literal: [[]], or [h :: t] with
-      the constructor [(::)] and a list literal [t], as [[ x; y ]], with or
-      without a type constraint. [a @ []] is [a], and in [acc @ [ x ]] [tail]
-      gives the mutant [acc @ []]. Thus [acc @ [ x ]] has no [left] site also
-      where [tail] has no site: at load, in the right-hand side of a [let rec],
-      and in a file that loses [tail]. [[] @ b] and [a @ (x :: t)] keep their
-      mutants.
+    - [left] skips [a @ l] where [l] is a list literal, as [[]] or [[ x; y ]]. A
+      list literal is [[]], or [h :: t] with the constructor [(::)] and a list
+      literal [t]. A type constraint does not change this. [a @ []] is [a], and
+      in [acc @ [ x ]] [tail] gives the mutant [acc @ []]. Thus [acc @ [ x ]]
+      has no [left] site where [tail] has no site: at load, in the right-hand
+      side of a [let rec], and in a file that loses [tail]. [[] @ b] and
+      [a @ (x :: t)] keep their mutants.
     - [con] skips [a && a] and [a || a] when the two operands are one expression
       and [a] is an identifier, a constructor without an argument, as [true], or
       a field of such an expression, with or without a type constraint. Such an
@@ -367,12 +367,12 @@
       site. A type constraint between the two, as in [-((-x) : int)], does not
       change this.
     - A unary minus on the right operand of an [ari] site, as in [x - (-y)], has
-      no [pos] site. Its mutant gives [x - y], as [add] does. Where the operator
-      has no site, as the inner [-] of [(a - (-b)) - c], the minus keeps its
-      site.
-    - Two sites can start at one byte under two rewrites, as [mod] and [mul] in
-      [a / b mod c], [del] and [decr] in the statement [incr r], and [sub] and
-      [pos] in [-a + b], which is [(-a) + b].
+      no [pos] site. Its mutant [x - y] has the value of the [add] mutant. Where
+      the operator has no site, as the inner [-] of [(a - (-b)) - c], the minus
+      keeps its site.
+    - Two sites can start at one byte under two rewrites. These are [mod] and
+      [mul] in [a / b mod c], [del] and [decr] in the statement [incr r], and
+      [sub] and [pos] in [-a + b]. The last one is [(-a) + b].
     - A guard binds its operands under the names [__windtrap_mut_<i>_<role>],
       where [<i>] is the index of the site and [<role>] is [p], [l] or [r]. The
       guard of a counter binds no name. *)
@@ -498,9 +498,9 @@
     disarmed arm of an ordering, [ari], [mul], [fmul], [bit], [pos] or [left]
     guard is the original application rebuilt over the binders. It keeps its
     location and its attributes. The disarmed arm of a counter guard is the
-    site. The whole guard of these rewrites also takes the [ocaml.warning],
-    [warning], [ocaml.alert] and [alert] attributes of the site, because its
-    operands or its armed arm are outside the disarmed arm.
+    site. The operands and the armed arm are outside the disarmed arm, so the
+    whole guard of these rewrites also takes the [ocaml.warning], [warning],
+    [ocaml.alert] and [alert] attributes of the site.
 
     The disarmed arm of the [del] guard of a statement or a loop body is
     [e; ()], whose [()] has a location of zero width at the end of [e]. On a
