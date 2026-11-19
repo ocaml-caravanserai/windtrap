@@ -136,6 +136,12 @@ let retry value =
   | Some _ | None ->
       Error (Printf.sprintf "a non-negative integer up to %d" max_retry)
 
+let mutate_order value =
+  match String.lowercase_ascii value with
+  | "catalogue" -> Ok Run.Catalogue
+  | "fast" -> Ok Run.Fast
+  | _ -> Error "catalogue or fast"
+
 let seconds ~expected accepts value =
   match float_of_string_opt value with
   | Some s when accepts s && Float.is_finite s -> Ok s
@@ -376,6 +382,13 @@ let entries =
       "Run the job of a survivor up to N more times, each in a fresh worker. \
        If N is above 0, also check each kill with no mutant (with --mutate, \
        default 0).";
+    row "--mutate-order"
+      (value "ORDER" mutate_order
+         (field (fun c mutate_order -> { c with mutate_order })))
+      ~mirror:(mirrored "WINDTRAP_MUTATE_ORDER")
+      "Run the reaching tests of each mutant in ORDER: catalogue, or fast for \
+       the fastest first by their time in the dry run, which also checks each \
+       kill with no mutant (with --mutate, default catalogue).";
     row "--mutate-memory"
       (value "MB" memory
          (field (fun c mutate_memory -> { c with mutate_memory })))
@@ -683,6 +696,11 @@ let settings cli =
     else Ok ()
   in
   let* () =
+    if gave cli "--mutate-order" && not (gave layered "--mutate") then
+      Error (Requires_any ("--mutate-order", [ "--mutate" ]))
+    else Ok ()
+  in
+  let* () =
     if gave cli "--mutate-memory" && not (gave layered "--mutate") then
       Error (Requires_any ("--mutate-memory", [ "--mutate" ]))
     else Ok ()
@@ -734,6 +752,8 @@ let settings cli =
         | (Run.Armed _ | Run.No_mutation) as m -> m);
       mutate_workers = c.mutate_workers && mutates;
       mutate_retry = (if gave layered "--mutate" then c.mutate_retry else 0);
+      mutate_order =
+        (if gave layered "--mutate" then c.mutate_order else Run.Catalogue);
       mutate_memory =
         (if gave layered "--mutate" then c.mutate_memory
          else (Run.default_config ()).mutate_memory);

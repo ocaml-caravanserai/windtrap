@@ -37,6 +37,7 @@ let every_mutant =
     sample = None;
   }
 
+type mutate_order = Catalogue | Fast
 type broadcast = { selection : bool; mutate : bool }
 type case_file = { file : string; choices : int64 array }
 
@@ -67,6 +68,7 @@ type config = {
   mutation : mutation;
   mutate_workers : bool;
   mutate_retry : int;
+  mutate_order : mutate_order;
   mutate_memory : int;
   crash_kills : bool;
   incremental : bool;
@@ -106,6 +108,7 @@ let default_config () =
     mutation = No_mutation;
     mutate_workers = false;
     mutate_retry = 0;
+    mutate_order = Catalogue;
     mutate_memory = 1024;
     crash_kills = false;
     incremental = false;
