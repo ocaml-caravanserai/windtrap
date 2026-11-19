@@ -32,3 +32,7 @@
   breaks the `left` mutant. A module of the library with a name of the
   fixed list has the same effect. Use `[@mutate off "reason"]` or
   `[@@@mutate exclude_file]`.
+- The replacement operator of `ari`, `mul`, `fmul` and `bit` keeps the
+  warning and alert attributes of the source operator. Before, an
+  attribute such as `[@warning "-44"]` on the source operator did not
+  cover the replacement, and the instrumented file did not compile.
