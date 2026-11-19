@@ -1578,12 +1578,12 @@ class instrumenter ~keeps ~declares ~module_name =
 
     method! class_structure cs =
       let outer = inherits in
-      if
-        List.exists
-          (fun cf ->
-            match cf.pcf_desc with Pcf_inherit _ -> true | _ -> false)
-          cs.pcstr_fields
-      then inherits <- true;
+      inherits <-
+        outer
+        || List.exists
+             (fun cf ->
+               match cf.pcf_desc with Pcf_inherit _ -> true | _ -> false)
+             cs.pcstr_fields;
       let cs = super#class_structure cs in
       inherits <- outer;
       cs
