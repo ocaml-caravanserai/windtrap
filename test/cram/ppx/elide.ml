@@ -139,6 +139,8 @@ let mutation ~name = function
             helpers ("type ints" :: acc) rest
         | [%stri type floats = float * float] :: rest ->
             helpers ("type floats" :: acc) rest
+        | [%stri type 'a lists = 'a list * 'a list] :: rest ->
+            helpers ("type 'a lists" :: acc) rest
         | rest -> (List.rev acc, rest)
       in
       let helper, rest =

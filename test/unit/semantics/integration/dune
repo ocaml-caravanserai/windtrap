@@ -11,6 +11,7 @@
   own_constructors
   own_unit
   rebound
+  rebound_unary
   recursive
   shadowed)
  (flags
@@ -60,6 +61,19 @@
  (preprocess
   (pps ppx_windtrap.mutate)))
 
+; The counters under a local open of each module of the fixed list, under
+; fatal warnings and -principal. Warning 33 reports an open that the code
+; does not use, as Int.( incr r ), and warnings 44 and 45 an open that
+; shadows a counter, as Atomic.( incr a ).
+
+(library
+ (name windtrap_mutate_listed)
+ (modules listed)
+ (flags
+  (:standard -principal -w +a-33-44-45-70 -warn-error +a))
+ (preprocess
+  (pps ppx_windtrap.mutate)))
+
 ; The operators of Base under the flag -open Base, which the rewriter does
 ; not see. Only where Base is installed.
 
@@ -104,4 +118,5 @@
   windtrap_mutate_principal
   windtrap_mutate_loose
   windtrap_mutate_scoped
+  windtrap_mutate_listed
   windtrap_mutate_both))

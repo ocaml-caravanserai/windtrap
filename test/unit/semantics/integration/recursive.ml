@@ -52,6 +52,16 @@ let product () =
   let rec v = 2 * 3 and g () = v in
   g ()
 
+(* The same with sites of [pos] and [left]. *)
+
+let negated () =
+  let rec v = -(2 * 3) and g () = v in
+  g ()
+
+let appended () =
+  let rec v = [ 1 ] @ List.init 2 succ and g () = v in
+  g ()
+
 (* A function and a [lazy] in the right-hand side run later, and keep their
    sites. *)
 

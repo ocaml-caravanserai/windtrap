@@ -415,6 +415,257 @@ before and after, and the reason of a dismissed site.
           then __windtrap_mut_35_l / __windtrap_mut_35_r
           else __windtrap_mut_35_l * __windtrap_mut_35_r))
 
+  $ mut --impl ./fixture_counter.ml | ../elide.exe
+  mutation sites of "./fixture_counter.ml" in Windtrap_mut_________fixture_counter___ml:
+    0: 5:11-5:17 "decr" "incr r" -> "decr r"
+    1: 6:13-6:19 "incr" "decr r" -> "incr r"
+    2: 7:35-7:48 "decr" "Atomic.incr a" -> "Atomic.decr a"
+    3: 8:37-8:50 "incr" "Atomic.decr a" -> "Atomic.incr a"
+    4: 9:40-9:46 "decr" "incr c" -> "decr c"
+    5: 10:24-10:30 "decr" "incr r" -> "decr r"
+    6: 11:30-11:36 "decr" "incr r" -> "decr r"
+    7: 15:16-15:28 "decr" "incr s.count" -> "decr s.count"
+    8: 16:20-16:38 "decr" "incr (r : int ref)" -> "decr (r : int ref)"
+    9: 19:2-19:8 "del" "incr r" -> "()"
+    10: 19:2-19:8 "decr" "incr r" -> "decr r"
+    11: 22:27-22:33 "del" "incr r" -> "()"
+    12: 22:27-22:33 "decr" "incr r" -> "decr r"
+    13: 22:20-22:21 "not" "c" -> "not c"
+    14: 26:9-26:20 "decr" "incr loaded" -> "decr loaded"
+    15: 27:18-27:26 "decr" "incr r" -> "decr r", dismissed "the count is a statistic"
+    16: 37:33-37:34 "int" "0" -> "1"
+  let up r =
+    if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 0
+    then decr r
+    else incr r
+  let down r =
+    if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 1
+    then incr r
+    else decr r
+  let atomic_up (a : int Atomic.t) =
+    if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 2
+    then Atomic.decr a
+    else Atomic.incr a
+  let atomic_down (a : int Atomic.t) =
+    if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 3
+    then Atomic.incr a
+    else Atomic.decr a
+  let opened (c : int Atomic.t) =
+    let open Atomic in
+      if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 4
+      then decr c
+      else incr c
+  let int_opened r =
+    let open Int in
+      if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 5
+      then decr r
+      else incr r
+  let printf_opened r =
+    let open Printf in
+      if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 6
+      then decr r
+      else incr r
+  type state = {
+    count: int ref }
+  let counted s =
+    if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 7
+    then decr s.count
+    else incr s.count
+  let constrained r =
+    if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 8
+    then decr (r : int ref)
+    else incr (r : int ref)
+  let statement r x =
+    (if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 9
+     then ((())[@ocaml.warning "-41-42"])
+     else
+       (if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 10
+        then decr r
+        else incr r;
+        ((())
+        [@ocaml.warning "-41-42"])) : Stdlib.Unit.t);
+    x
+  let branch c r =
+    if
+      let __windtrap_mut_13_p : Stdlib.Bool.t = c in
+      (if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 13
+       then Stdlib.not __windtrap_mut_13_p
+       else __windtrap_mut_13_p)
+    then
+      (if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 11
+       then ((())[@ocaml.warning "-41-42"])
+       else
+         if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 12
+         then decr r
+         else incr r)
+  let loaded = ref 0
+  let () =
+    if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 14
+    then decr loaded
+    else incr loaded
+  let dismissed r = ((incr r)[@mutate off "the count is a statistic"])
+  let effectful f = incr (f ())
+  let qualified r = Stdlib.incr r
+  let piped r = r |> incr
+  let applied r = incr @@ r
+  let partial l = List.iter incr l
+  let built () =
+    incr
+      {
+        contents =
+          (if Windtrap_mut_________fixture_counter___ml.___windtrap_armed___ 16
+           then 1
+           else 0)
+      }
+  type _ witness =
+    | Ref: int ref witness 
+  let gadt (type a) (w : a witness) (x : a) = incr (match w with | Ref -> x)
+
+  $ mut --impl ./fixture_pos.ml | ../elide.exe
+  mutation sites of "./fixture_pos.ml" in Windtrap_mut_________fixture_pos___ml, with type ints:
+    0: 5:15-5:17 "pos" "- x" -> "x"
+    1: 6:16-6:19 "pos" "-. x" -> "x"
+    2: 7:18-7:22 "pos" "- (f x)" -> "f x"
+    3: 8:15-8:23 "pos" "- x" -> "x"
+    4: 12:14-12:19 "pos" "- (- x)" -> "- x"
+    5: 13:14-13:20 "sub" "(- a) + b" -> "(- a) - b"
+    6: 13:14-13:16 "pos" "- a" -> "a"
+    7: 29:18-29:22 "pos" "- x" -> "x", dismissed "the sign is not checked"
+  let negate x =
+    let __windtrap_mut_0_p : Stdlib.Int.t = x in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 0
+    then __windtrap_mut_0_p
+    else - __windtrap_mut_0_p
+  let fnegate x =
+    let __windtrap_mut_1_p : Stdlib.Float.t = x in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 1
+    then __windtrap_mut_1_p
+    else -. __windtrap_mut_1_p
+  let applied f x =
+    let __windtrap_mut_2_p : Stdlib.Int.t = f x in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 2
+    then __windtrap_mut_2_p
+    else - __windtrap_mut_2_p
+  let prefix x =
+    let __windtrap_mut_3_p : Stdlib.Int.t = x in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 3
+    then __windtrap_mut_3_p
+    else - __windtrap_mut_3_p
+  let twice x =
+    let __windtrap_mut_4_p : Stdlib.Int.t = - x in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 4
+    then __windtrap_mut_4_p
+    else - __windtrap_mut_4_p
+  let sum a b =
+    let (__windtrap_mut_5_l, __windtrap_mut_5_r) =
+      (((let __windtrap_mut_6_p : Stdlib.Int.t = a in
+         if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 6
+         then __windtrap_mut_6_p
+         else - __windtrap_mut_6_p), b) : Windtrap_mut_________fixture_pos___ml.ints) in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 5
+    then __windtrap_mut_5_l - __windtrap_mut_5_r
+    else __windtrap_mut_5_l + __windtrap_mut_5_r
+  let one = (-1)
+  let spaced = (-1)
+  let bracketed = (-1)
+  let fone = (-1.5)
+  let partial l = List.map (~-) l
+  let float_opened x = let open Float in - x
+  let let_opened x = let open Counters in - x
+  let dismissed x = ((- x)[@mutate off "the sign is not checked"])
+  let logged x = Logs.debug (fun m -> m "%d" (- x))
+
+  $ mut --impl ./fixture_left.ml | ../elide.exe
+  mutation sites of "./fixture_left.ml" in Windtrap_mut_________fixture_left___ml, with type 'a lists:
+    0: 4:17-4:22 "left" "a @ b" -> "a"
+    1: 5:17-5:26 "left" "a @ b" -> "a"
+    2: 9:24-9:35 "left" "(a @ b) @ c" -> "a @ b"
+    3: 10:25-10:34 "left" "a @ (b @ c)" -> "a"
+    4: 10:29-10:34 "left" "b @ c" -> "b"
+    5: 15:23-15:28 "tail" "[x]" -> "[]"
+    6: 16:21-16:29 "tail" "[x; y]" -> "[y]"
+    7: 17:18-17:25 "left" "a @ b" -> "a"
+    8: 17:28-17:33 "tail" "[x]" -> "[]"
+    9: 18:17-18:29 "left" "a @ (x :: t)" -> "a"
+    10: 18:21-18:29 "tail" "x :: t" -> "t"
+    11: 19:14-19:20 "left" "[] @ b" -> "[]"
+  let append a b =
+    let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
+      ((a, b) : _ Windtrap_mut_________fixture_left___ml.lists) in
+    if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 0
+    then __windtrap_mut_0_l
+    else __windtrap_mut_0_l @ __windtrap_mut_0_r
+  let prefix a b =
+    let (__windtrap_mut_1_l, __windtrap_mut_1_r) =
+      ((a, b) : _ Windtrap_mut_________fixture_left___ml.lists) in
+    if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 1
+    then __windtrap_mut_1_l
+    else __windtrap_mut_1_l @ __windtrap_mut_1_r
+  let left_nested a b c =
+    let (__windtrap_mut_2_l, __windtrap_mut_2_r) =
+      (((a @ b), c) : _ Windtrap_mut_________fixture_left___ml.lists) in
+    if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 2
+    then __windtrap_mut_2_l
+    else __windtrap_mut_2_l @ __windtrap_mut_2_r
+  let right_nested a b c =
+    let (__windtrap_mut_3_l, __windtrap_mut_3_r) =
+      ((a,
+         (let (__windtrap_mut_4_l, __windtrap_mut_4_r) =
+            ((b, c) : _ Windtrap_mut_________fixture_left___ml.lists) in
+          if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 4
+          then __windtrap_mut_4_l
+          else __windtrap_mut_4_l @ __windtrap_mut_4_r)) : _
+                                                             Windtrap_mut_________fixture_left___ml.lists) in
+    if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 3
+    then __windtrap_mut_3_l
+    else __windtrap_mut_3_l @ __windtrap_mut_3_r
+  let empty a = a @ []
+  let snoc acc x =
+    acc @
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 5)
+       then [x]
+       else [])
+  let pair a x y =
+    a @
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 6)
+       then [x; y]
+       else [y])
+  let inner a b x =
+    (let (__windtrap_mut_7_l, __windtrap_mut_7_r) =
+       ((a, b) : _ Windtrap_mut_________fixture_left___ml.lists) in
+     if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 7
+     then __windtrap_mut_7_l
+     else __windtrap_mut_7_l @ __windtrap_mut_7_r) @
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 8)
+       then [x]
+       else [])
+  let cons a x t =
+    let (__windtrap_mut_9_l, __windtrap_mut_9_r) =
+      ((a,
+         (if
+            Stdlib.not
+              (Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 10)
+          then x :: t
+          else t)) : _ Windtrap_mut_________fixture_left___ml.lists) in
+    if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 9
+    then __windtrap_mut_9_l
+    else __windtrap_mut_9_l @ __windtrap_mut_9_r
+  let first b =
+    let (__windtrap_mut_11_l, __windtrap_mut_11_r) =
+      (([], b) : _ Windtrap_mut_________fixture_left___ml.lists) in
+    if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 11
+    then __windtrap_mut_11_l
+    else __windtrap_mut_11_l @ __windtrap_mut_11_r
+  let opened a b = let open List in a @ b
+  let qualified a b = Stdlib.(@) a b
+  let partial a = List.map ((@) a)
+
   $ mut --impl ./fixture_del.ml | ../elide.exe
   mutation sites of "./fixture_del.ml" in Windtrap_mut_________fixture_del___ml:
     0: 8:2-8:18 "del" "log := (x :: (!log))" -> "()"
@@ -2473,6 +2724,86 @@ and keeps its reason:
     0: 10:16-10:21 "div" "a * b" -> "a / b"
     1: 11:14-11:19 "sub" "a + b" -> "a - b"
 
+  $ mut --impl ./fixture_lost_counter.ml | ../elide.exe
+  mutation sites of "./fixture_lost_counter.ml" in Windtrap_mut_________fixture_lost_counter___ml, with type ints:
+    0: 4:18-4:24 "add" "(!r) - 2" -> "(!r) + 2"
+    1: 9:16-9:18 "pos" "- x" -> "x"
+    2: 10:14-10:19 "sub" "a + b" -> "a - b"
+  let decr r =
+    r :=
+      (let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
+         (((!r), 2) : Windtrap_mut_________fixture_lost_counter___ml.ints) in
+       if Windtrap_mut_________fixture_lost_counter___ml.___windtrap_armed___ 0
+       then __windtrap_mut_0_l + __windtrap_mut_0_r
+       else __windtrap_mut_0_l - __windtrap_mut_0_r)
+  let up r = incr r
+  let down r = decr r
+  let atomic_up (a : int Atomic.t) = Atomic.incr a
+  let atomic_down (a : int Atomic.t) = Atomic.decr a
+  let negated x =
+    let __windtrap_mut_1_p : Stdlib.Int.t = x in
+    if Windtrap_mut_________fixture_lost_counter___ml.___windtrap_armed___ 1
+    then __windtrap_mut_1_p
+    else - __windtrap_mut_1_p
+  let sum a b =
+    let (__windtrap_mut_2_l, __windtrap_mut_2_r) =
+      ((a, b) : Windtrap_mut_________fixture_lost_counter___ml.ints) in
+    if Windtrap_mut_________fixture_lost_counter___ml.___windtrap_armed___ 2
+    then __windtrap_mut_2_l - __windtrap_mut_2_r
+    else __windtrap_mut_2_l + __windtrap_mut_2_r
+
+  $ mut --impl ./fixture_counter_class.ml | ../elide.exe
+  mutation sites of "./fixture_counter_class.ml" in Windtrap_mut_________fixture_counter_class___ml, with type ints:
+    0: 8:43-8:50 "sub" "c.n + 1" -> "c.n - 1"
+  type counter = {
+    mutable n: int }
+  let o =
+    object
+      val incr =
+        fun (c : counter) ->
+          c.n <-
+            (let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
+               (((c.n), 1) : Windtrap_mut_________fixture_counter_class___ml.ints) in
+             if
+               Windtrap_mut_________fixture_counter_class___ml.___windtrap_armed___
+                 0
+             then __windtrap_mut_0_l - __windtrap_mut_0_r
+             else __windtrap_mut_0_l + __windtrap_mut_0_r)
+      method bump c = incr c
+    end
+  let up r = incr r
+
+  $ mut --impl ./fixture_lost_pos.ml | ../elide.exe
+  mutation sites of "./fixture_lost_pos.ml" in Windtrap_mut_________fixture_lost_pos___ml, with type ints:
+    0: 7:14-7:19 "sub" "a + b" -> "a - b"
+  let (~-.) x = x
+  let negate x = - x
+  let fnegate x = -. x
+  let sum a b =
+    let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
+      ((a, b) : Windtrap_mut_________fixture_lost_pos___ml.ints) in
+    if Windtrap_mut_________fixture_lost_pos___ml.___windtrap_armed___ 0
+    then __windtrap_mut_0_l - __windtrap_mut_0_r
+    else __windtrap_mut_0_l + __windtrap_mut_0_r
+
+  $ mut --impl ./fixture_lost_left.ml | ../elide.exe
+  mutation sites of "./fixture_lost_left.ml" in Windtrap_mut_________fixture_lost_left___ml, with type ints:
+    0: 6:16-6:18 "pos" "- x" -> "x"
+    1: 7:14-7:19 "sub" "a + b" -> "a - b"
+  let (@) a b = a ^ b
+  let joined a b = a @ b
+  let negated x =
+    let __windtrap_mut_0_p : Stdlib.Int.t = x in
+    if Windtrap_mut_________fixture_lost_left___ml.___windtrap_armed___ 0
+    then __windtrap_mut_0_p
+    else - __windtrap_mut_0_p
+  let sum a b =
+    let (__windtrap_mut_1_l, __windtrap_mut_1_r) =
+      ((a, b) : Windtrap_mut_________fixture_lost_left___ml.ints) in
+    if Windtrap_mut_________fixture_lost_left___ml.___windtrap_armed___ 1
+    then __windtrap_mut_1_l - __windtrap_mut_1_r
+    else __windtrap_mut_1_l + __windtrap_mut_1_r
+
   $ mut --impl ./fixture_lost_ret.ml | ../elide.exe
   type found =
     | Some of int 
@@ -2833,6 +3164,90 @@ and keeps its reason:
     7: 88:28-88:33 "div" "a * b" -> "a / b"
     8: 97:21-97:30 "sub" "a + (b * c)" -> "a - (b * c)"
 
+  $ mut --impl ./fixture_counter_scope.ml | ../elide.exe
+  mutation sites of "./fixture_counter_scope.ml" in Windtrap_mut_________fixture_counter_scope___ml:
+    0: 11:30-11:36 "decr" "incr a" -> "decr a"
+    1: 16:2-16:8 "decr" "incr a" -> "decr a"
+    2: 21:16-21:22 "decr" "incr a" -> "decr a"
+    3: 27:13-27:19 "decr" "incr r" -> "decr r"
+  module Opened =
+    struct
+      open Atomic
+      let up (a : int Atomic.t) =
+        if
+          Windtrap_mut_________fixture_counter_scope___ml.___windtrap_armed___
+            0
+        then decr a
+        else incr a
+    end
+  let let_opened (a : int Atomic.t) =
+    let open Atomic in
+      if Windtrap_mut_________fixture_counter_scope___ml.___windtrap_armed___ 1
+      then decr a
+      else incr a
+  class let_opened_class (a : int Atomic.t) =
+    let open Atomic in
+      object
+        method up =
+          if
+            Windtrap_mut_________fixture_counter_scope___ml.___windtrap_armed___
+              2
+          then decr a
+          else incr a
+      end
+  module Included =
+    struct
+      include Int
+      let up r =
+        if
+          Windtrap_mut_________fixture_counter_scope___ml.___windtrap_armed___
+            3
+        then decr r
+        else incr r
+    end
+  let under_open r = let open Counters in incr r
+  let under_path r = let open Counters in incr r
+  module Under_include = struct include Counters
+                                let up r = incr r end
+  class under_class r = let open Counters in object method up = incr r end
+  module Structure_open = struct open Counters
+                                 let up r = incr r end
+  let float_array r = let open Float.Array in incr r
+  let stdlib_atomic (a : int Atomic.t) = let open Stdlib.Atomic in incr a
+  module type S  = sig type t end
+  let unseen r ((module C)  : (module S)) = let open C in incr r
+  let first_class r m = let open (val (m : (module S))) in incr r
+
+  $ mut --impl ./fixture_counter_declared.ml | ../elide.exe
+  mutation sites of "./fixture_counter_declared.ml" in Windtrap_mut_________fixture_counter_declared___ml:
+    0: 15:13-15:19 "decr" "incr r" -> "decr r"
+  module Atomic = struct type t = int ref
+                         let make n : t= ref n end
+  module Int = struct  end
+  let atomic (a : int Stdlib.Atomic.t) = Atomic.incr a
+  let opened r = let open Int in incr r
+  let bare r =
+    if
+      Windtrap_mut_________fixture_counter_declared___ml.___windtrap_armed___ 0
+    then decr r
+    else incr r
+
+  $ mut --impl ./fixture_counter_inherit.ml | ../elide.exe
+  mutation sites of "./fixture_counter_inherit.ml" in Windtrap_mut_________fixture_counter_inherit___ml:
+    0: 21:16-21:22 "decr" "incr r" -> "decr r"
+  class base = object  end
+  class child r = object inherit  base method up = incr r end
+  let immediate r = object inherit  base method up = incr r end
+  class plain r =
+    object
+      method up =
+        if
+          Windtrap_mut_________fixture_counter_inherit___ml.___windtrap_armed___
+            0
+        then decr r
+        else incr r
+    end
+
   $ mut --impl ./fixture_shadow.ml | ../elide.exe
   mutation sites of "./fixture_shadow.ml" in Windtrap_mut_________fixture_shadow___ml, with type 'a operands:
     0: 16:39-16:40 "int" "0" -> "1"
@@ -2979,6 +3394,9 @@ driver, coverage_first.exe:
     5: 377-378
     6: 359-385
     7: 519-522
+    8: 612-614
+    9: 634-639
+    10: 656-662
   let either a b =
     ___windtrap_visit___ 0;
     if
@@ -3021,6 +3439,9 @@ driver, coverage_first.exe:
       (if Windtrap_mut_________fixture_visits___ml.___windtrap_armed___ 5
        then 3
        else 2)
+  let negated x = ___windtrap_visit___ 8; - x
+  let appended a b = ___windtrap_visit___ 9; a @ b
+  let counted r = ___windtrap_visit___ 10; incr r
 
 A file under an input name that is not a source file's is returned as
 parsed:

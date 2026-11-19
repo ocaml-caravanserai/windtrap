@@ -24,3 +24,6 @@ let shifted x = (x + Old.value) [@alert "-deprecated"]
 
 let below x y =
   if ((match y with Some z -> z) < x) [@warning "-8"] then 1 else 0
+
+let negated y = -(match y with Some z -> z) [@ocaml.warning "-8"]
+let appended x y = (x @ match y with Some z -> z) [@ocaml.warning "-8"]

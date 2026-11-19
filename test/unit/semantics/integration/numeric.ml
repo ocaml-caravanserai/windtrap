@@ -27,3 +27,7 @@ let doubled (type a) (w : a whole) (x : a) = (match w with Whole -> x) * 2
 let unpacked p = (match p with Packed (Whole, v) -> v) * 2
 let shifted (type a) (w : a whole) = (match w with Whole -> 1) lsl 2
 let fdoubled (type a) (w : a real) (x : a) = (match w with Real -> x) *. 2.
+
+(* The operand of [pos] gets the expected type of the application. *)
+let opposite : type a. a number -> a -> a =
+ fun t v -> match t with Int -> -v | Float -> -.v

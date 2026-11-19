@@ -18,6 +18,7 @@ module Own_unit = Windtrap_mutate_forced.Own_unit
 module No_guard = Windtrap_mutate_forced.No_guard
 module Arid = Windtrap_mutate_forced.Arid
 module Loose = Windtrap_mutate_loose.Loose
+module Listed = Windtrap_mutate_listed.Listed
 module Disambiguate = Windtrap_mutate_disambiguate.Disambiguate
 module Expected_type = Windtrap_mutate_disambiguate.Expected_type
 
@@ -72,6 +73,17 @@ let raised f =
   | n -> Int.to_string n
   | exception e -> "raised " ^ Printexc.to_string e
 
+(* [counted f n] is the value of a counter at [n] after [f]. *)
+let counted f n =
+  let r = ref n in
+  f r;
+  Int.to_string !r
+
+let atomic f n =
+  let a = Atomic.make n in
+  f a;
+  Int.to_string (Atomic.get a)
+
 (* [traced f] is the operands [f] evaluated, in order. *)
 let traced f =
   ignore (f ());
@@ -119,6 +131,15 @@ let originals =
     ("bit_lsr 8 1", "4", fun () -> Int.to_string (Oracle.bit_lsr 8 1));
     ("bit_asr -8 1", "-4", fun () -> Int.to_string (Oracle.bit_asr (-8) 1));
     ("scale_by 3 0", "0", fun () -> raised (fun () -> Oracle.scale_by 3 0));
+    ("counter_incr 5", "6", fun () -> counted Oracle.counter_incr 5);
+    ("counter_decr 5", "4", fun () -> counted Oracle.counter_decr 5);
+    ("counter_atomic_incr 5", "6", fun () -> atomic Oracle.counter_atomic_incr 5);
+    ("counter_atomic_decr 5", "4", fun () -> atomic Oracle.counter_atomic_decr 5);
+    ("pos_int 3", "-3", fun () -> Int.to_string (Oracle.pos_int 3));
+    ("pos_float 1.5", "-1.5", fun () -> Float.to_string (Oracle.pos_float 1.5));
+    ( "left_append [ 1 ] [ 2 ]",
+      "1,2",
+      fun () -> String.concat "," (ints (Oracle.left_append [ 1 ] [ 2 ])) );
     ("del_count", "1", fun () -> Int.to_string (Oracle.del_count ()));
     ("del_then true", "7", fun () -> Int.to_string (Oracle.del_then true));
     ("del_last true", "10", fun () -> Int.to_string (Oracle.del_last true));
@@ -155,6 +176,9 @@ let originals =
     ( "the operands of mul_order",
       "r,l",
       fun () -> traced (fun () -> Oracle.mul_order 1 2) );
+    ( "the operands of left_order",
+      "r,l",
+      fun () -> traced (fun () -> Oracle.left_order [ 1 ] [ 2 ]) );
     ( "the right operand of con_short false",
       "",
       fun () -> traced (fun () -> Oracle.con_short false true) );
@@ -288,6 +312,19 @@ let armings =
     oracle "div" "n * d"
       (fun () -> [ raised (fun () -> Oracle.scale_by 3 0) ])
       [ "raised Division_by_zero" ];
+    oracle "decr" "incr r" (fun () -> [ counted Oracle.counter_incr 5 ]) [ "4" ];
+    oracle "incr" "decr r" (fun () -> [ counted Oracle.counter_decr 5 ]) [ "6" ];
+    oracle "decr" "Atomic.incr a"
+      (fun () -> [ atomic Oracle.counter_atomic_incr 5 ])
+      [ "4" ];
+    oracle "incr" "Atomic.decr a"
+      (fun () -> [ atomic Oracle.counter_atomic_decr 5 ])
+      [ "6" ];
+    oracle "pos" "- x" (fun () -> ints [ Oracle.pos_int 3 ]) [ "3" ];
+    oracle "pos" "-. x" (fun () -> floats [ Oracle.pos_float 1.5 ]) [ "1.5" ];
+    oracle "left" "a @ b"
+      (fun () -> ints (Oracle.left_append [ 1 ] [ 2 ]))
+      [ "1" ];
     oracle "del" "incr dropped" (fun () -> ints [ Oracle.del_count () ]) [ "0" ];
     oracle "del" "shown := 7" (fun () -> ints [ Oracle.del_then true ]) [ "0" ];
     oracle "del" "steps := ((!steps) * 10)"
@@ -337,6 +374,9 @@ let armings =
       [ "r,l" ];
     oracle "div" "(note \"l\" a) * (note \"r\" b)"
       (fun () -> [ traced (fun () -> Oracle.mul_order 1 2) ])
+      [ "r,l" ];
+    oracle "left" "(note \"l\" a) @ (note \"r\" b)"
+      (fun () -> [ traced (fun () -> Oracle.left_order [ 1 ] [ 2 ]) ])
       [ "r,l" ];
     oracle "or" "a && (note \"r\" b)"
       (fun () ->
@@ -466,15 +506,16 @@ let every_mutant =
 
 let arid_reading () =
   Arid.logged 4;
-  strf "%d %d %b %d %d %d %d %d %.1f %.1f %d" (Arid.zero 4) (Arid.chain 5 3)
+  strf "%d %d %b %d %d %d %d %d %.1f %.1f %d %d" (Arid.zero 4) (Arid.chain 5 3)
     (Arid.same true) (Arid.branches false 7) (Arid.message 2)
     (Queue.take Windtrap_mutate_forced.Logs.logged)
     (Arid.mul_one 4) (Arid.div_minus 4) (Arid.fmul_one 2.) (Arid.fdiv_minus 2.)
     (Arid.same_bits 6)
+    (List.length (Arid.appended [ 1; 2 ]))
 
 let arid_sites () =
   let site (m : Mutate.mutant) = strf "%s %s" m.id.rewrite m.before in
-  equal string "4 8 true 7 2 8 4 -4 2.0 -2.0 6" (arid_reading ());
+  equal string "4 8 true 7 2 8 4 -4 2.0 -2.0 6 2" (arid_reading ());
   equal (list string)
     [ "sub a + b"; "le n < 0" ]
     (List.map site (mutants_of "arid.ml"))
@@ -527,10 +568,19 @@ let rebound () =
     [ "sub"; "fdiv"; "lor"; "int" ]
     (List.map rewrite (mutants_of "rebound.ml"))
 
+(* The test calls [sum], so that the module is linked. *)
+let rebound_unary () =
+  let rewrite (m : Mutate.mutant) = m.id.rewrite in
+  equal int 3 (Windtrap_mutate_forced.Rebound_unary.sum 1 2);
+  equal (list string) [ "del"; "sub" ]
+    (List.map rewrite (mutants_of "rebound_unary.ml"))
+
 let lost =
   group "Lost families"
     [
       test "a file that binds / has no mul mutant" rebound;
+      test "a file that binds incr, ~- and @ has no counter, pos or left mutant"
+        rebound_unary;
       test "a file that declares Some and (::) has no none and no tail mutant"
         lost_families;
       test "an alias pattern of an operator loses its family" aliased;
@@ -548,11 +598,64 @@ let scoped () =
     [ "div a * b"; "tail [a * b]"; "mul a / b"; "fmul a /. b"; "lsr a lsl b" ]
     (List.map site (mutants_of "scoped.ml"))
 
+(* Each module of the fixed list, under a local open, gives the two
+   counters their sites, in the order of the file. The site is the counter
+   inside the open. The test calls [int_incr], so that the module is
+   linked. *)
+let listed () =
+  let r = ref 1 in
+  Listed.int_incr r;
+  equal int 2 !r;
+  let site (m : Mutate.mutant) = strf "%s %s" m.id.rewrite m.before in
+  let modules =
+    [
+      "Int";
+      "Float";
+      "Int32";
+      "Int64";
+      "Nativeint";
+      "Char";
+      "String";
+      "Bytes";
+      "List";
+      "Array";
+      "Option";
+      "Result";
+      "Bool";
+      "Fun";
+      "Seq";
+      "Hashtbl";
+      "Printf";
+      "Format";
+      "Buffer";
+      "Atomic";
+    ]
+  in
+  let forms m =
+    let v = if String.equal m "Atomic" then "a" else "r" in
+    [ strf "decr incr %s" v; strf "incr decr %s" v ]
+  in
+  equal (list string)
+    (List.concat_map forms modules)
+    (List.map site (mutants_of "listed.ml"))
+
+(* Armed, a counter under [Atomic.( ... )] calls the [decr] of [Atomic]. *)
+let listed_atomic () =
+  let a = Atomic.make 5 in
+  equal int 4
+    (armed ~file:"listed.ml" ~rewrite:"decr" ~before:"incr a" (fun () ->
+         Listed.atomic_incr a;
+         Atomic.get a))
+
 let stdlib_scope =
   group "Stdlib scope"
     [
       test "an operator under an opaque open has no mul, fmul or bit mutant"
         scoped;
+      test "a counter under a local open of each listed module has its mutant"
+        listed;
+      test "an armed counter under Atomic.( ... ) calls Atomic.decr"
+        listed_atomic;
     ]
 
 let () =

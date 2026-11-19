@@ -12,3 +12,8 @@ let lt f g x = if f x < g x then 1 else 0
 (* The [open] of the coverage module is opaque, so [*] has no [div] site,
    and its [2] keeps its [int] site. *)
 let product f x = f x * 2
+
+(* [-x], [a @ b] and [incr r] have no site, for the same reason. *)
+let negated x = -x
+let appended a b = a @ b
+let counted r = incr r
