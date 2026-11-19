@@ -74,15 +74,17 @@ val execute_and_report :
       dry run executed, unarmed, and then one job per reached mutant that it
       does not skip, in the order of the catalogue, with the mutant armed and
       its reaching tests up to the first failure in or after the test that first
-      evaluated the armed site. Under [config.full_matrix], the job runs all its
-      reaching tests ({b Full matrix} below). Up to [config.jobs] run at once,
-      and they are given in that order. A job that holds a test that spawned a
-      pool of worker domains in the dry run ([config.mutate_workers]) runs
-      alone. The probe agrees iff it executed as many tests, skipped as many and
-      counted no failure.
+      evaluated the armed site. The reaching tests are in the order that
+      {!job_order} gives for [config.mutate_order] ({b Job order} below). Under
+      [config.full_matrix], the job runs all its reaching tests ({b Full matrix}
+      below). Up to [config.jobs] run at once, and they are given in that order.
+      A job that holds a test that spawned a pool of worker domains in the dry
+      run ([config.mutate_workers]) runs alone. The probe agrees iff it executed
+      as many tests, skipped as many and counted no failure.
     + Under [config.mutate_retry = n] above [0], it runs up to [n] more passes
-      ({b Retries} below), and then up to [3] passes that check the kills
-      ({b Flaky kills} below).
+      ({b Retries} below). Under [config.mutate_retry] above [0] or the fast
+      order, it then runs up to [3] passes that check the kills ({b Flaky kills}
+      below).
     + Once the last job is given it writes the verdict file.
 
     A job starts from module initialization, so what the dry run left, a table
@@ -92,7 +94,20 @@ val execute_and_report :
 
     The root seed is {!Cli.mutation_seed} unless [--seed] gives one
     ({!Cli.settings}), so a property draws the same cases in the dry run, the
-    probe and every job, and on every run of one binary.
+    probe and every job, and on every run of one binary. Under the fast order,
+    the order of a job comes from the times of the dry run. Thus a verdict that
+    depends on the order can change between two runs.
+
+    {b Job order.} Under {!Run.Catalogue}, the reaching tests of a job are in
+    the order in which the workers of the dry run reported them, which is the
+    catalogue order under [config.jobs = 1]. Under {!Run.Fast}
+    ([--mutate-order=fast]), they are in the order of their time in the dry run,
+    the fastest first ({!job_order}). The loop makes the order of each job one
+    time, after the dry run. The job, its retries, its check, the digest of its
+    kill and {!Windtrap_runtime.Verdicts.reuse} use that order. The dry run and
+    the probe keep the catalogue order. A worker serves the tests of its job in
+    that order, and it keeps a fixture until it ends. Thus the first test of the
+    job that uses a fixture pays its setup.
 
     {b Verdicts.} A mutant is {!Windtrap_runtime.Verdicts.Killed} when a test of
     its job failed in or after the test that first evaluated the armed site. It
@@ -138,31 +153,35 @@ val execute_and_report :
     {b Retries.} Each pass after the first runs again the jobs of the mutants
     that survived the pass before it, with the same cases, deadline and budget,
     each in a fresh worker, up to [config.jobs] at once, in the order of the
-    catalogue. A job that runs alone in the first pass runs alone in each pass.
-    The first run gives the verdict as a run with no retry does. After it, only
-    a kill that its check trusts replaces the survivor. A retry that does not
-    evaluate the site or that ends early leaves the mutant a survivor, and the
-    next retry runs. A mutant survives when its first run survives and no retry
-    kills it. The report commits its block when the job of its last run is
-    given, or when the check of a kill in a retry fails, with the number of runs
-    when it is above [1], and one line for each retry that did not evaluate the
-    site, ended early or gave a kill that the check does not trust, with why
+    catalogue. Each job keeps its tests in the job order. A job that runs alone
+    in the first pass runs alone in each pass. The first run gives the verdict
+    as a run with no retry does. After it, only a kill that its check trusts
+    replaces the survivor. A retry that does not evaluate the site or that ends
+    early leaves the mutant a survivor, and the next retry runs. A mutant
+    survives when its first run survives and no retry kills it. The report
+    commits its block when the job of its last run is given, or when the check
+    of a kill in a retry fails, with the number of runs when it is above [1],
+    and one line for each retry that did not evaluate the site, ended early or
+    gave a kill that the check does not trust, with why
     ({!Report.mutation_survivor}). A retry that hangs costs its deadline. The
     verdict file records [config.mutate_retry] and the pass that gave each
     verdict, not the early lines. The live line names a mutant of a later pass
     as it did in the first pass.
 
-    {b Flaky kills.} Under [config.mutate_retry] above [0], a kill whose job
-    names a killing test waits for a check. The killing test is the first test
-    that has a counted failure, is not marked xfail, and comes in or after the
-    test that first evaluated the site. A kill by a fixture release alone names
-    no test and gets no check. The check runs the cases of the job, which are
-    the reaching tests of the mutant, up to and with the killing test. It runs
-    them with no mutant and with no stop at a failure, in a fresh worker. Two
-    kills whose checks run the same cases share one check. Under
-    [config.full_matrix], the check also runs only up to the first killing test.
-    When the check trusts the kill, the kill keeps each of its killing tests.
-    Thus [by] can hold a later killing test that also fails with no mutant.
+    {b Flaky kills.} Under [config.mutate_retry] above [0], or under the fast
+    order, a kill whose job names a killing test waits for a check. The killing
+    test is the first test that has a counted failure, is not marked xfail, and
+    comes in or after the test that first evaluated the site. A kill by a
+    fixture release alone names no test. It gets a check only under the fast
+    order. The check runs the cases of the job, which are the reaching tests of
+    the mutant in the job order, up to and with the killing test, or all of them
+    for a kill by a fixture release. It runs them with no mutant and with no
+    stop at a failure, in a fresh worker. Two kills whose checks run the same
+    cases in the same order, and name the same killing test or none, share one
+    check. Under [config.full_matrix], the check also runs only up to the first
+    killing test. When the check trusts the kill, the kill keeps each of its
+    killing tests. Thus [by] can hold a later killing test that also fails with
+    no mutant.
 
     The checks run after the last retry pass, in up to [3] passes
     ([check_runs]). Each pass runs once each check that has not failed, up to
@@ -174,11 +193,17 @@ val execute_and_report :
 
     A check fails when the killing test has a counted failure in one of its
     runs, also when the run then passes its deadline or loses its worker. A run
-    that ends before the killing test ends gives no failure. When the check
-    fails, a kill in the first run is {!Windtrap_runtime.Verdicts.Unknown}, with
-    the reason ["its killing test <path> also fails with no mutant: <failure>"].
-    The failure is the headline of the first failure of the test in that run
-    ({!Report_sections.headline}). Otherwise the kill stays.
+    that ends before the killing test ends gives no failure. The check of a kill
+    by a fixture release fails when a release fails in one of its runs. When the
+    check fails, a kill in the first run is
+    {!Windtrap_runtime.Verdicts.Unknown}, with the reason
+    ["its killing test <path> also fails with no mutant: <failure>"], or
+    ["a fixture release also fails with no mutant: <failure>"]. Under the fast
+    order, the reason has ["in the fast order"] after ["no mutant"]. The failure
+    is the headline of the first failure of the test, or of the first release
+    failure, in that run ({!Report_sections.headline}). Otherwise the kill
+    stays. A kill by a fixture release has the empty test in its
+    {!Windtrap_runtime.Verdicts.Flaky_kill}.
 
     When the check of a kill in a retry fails, the mutant stays a survivor, and
     the loop runs no more retries of it. Its block prints after the blocks of
@@ -229,11 +254,12 @@ val execute_and_report :
       digest, not [None], the renderings and the extent of this run.
     - The record is a kill that names a test, and the killing test reaches the
       mutant in this dry run. The tests of the job of this run, up to the
-      killing test, are those of the kill, in the same order. Under
-      [config.full_matrix], the record is a kill of a run with the flag, and
-      each of its killing tests reaches the mutant. Under [config.full_matrix],
-      all the tests of the job are also those of the kill, in the same order. Or
-      the record is a survivor, and the same set of tests reaches the mutant.
+      killing test and in the job order, are those of the kill, in the same
+      order. Under [config.full_matrix], the record is a kill of a run with the
+      flag, and each of its killing tests reaches the mutant. Under
+      [config.full_matrix], all the tests of the job are also those of the kill,
+      in the same order. Or the record is a survivor, and the same set of tests
+      reaches the mutant.
     - Each of these tests has the same digest in the file and in this run. The
       digest of a test is the MD5 of the digest of its source file
       ({!test_digest}), of its declared limit and of its declared retries. A
@@ -242,9 +268,11 @@ val execute_and_report :
       ({!Windtrap_runtime.Verdicts.effort_covers}): the same {!settings}, and
       enough retries. A kill is reused only from a run with the same
       [config.full_matrix]. Under [config.full_matrix], a kill is reused only
-      when its job ran each of its tests. Under [config.mutate_retry] above [0],
-      a kill is reused only from a run that had retries too. A kill from the
-      [k]-th retry is reused only when [config.mutate_retry] is [k] or more.
+      when its job ran each of its tests. {!settings} holds the fast order, so
+      no verdict is reused from a run with the other order. Under
+      [config.mutate_retry] above [0], a kill is reused only from a run that had
+      retries too. A kill from the [k]-th retry is reused only when
+      [config.mutate_retry] is [k] or more.
 
     A reused mutant gets no job, no retry and no check. Once the probe agrees,
     the loop commits each reused kill in the first pass, and each reused
@@ -442,9 +470,24 @@ val settings : Run.config -> string
 (** [settings config] is the lowercase hexadecimal MD5 of one injective spelling
     of the settings of [config] that change what a test does in a job: the
     windtrap version ({!Cli.version}), [seed], [prop_count], [replay], the
-    choices of [case_file], [mutate_workers], [timeout], [default_timeout] and
-    [mutate_memory]. Each value has a tag and a length, so no two configurations
-    that differ in one of them share a spelling. *)
+    choices of [case_file], [mutate_workers], [timeout], [default_timeout],
+    [mutate_memory] and [mutate_order]. [mutate_order] adds a line only when it
+    is {!Run.Fast}, so a {!Run.Catalogue} configuration has the digest of a
+    configuration with no order. Each value has a tag and a length, so no two
+    configurations that differ in one of them share a spelling. *)
+
+val job_order :
+  Run.mutate_order ->
+  timing:(string list -> (float * int) option) ->
+  string list list ->
+  string list list
+(** [job_order order ~timing paths] is the order of the reaching tests [paths]
+    in a job. [timing path] is the time of [path] in the dry run, in seconds,
+    and its index in the catalogue.
+    - Under {!Run.Catalogue} it is [paths].
+    - Under {!Run.Fast} it is [paths] sorted by the time in whole milliseconds,
+      truncated, and then by the index. A test that [timing] does not know comes
+      after all the others, in the order of [paths]. *)
 
 val test_digest : string -> string option
 (** [test_digest file] is the lowercase hexadecimal MD5 of the source file

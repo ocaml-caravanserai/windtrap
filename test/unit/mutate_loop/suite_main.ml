@@ -861,6 +861,59 @@ let timed_kill =
         is_true (Subject.widen 1 2 <> 99));
   ]
 
+(* The fixtures of --mutate-order. A slow test sleeps for 0.1 s, so that its
+   time in whole milliseconds is above that of a fast test also on a loaded
+   machine. *)
+let slow_test () = Unix.sleepf 0.1
+
+(* Two tests kill the mutant of [sub]: a slow test, and then a fast test. Each
+   run of the fast test appends a line to the file of MUTATE_RUNS, and each run
+   of the slow test a line to the file of MUTATE_FIRST_RUNS. *)
+let speed =
+  [
+    test "slow sub" (fun () ->
+        ignore (count "MUTATE_FIRST_RUNS");
+        slow_test ();
+        equal int 6 (Subject.sub 10 4));
+    test "fast sub" (fun () ->
+        ignore (count "MUTATE_RUNS");
+        equal int 0 (Subject.sub 4 4));
+  ]
+
+(* Two tests reach [widen], and neither pins it. The fast test passes only
+   after the slow test, so only the fast order makes it fail. It evaluates
+   [widen] before it fails, so the failure is a kill. *)
+let state = ref false
+
+let order =
+  [
+    test "sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "needs the state" (fun () ->
+        is_true (Subject.widen 1 2 <> 99);
+        if not !state then fail "the state is not set");
+  ]
+
+(* As [order], but the release of the fixture of the fast test fails when the
+   fixture was set up before the slow test ran. *)
+let after_the_state =
+  fixture
+    ~teardown:(fun set -> if not set then failwith "set up before the state")
+    (fun () -> !state)
+
+let release_order =
+  [
+    test "sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "needs the state at its release" (fun () ->
+        ignore (after_the_state ());
+        is_true (Subject.widen 1 2 <> 99));
+  ]
+
 let retried = ref 0
 let handle = fixture ~teardown:(fun () -> ignore (Subject.crasher 3 1)) Fun.id
 
@@ -963,6 +1016,9 @@ let () =
   | "intermittent" -> exit @@ run "calc" [ group "intermittent" intermittent ]
   | "flaky_kill" -> exit @@ run "calc" [ group "kill" flaky_kill ]
   | "timed_kill" -> exit @@ run "calc" [ group "kill" timed_kill ]
+  | "speed" -> exit @@ run "calc" [ group "speed" speed ]
+  | "order" -> exit @@ run "calc" [ group "order" order ]
+  | "release_order" -> exit @@ run "calc" [ group "order" release_order ]
   | "start_hangs" ->
       (match Sys.getenv_opt "MUTATE_STARTS" with
       | Some path when start_index path = 5 -> Unix.sleepf 60.
