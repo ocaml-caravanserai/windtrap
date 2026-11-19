@@ -4343,7 +4343,7 @@ let stopped_kill ~gate_at env args =
   r
 
 let waits_for_check line =
-  strf "windtrap: interrupted while the kill of %s waits for its check\n"
+  strf "windtrap: interrupted while the verdict of %s waits for its check\n"
     (site line)
 
 let interrupted_check () =

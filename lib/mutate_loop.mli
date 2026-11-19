@@ -458,14 +458,14 @@ val execute_and_report :
     From the end of the dry run until its verdict file is written, the loop
     handles [SIGINT], [SIGTERM] and [SIGHUP]. One that arrives while a job runs
     ends every job, with its process group, and the mutants not yet given get no
-    verdict. Nor does a survivor that waits for its next run, or a kill that
+    verdict. Nor does a survivor that waits for its next run, or a verdict that
     waits for its check, and the loop starts no other pass. The report names the
     mutant of the next job that a pass of mutants gives, or the probe, as
     interrupted while it is tested. When the signal comes during a pass of
     checks or between two passes, it names the first mutant in catalogue order
-    with no verdict: a survivor as one that waits for its next run, and a kill
-    as one that waits for its check. A signal that comes before a pass installs
-    its handlers stops the pass before its first job
+    with no verdict: a survivor as one that waits for its next run, and another
+    mutant as one whose verdict waits for its check. A signal that comes before
+    a pass installs its handlers stops the pass before its first job
     ([Supervisor.fresh ~stopped]). The loop then reports what it found, writes
     no verdict file, and dies by the same signal last, so its parent sees a
     death by signal and no [at_exit] function runs.

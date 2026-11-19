@@ -2168,7 +2168,7 @@ let interrupted_rows =
         "windtrap: interrupted before the retry of lib/calc.ml:9:12:add\n" ) );
     ( "a kill that waits for its check",
       ( `Check "lib/calc.ml:9:12:add",
-        "windtrap: interrupted while the kill of lib/calc.ml:9:12:add waits \
+        "windtrap: interrupted while the verdict of lib/calc.ml:9:12:add waits \
          for its check\n" ) );
     ( "the determinism probe",
       (`Probe, "windtrap: interrupted during the determinism probe\n") );

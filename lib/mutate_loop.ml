@@ -1169,7 +1169,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   in
   (* Signals are handled until the verdict file is written, so a loop that
      ended has its file whatever becomes of its report. A survivor that waits
-     for a run, and a kill that waits for its check, have no verdict. *)
+     for a run, and a mutant that waits for its check, have no verdict. *)
   let ended =
     with_interrupts @@ fun () ->
     let jobs =
