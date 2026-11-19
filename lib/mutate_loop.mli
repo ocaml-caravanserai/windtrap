@@ -130,8 +130,7 @@ val execute_and_report :
     counts each failure, as when it could not tell. Under [config.crash_kills],
     the report counts an unknown mutant of a deadline, a crash or a memory limit
     as killed ({!Report_sections.val-counted_as_killed}). Its verdict stays
-    unknown. Under the fast order, an early end has an [Other] reason
-    ({b Order failures} below), which does not count.
+    unknown.
 
     {b Full matrix.} Under [config.full_matrix] ([--full-matrix]), the job of a
     mutant does not stop at a kill. After each counted failure in or after the
