@@ -1012,14 +1012,16 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
       | verdict -> verdict
     in
     let verdict =
-      match (verdict, first_failure ran) with
-      | (Verdicts.Survived _ | Not_evaluated), Some (what, failure)
-        when fast && run = 1 ->
-          Verdicts.Unknown
-            (Other
-               (strf "%s fails before the site in the fast order: %s" what
-                  failure))
-      | verdict, _ -> verdict
+      match verdict with
+      | (Verdicts.Survived _ | Not_evaluated) when fast && run = 1 -> (
+          match first_failure ran with
+          | Some (what, failure) ->
+              Verdicts.Unknown
+                (Other
+                   (strf "%s fails before the site in the fast order: %s" what
+                      failure))
+          | None -> verdict)
+      | verdict -> verdict
     in
     let matrix = matrix ~full_matrix verdict ran in
     (* The check runs the tests up to the first killing test, the whole job
