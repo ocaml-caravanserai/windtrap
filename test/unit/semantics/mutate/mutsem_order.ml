@@ -207,6 +207,42 @@ let mul_exception_order () =
 let fmul_order a b = Printf.sprintf "%.2f" (note "l" a *. note "r" b)
 let bit_order a b = string_of_int (note "l" a land note "r" b)
 
+(* {1 [decr], [incr], [pos] and [left]}
+
+   A counter is a site only on a pure operand, which its guard copies, so
+   its operand runs before the counter. The guard of [pos] binds its operand
+   once, and that of [left] takes the guard of [ari], with the right operand
+   also bound when the mutant is armed. *)
+
+let counter_incr n =
+  let r = ref (note "r" n) in
+  incr r;
+  string_of_int !r
+
+let counter_decr n =
+  let r = ref (note "r" n) in
+  decr r;
+  string_of_int !r
+
+let counter_atomic n =
+  let a = Atomic.make (note "a" n) in
+  Atomic.incr a;
+  string_of_int (Atomic.get a)
+
+let pos_order a = string_of_int (-note "x" a)
+let fpos_order a = Printf.sprintf "%.2f" (-.note "x" a)
+let left_order a b = String.concat "," (note "l" [ a ] @ note "r" [ b ])
+
+let boom_list : string -> string list =
+ fun tag ->
+  log := tag :: !log;
+  raise (Boom tag)
+
+let left_exception_order () =
+  match String.concat "," (boom_list "l" @ boom_list "r") with
+  | s -> s
+  | exception Boom tag -> tag
+
 (* {1 [con]: short-circuiting}
 
    The connective encoding turns [a && b] into
@@ -501,6 +537,13 @@ let witnesses : (string * (unit -> string)) list =
     ("mul operand exceptions", fun () -> show (mul_exception_order ()));
     ("fmul *.", fun () -> show (fmul_order 1.5 2.));
     ("bit land", fun () -> show (bit_order 12 10));
+    ("counter incr", fun () -> show (counter_incr 1));
+    ("counter decr", fun () -> show (counter_decr 1));
+    ("counter Atomic.incr", fun () -> show (counter_atomic 1));
+    ("pos ~-", fun () -> show (pos_order 3));
+    ("pos ~-.", fun () -> show (fpos_order 1.5));
+    ("left @", fun () -> show (left_order "a" "b"));
+    ("left operand exceptions", fun () -> show (left_exception_order ()));
     ("con && skips b on false", fun () -> show (con_and false true));
     ("con && runs b on true", fun () -> show (con_and true false));
     ("con && both true", fun () -> show (con_and true true));
