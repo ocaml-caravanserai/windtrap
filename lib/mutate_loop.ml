@@ -511,6 +511,12 @@ let end_reason ~deadline : Supervisor.ended -> Verdicts.unknown_reason option =
   | Lost { signal; status; how } -> Some (Crashed { signal; status; how })
   | Outgrown mb -> Some (Memory { mb })
 
+(* The first release failure of a run, as what failed and its headline. *)
+let release_failure (ran : Supervisor.ran) =
+  match ran.release_failures with
+  | f :: _ -> Some ("a fixture release", Report_sections.headline f)
+  | [] -> None
+
 (* The first counted failure of a run, as what failed and its headline. *)
 let first_failure (ran : Supervisor.ran) =
   match
@@ -523,10 +529,7 @@ let first_failure (ran : Supervisor.ran) =
       ran.results
   with
   | Some (what, f) -> Some (what, Report_sections.headline f)
-  | None -> (
-      match ran.release_failures with
-      | f :: _ -> Some ("a fixture release", Report_sections.headline f)
-      | [] -> None)
+  | None -> release_failure ran
 
 (* What a check looks for in its runs. *)
 type goal =
@@ -537,13 +540,11 @@ type goal =
 (* The failure that [goal] finds in a run of a check, as one line. A run that
    ended before the killing test ended has no row of it, and gives none. A
    run that ended before its releases has no release failure, and gives
-   none for [Release]. [deadline] is the deadline of the run. Under [Fast],
+   none for [Release]. [deadline] is the deadline of the run. Under [fast],
    the text names the fast order. *)
-let check_failure order ~deadline goal (ran : Supervisor.ran) =
-  let in_order =
-    match order with Run.Catalogue -> "" | Run.Fast -> " in the fast order"
-  in
-  let also what failure =
+let check_failure ~fast ~deadline goal (ran : Supervisor.ran) =
+  let in_order = if fast then " in the fast order" else "" in
+  let also (what, failure) =
     strf "%s also fails with no mutant%s: %s" what in_order failure
   in
   match goal with
@@ -555,24 +556,18 @@ let check_failure order ~deadline goal (ran : Supervisor.ran) =
             when kills r && List.equal String.equal r.path test ->
               Some
                 (also
-                   ("its killing test " ^ Test_tree.path_to_string test)
-                   (Report_sections.headline f))
+                   ( "its killing test " ^ Test_tree.path_to_string test,
+                     Report_sections.headline f ))
           | Pass | Fail _ | Skip _ -> None)
         ran.results
-  | Release -> (
-      match ran.release_failures with
-      | f :: _ -> Some (also "a fixture release" (Report_sections.headline f))
-      | [] -> None)
+  | Release -> Option.map also (release_failure ran)
   | End -> (
       match end_reason ~deadline ran.ended with
       | Some reason ->
           Some
             (strf "the job also ends with no mutant%s: %s" in_order
                (Verdicts.reason_text reason))
-      | None ->
-          Option.map
-            (fun (what, failure) -> also what failure)
-            (first_failure ran))
+      | None -> Option.map also (first_failure ran))
 
 (* The failure of a job that did not evaluate the armed site. *)
 let uncaused (ran : Supervisor.ran) =
@@ -1058,14 +1053,13 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
       (fun { i; run; held; matrix } ->
         match (failure, check.goal) with
         | None, _ -> commit ~failed:None ~run ?matrix i held
-        | Some failure, Killing test when run = 1 ->
+        | Some failure, goal when run = 1 ->
             commit ~failed:None ~run i
-              (Verdicts.Unknown (Flaky_kill { test; failure }))
-        | Some failure, Release when run = 1 ->
-            commit ~failed:None ~run i
-              (Verdicts.Unknown (Flaky_kill { test = []; failure }))
-        | Some failure, End when run = 1 ->
-            commit ~failed:None ~run i (Verdicts.Unknown (Other failure))
+              (Verdicts.Unknown
+                 (match goal with
+                 | Killing test -> Flaky_kill { test; failure }
+                 | Release -> Flaky_kill { test = []; failure }
+                 | End -> Other failure))
         | Some reason, _ ->
             early.(i) <- (run, reason) :: early.(i);
             commit ~failed:None ~run i (Verdicts.survived (paths i)))
@@ -1091,8 +1085,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
           given ran;
           let check = due.(j) in
           (match
-             check_failure config.mutate_order ~deadline:(longest check)
-               check.goal ran
+             check_failure ~fast ~deadline:(longest check) check.goal ran
            with
           | Some _ as failure -> settle check failure
           | None when run < check_runs -> clean := check :: !clean
