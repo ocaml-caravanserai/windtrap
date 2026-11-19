@@ -99,8 +99,7 @@ val execute_and_report :
     depends on the order can change between two runs.
 
     {b Job order.} Under {!Run.Catalogue}, the reaching tests of a job are in
-    the order in which the workers of the dry run reported them, which is the
-    catalogue order under [config.jobs = 1]. Under {!Run.Fast}
+    the order in which the dry run reported them. Under {!Run.Fast}
     ([--mutate-order=fast]), they are in the order of their time in the dry run,
     the fastest first ({!job_order}). The loop makes the order of each job one
     time, after the dry run. The job, its retries, its check, the digest of its

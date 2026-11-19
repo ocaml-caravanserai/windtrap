@@ -741,6 +741,10 @@ reason tells the order:
 its killing test calc › needs the state also fails with no mutant in the fast order: the state is not set
 ```
 
+For a kill by a fixture release, the reason is
+`a fixture release also fails with no mutant in the fast order:`, and
+then the failure of the release.
+
 A worker keeps a fixture until it ends. Thus the first test of the job
 that uses a fixture pays its setup, and no fixture is set up two times,
 unless the worker retires (a test that spawned, a timeout, or a kill

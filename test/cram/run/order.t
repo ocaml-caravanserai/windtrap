@@ -95,7 +95,8 @@ The mirror does the same:
   mutants: 1 reached by this suite, 1 unknown, reach 100.0% (1/1)
   [0]
 
-The flag needs `--mutate`, and its mirror alone has no effect:
+The flag without `--mutate` is a usage error, and its mirror alone has
+no effect:
 
   $ suite ./order_main.exe --mutate-order=fast
   windtrap: option '--mutate-order' requires '--mutate'

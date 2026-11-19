@@ -5808,6 +5808,12 @@ let order_causes_a_release_failure () =
       failf "rows: %s"
         (Option.fold ~none:"none" ~some:(String.concat " | ") rows)
 
+(* A fixture release kills the mutant, and does not fail with no mutant. *)
+let release_kill_checked () =
+  let r = spawn ~env:[ suite "release"; measured () ] [ mutate; fast ] in
+  ended_well r;
+  equal string killed_outcome (outcome r.out)
+
 (* Run 3 survives, run 4 is the retry and kills, and run 5 is the first check
    run. *)
 let fast_kill_in_a_retry () =
@@ -5878,6 +5884,10 @@ let job_order =
         "a release failure that the fast order causes gives unknown, and a \
          survivor in the catalogue order"
         order_causes_a_release_failure;
+      test
+        "under the fast order, a kill by a fixture release that its check \
+         trusts stays"
+        release_kill_checked;
       test
         "under the fast order, a kill in a retry that its check does not trust \
          leaves the survivor"
