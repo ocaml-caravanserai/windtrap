@@ -357,6 +357,21 @@ let apply ~loc ?(attributes = []) name args =
     { operator with pexp_attributes = attributes }
     (List.map (fun arg -> (Nolabel, arg)) args)
 
+(* The attributes that set the warnings and the alerts of the expression that
+   carries them. *)
+let scoping =
+  [
+    "ocaml.warning";
+    "warning";
+    "ocaml.warnerror";
+    "warnerror";
+    "ocaml.alert";
+    "alert";
+  ]
+
+let scoped e =
+  List.filter (fun a -> List.mem a.attr_name.txt scoping) e.pexp_attributes
+
 (* A text is printed from the parsetree, since a preprocessor cannot rely on
    the path of its source, and each run of blanks becomes one space. *)
 let render e =
@@ -429,7 +444,7 @@ let mutant ~keeps ~declares context e =
         in
         Some
           {
-            guard = Recount (replaced u.fn.pexp_attributes);
+            guard = Recount (replaced (scoped u.fn));
             rewrite;
             after = render (replaced []);
           }
@@ -791,7 +806,7 @@ let negation ~loc ~module_name ~index value =
    [let l, r = left, right in if armed then ... else l op r], where the
    disarmed arm is the application of [e] rebuilt over the binders, with its
    location and its attributes. The replacement operator of the armed arm has
-   the attributes of the source operator.
+   the warning and alert attributes of the source operator.
 
    The type-checker reads the tuple left to right, as it reads the arguments
    of an application, so a qualified field of the left operand still resolves
@@ -827,19 +842,6 @@ let negation ~loc ~module_name ~index value =
    closure in bytecode under [-g]. Binding the operator, as in [let op = if
    armed then ( <= ) else ( < )], names a second operator, and reaches the
    polymorphic comparison even when nothing is armed. *)
-let scoping =
-  [
-    "ocaml.warning";
-    "warning";
-    "ocaml.warnerror";
-    "warnerror";
-    "ocaml.alert";
-    "alert";
-  ]
-
-let scoped e =
-  List.filter (fun a -> List.mem a.attr_name.txt scoping) e.pexp_attributes
-
 type pin = Operands | Ints | Floats | Lists
 
 (* The pin of a Stdlib operator of [ari], [mul], [fmul] or [bit], from the
@@ -970,11 +972,11 @@ let tail ~loc ~module_name ~index e value t =
     else [%e copy]]
 
 (* A counter: [if armed then decr r' else incr r], where [r'] is a copy of
-   the pure operand [r], as in [tail], and [decr] has the path and the
-   attributes of the source [incr]. The disarmed arm is the site, with its
-   location and its attributes. The application gives [r'] the expected type
-   of [r], so the guard has no constraint, which would name [Stdlib.ref] or
-   [Stdlib.Atomic.t]. *)
+   the pure operand [r], as in [tail], and [decr] has the path and the warning
+   and alert attributes of the source [incr]. The disarmed arm is the site,
+   with its location and its attributes. The application gives [r'] the
+   expected type of [r], so the guard has no constraint, which would name
+   [Stdlib.ref] or [Stdlib.Atomic.t]. *)
 let recount ~loc ~module_name ~index e replaced =
   let replaced = ghost#expression replaced in
   {
@@ -1399,8 +1401,8 @@ class instrumenter ~keeps ~declares ~module_name =
                   in
                   binary ~loc ~module_name ~index ~pin e app left right
                     ~armed_arm:(fun l r ->
-                      apply ~loc ~attributes:app.operator.pexp_attributes
-                        replacement [ l; r ])
+                      apply ~loc ~attributes:(scoped app.operator) replacement
+                        [ l; r ])
               | Keep_left ->
                   binary ~loc ~module_name ~index ~pin:(self#pin Lists) e app
                     left right ~armed_arm:(fun l _ -> l)))

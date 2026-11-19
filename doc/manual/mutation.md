@@ -1790,7 +1790,8 @@ the list, which `-open` makes visible. Then `Int.( incr r )` or
 Under `-open Base`, each mutant compiles. Base deprecates `mod`, `incr`
 and `decr`. The original gives the same alert, and the guard takes the
 alert attributes of the site. The armed `decr` or `incr` takes the
-attributes of the source counter, as in `(incr [@alert "-deprecated"]) r`.
+warning and alert attributes of the source counter, as in
+`(incr [@alert "-deprecated"]) r`.
 
 The `none` mutant names `None` without a module, and the `tail` mutant
 gives `t` the type of `h :: t`. The rewriter does not see a `Some` or a

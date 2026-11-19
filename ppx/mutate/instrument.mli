@@ -502,7 +502,7 @@
     whole guard of these rewrites also takes the [ocaml.warning], [warning],
     [ocaml.warnerror], [warnerror], [ocaml.alert] and [alert] attributes of the
     site. The armed counter and the replacement operator of [ari], [mul], [fmul]
-    and [bit] take the attributes of the source identifier.
+    and [bit] take these attributes of the source identifier.
 
     The disarmed arm of the [del] guard of a statement or a loop body is
     [e; ()], whose [()] has a location of zero width at the end of [e]. On a
