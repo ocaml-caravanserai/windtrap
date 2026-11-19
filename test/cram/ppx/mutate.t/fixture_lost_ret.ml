@@ -6,3 +6,6 @@ type found = Some of int | Missing
 
 let found n = Some n
 let push x xs = x :: xs
+
+(* [acc @ [ x ]] has no [left] site where [tail] has no site. *)
+let snoc acc x = acc @ [ x ]

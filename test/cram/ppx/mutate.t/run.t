@@ -728,6 +728,7 @@ before and after, and the reason of a dismissed site.
     if Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 13
     then __windtrap_mut_13_l
     else __windtrap_mut_13_l @ __windtrap_mut_13_r
+  let loaded_snoc = base @ [2]
 
   $ mut --impl ./fixture_del.ml | ../elide.exe
   mutation sites of "./fixture_del.ml" in Windtrap_mut_________fixture_del___ml:
@@ -2897,6 +2898,7 @@ and keeps its reason:
     | Missing 
   let found n = Some n
   let push x xs = x :: xs
+  let snoc acc x = acc @ [x]
   $ mut --impl ./fixture_lost_ret_cons.ml | ../elide.exe
   mutation sites of "./fixture_lost_ret_cons.ml" in Windtrap_mut_________fixture_lost_ret_cons___ml, with type ints:
     0: 9:14-9:19 "sub" "a + b" -> "a - b"
@@ -3257,6 +3259,7 @@ and keeps its reason:
     1: 16:2-16:8 "decr" "incr a" -> "decr a"
     2: 21:16-21:22 "decr" "incr a" -> "decr a"
     3: 27:13-27:19 "decr" "incr r" -> "decr r"
+    4: 32:29-32:35 "decr" "incr r" -> "decr r"
   module Opened =
     struct
       open Atomic
@@ -3292,6 +3295,14 @@ and keeps its reason:
         then decr r
         else incr r
     end
+  let nested r =
+    let open Float in
+      let open Array in
+        if
+          Windtrap_mut_________fixture_counter_scope___ml.___windtrap_armed___
+            4
+        then decr r
+        else incr r
   let under_open r = let open Counters in incr r
   let under_path r = let open Counters in incr r
   module Under_include = struct include Counters

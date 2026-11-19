@@ -27,6 +27,10 @@ module Included = struct
   let up r = incr r
 end
 
+(* A site: the check reads only the name of each module. Thus [Array]
+   counts as a module of the list, but it is [Float.Array]. *)
+let nested r = Float.(Array.(incr r))
+
 (* No site: a module that is not in the list, under each opaque form. *)
 let under_open r =
   let open Counters in
