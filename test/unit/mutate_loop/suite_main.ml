@@ -959,6 +959,20 @@ let end_prefix =
     test "x fast ends" (fun () -> if Subject.widen 2 2 <> 4 then Unix._exit 3);
   ]
 
+(* As [state_first], but the fast test fails before it evaluates [widen] only
+   at the runs in MUTATE_FAIL_AT. It counts its runs in the file of
+   MUTATE_RUNS, as in [flaky_kill]. *)
+let retry_order =
+  [
+    test "slow reaches widen" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0));
+    test "fast fails at the given runs" (fun () ->
+        let run = count "MUTATE_RUNS" in
+        if among "MUTATE_FAIL_AT" run then fail (Printf.sprintf "run %d" run);
+        is_true (Subject.widen 1 2 <> 99));
+  ]
+
 let retried = ref 0
 let handle = fixture ~teardown:(fun () -> ignore (Subject.crasher 3 1)) Fun.id
 
@@ -1067,6 +1081,7 @@ let () =
   | "state_first" -> exit @@ run "calc" [ group "order" state_first ]
   | "exit_order" -> exit @@ run "calc" [ group "order" exit_order ]
   | "end_prefix" -> exit @@ run "calc" [ group "order" end_prefix ]
+  | "retry_order" -> exit @@ run "calc" [ group "order" retry_order ]
   | "start_hangs" ->
       (match Sys.getenv_opt "MUTATE_STARTS" with
       | Some path when start_index path = 5 -> Unix.sleepf 60.

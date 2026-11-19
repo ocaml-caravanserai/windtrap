@@ -5848,9 +5848,9 @@ let order_ends_the_job () =
   contains ~sub:(strf "\n    %s\n" reason) r.out;
   not_contains ~sub:"counted as killed" r.out
 
-(* The mutant of [crasher] ends its worker, and the check of the whole job
-   runs the test three times with no mutant. Under --crash-kills, the end
-   still counts as a kill. *)
+(* The mutant of [crasher] ends its worker, and the check runs the test three
+   times with no mutant. Under --crash-kills, the end counts as a kill, as
+   without the fast order. *)
 let mutant_ends_the_job () =
   let crash_runs args =
     let runs = Filename.concat (temp_dir ()) "runs" in
@@ -5922,6 +5922,36 @@ let fast_kill_in_a_retry () =
   equal (list string)
     [ "run 2: " ^ order_reason b "run 5" ]
     (early_runs k.r.out)
+
+(* The fast test fails before the site at the given run. Run 3 is the job, and
+   run 4 the retry. A failure before the site gives unknown only in the first
+   run. *)
+let fast_failure_before_the_site_in_a_retry () =
+  let retry_run fail_at =
+    let runs = Filename.concat (temp_dir ()) "runs" in
+    let r =
+      spawn
+        ~env:
+          [
+            suite "retry_order";
+            ("MUTATE_RUNS", runs);
+            ("MUTATE_FAIL_AT", fail_at);
+          ]
+        [ mutate; fast; retry_once ]
+    in
+    ended_well r;
+    r
+  in
+  let r = retry_run "3" in
+  equal string unknown_outcome (outcome r.out);
+  contains
+    ~sub:
+      "test order \u{203a} fast fails at the given runs fails before the site \
+       in the fast order: run 3"
+    r.out;
+  let r = retry_run "4" in
+  equal string survived_outcome (outcome r.out);
+  not_contains ~sub:"fails before the site" r.out
 
 (* The two tests kill the mutant. The check runs the fast test alone. *)
 let fast_full_matrix () =
@@ -6004,6 +6034,10 @@ let job_order =
         "under the fast order, a kill in a retry that its check does not trust \
          leaves the survivor"
         fast_kill_in_a_retry;
+      test
+        "under the fast order, a failure before the site in a retry gives no \
+         unknown"
+        fast_failure_before_the_site_in_a_retry;
       test
         "under the fast order and --full-matrix, the check runs up to the \
          first killing test in the job order"
