@@ -149,7 +149,7 @@ File "calc.ml", line 10, characters 37-42:
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:10:16:ge
-mutants: 3 survived of 11 reached by this suite, 8 killed, 1 never reached, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
+mutants: 3 survived of 12 reached by this suite, 9 killed, 1 never reached, score 75.0% (9/12), reach 92.3% (12/13), total 69.2% (9/13)
 ```
 
 ## Reproducing a survivor
@@ -221,13 +221,13 @@ File "calc.ml", line 6, characters 11-16:
       subtraction › stays positive  test_calc.ml:11
 ──────────────────────────────────────────────────────────
 
-─────────────────── never reached (11) ───────────────────
-  11  calc.ml   lines 5, 7-8, 10
+─────────────────── never reached (12) ───────────────────
+  12  calc.ml   lines 5, 7-8, 10, 13
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:6:11:add -f 'stays positive'
 windtrap: verdicts not saved: this run's selection narrows the suite, and a partial run's verdicts would stand in the project merge as the whole.
-mutants: 1 survived of 1 reached by the 1 selected test, 11 never reached, score 0.0% (0/1), reach 8.3% (1/12), total 0.0% (0/12)
+mutants: 1 survived of 1 reached by the 1 selected test, 12 never reached, score 0.0% (0/1), reach 7.7% (1/13), total 0.0% (0/13)
 ```
 
 ## Testing a change's mutants
@@ -827,7 +827,7 @@ File "calc.ml", line 10, characters 37-42:
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:10:16:ge
-mutants: 3 survived of 11 reached by this suite, 8 killed, 1 never reached, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
+mutants: 3 survived of 12 reached by this suite, 9 killed, 1 never reached, score 75.0% (9/12), reach 92.3% (12/13), total 69.2% (9/13)
 $ dune exec windtrap -- mutants
 ───────────────────── survivors (3) ──────────────────────
 File "calc.ml", line 10, characters 16-21:
@@ -859,7 +859,7 @@ File "calc.ml", line 10, characters 37-42:
 ──────────────────────────────────────────────────────────
 
 reproduce: dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --arm calc.ml:10:16:ge
-mutants: 3 survived of 11 reached, 8 killed, 1 never reached, 1 executable, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12)
+mutants: 3 survived of 12 reached, 9 killed, 1 never reached, 1 executable, score 75.0% (9/12), reach 92.3% (12/13), total 69.2% (9/13)
 ```
 
 Only code that a suite's own process runs reaches a mutant. A binary
@@ -1166,7 +1166,7 @@ that were not evaluated. These mutants do not count in the score:
   not a survivor.
 
 The line gives the score with the killed and the counted mutants, as
-`score 72.7% (8/11)`. When no mutant counts and no gate is given, the
+`score 75.0% (9/12)`. When no mutant counts and no gate is given, the
 line gives no score.
 
 After the score, the line gives two more measures in the same form:
@@ -1205,9 +1205,9 @@ measure is that of the mutants on the lines:
 
 ```
 $ dune exec windtrap -- mutants --min 60 --min-reach 95 | tail -n 1
-mutants: 3 survived of 11 reached, 8 killed, 1 never reached, 1 executable, score 72.7% (8/11), minimum 60%: ok, reach 91.7% (11/12), minimum 95%: FAILED, total 66.7% (8/12)
+mutants: 3 survived of 12 reached, 9 killed, 1 never reached, 1 executable, score 75.0% (9/12), minimum 60%: ok, reach 92.3% (12/13), minimum 95%: FAILED, total 69.2% (9/13)
 $ dune exec windtrap -- mutants --max-survivors 3 | tail -n 1
-mutants: 3 survived of 11 reached, 8 killed, 1 never reached, 1 executable, score 72.7% (8/11), reach 91.7% (11/12), total 66.7% (8/12), maximum 3 survivors: ok
+mutants: 3 survived of 12 reached, 9 killed, 1 never reached, 1 executable, score 75.0% (9/12), reach 92.3% (12/13), total 69.2% (9/13), maximum 3 survivors: ok
 ```
 
 A suite that was not mutation-tested fails the merge also under a gate,
@@ -1243,7 +1243,7 @@ crashed:
 
 ```
 $ dune exec windtrap -- mutants --crash-kills | tail -n 1
-mutants: 3 survived of 13 reached, 10 killed (2 by --crash-kills), 1 never reached, 1 executable, score 76.9% (10/13), reach 92.9% (13/14), total 71.4% (10/14)
+mutants: 3 survived of 14 reached, 11 killed (2 by --crash-kills), 1 never reached, 1 executable, score 78.6% (11/14), reach 93.3% (14/15), total 73.3% (11/15)
 ```
 
 The verdict of a suite that was not mutation-tested never counts a
@@ -1443,9 +1443,9 @@ project's merge passes:
 ```
 $ dune exec --instrument-with ppx_windtrap.mutate ./test_calc.exe -- --mutate
 calc: 12 passed in 2.7ms.
-mutants: 12 reached by this suite, 12 killed, score 100.0% (12/12), reach 100.0% (12/12), total 100.0% (12/12)
+mutants: 13 reached by this suite, 13 killed, score 100.0% (13/13), reach 100.0% (13/13), total 100.0% (13/13)
 $ dune exec windtrap -- mutants
-mutants: 12 reached, 12 killed, 1 executable, score 100.0% (12/12), reach 100.0% (12/12), total 100.0% (12/12)
+mutants: 13 reached, 13 killed, 1 executable, score 100.0% (13/13), reach 100.0% (13/13), total 100.0% (13/13)
 ```
 
 ## Finding the tests that kill each mutant
@@ -1618,6 +1618,19 @@ these names (see
 - `tail` replaces `h :: t` with `t`, and `h` does not run. A list
   literal is one site, at its bracket: `[a; b; c]` becomes `[b; c]`. In
   a chain, as `a :: b :: t`, the outermost `::` alone is a site.
+- `incr r` becomes `decr r` (`decr`), and `decr r` becomes `incr r`
+  (`incr`). `Atomic.incr a` and `Atomic.decr a` swap in the same way.
+  The mutant uses the path of the source: `Atomic.(incr c)` becomes
+  `Atomic.(decr c)`. The operand must be a name, a constructor without
+  an argument or a field, so `incr (f x)` carries no mutant.
+  `Stdlib.incr r`, `r |> incr` and `List.iter incr l` carry no mutant.
+  A statement `incr r` carries `del` and `decr`.
+- `pos` drops a unary minus: `-x` and `-.x` become `x`. A minus on a
+  literal, as `-1`, is part of the literal and carries no mutant. In
+  `-(-x)`, the outer minus alone carries a mutant.
+- `left` drops the right operand of `@`: `a @ b` becomes `a`. `b` runs
+  also in the mutant. In a chain, as `(a @ b) @ c`, the outermost `@`
+  alone is a site. `a @ b @ c` is `a @ (b @ c)`, with two sites.
 
 Some code carries no mutant, because a test has no reason to pin it or
 no test can run it. `del` leaves a resource release alone: a call of
@@ -1662,6 +1675,11 @@ log message or a failure message alone. These cases are:
   keeps its mutant.
 - `a && a` and `a || a`, when `a` is a name, a constructor without an
   argument or a field.
+- `a @ l` when `l` is a list literal, as `a @ []` or `acc @ [ x ]`.
+  `a @ []` is `a`, and the `tail` mutant of `acc @ [ x ]` is
+  `acc @ []`. Thus `acc @ [ x ]` has no `left` mutant also where `tail`
+  gives none, as at load. `[] @ b` and `a @ (x :: t)` keep their
+  mutants.
 - The condition of `if c then e else e`, when the two branches are the
   same code. Code that can give its location, as `__LOC__`, `assert` or
   a `match`, is never the same code as its copy.
@@ -1707,30 +1725,51 @@ A file that rebinds an operator loses the rewrites of its family:
 - `*.` and `/.`
 - The six bit operators
 - The six comparisons
-- The two connectives.
+- The two connectives
+- `incr` and `decr`, which removes `decr` and `incr`, the forms of
+  `Atomic` included
+- `~-` and `~-.`, which removes `pos`. A binding of `-` or `-.` does not
+- `@`, which removes `left`.
 
-A binding is a variable, an alias pattern as `(_ as ( + ))`, or a value
-description as `external`. A file that declares a constructor `Some`,
-`None` or `::` loses `none` and `tail`.
+A binding is a variable, an alias pattern as `(_ as ( + ))`, a value
+description as `external`, or an instance variable. A file that
+declares a constructor `Some`, `None` or `::` loses `none` and `tail`.
 
-The rewrites of `*`, `/`, `mod`, `*.`, `/.` and the bit operators give
-no mutant under some code of another module, as in `Float.(a * b)`.
+The rewrites of `*`, `/`, `mod`, `*.`, `/.`, the bit operators, the
+unary minus and `@` give no mutant under some code of another module,
+as in `Float.(a * b)`.
 This code is an `open`, a `let open`, an `M.( ... )` or an `include` in
 scope. A `struct ... end` of the file, as the `include struct ... end`
 of a deriver, keeps them, unless it includes another module. An
 `open`, a `let open`, an `M.( ... )` or an `include` of a module of
 the same file by its name, as `open Infix`, also removes them.
 
-The rewriter does not see a `-open` flag of the compiler. A flag can
-give `*`, `/`, `mod`, `*.`, `/.`, a bit operator, `+`, `-`, `+.` or
-`-.` another type. It can also give only the replacement another type.
-Then the instrumented file does not compile. The compiler shows the
-error at the expression, and `[@mutate off "reason"]` or
-`[@@@mutate exclude_file]` removes it.
+`decr` and `incr` keep their mutants under an `open`, a `let open`, an
+`M.( ... )` or an `include` of these modules: `Int`, `Float`, `Int32`,
+`Int64`, `Nativeint`, `Char`, `String`, `Bytes`, `List`, `Array`,
+`Option`, `Result`, `Bool`, `Fun`, `Seq`, `Hashtbl`, `Printf`,
+`Format`, `Buffer` and `Atomic`. Of these modules, only `Atomic` gives
+`incr` and `decr`. A longer path, as `Float.Array`, removes them. A
+module of the file with one of these names also removes them, and
+`Atomic.incr a` has no mutant in a file that declares a module
+`Atomic`. A class body with an `inherit` has no `decr` or `incr`
+mutant, because the parent class can give an instance variable named
+`incr`.
 
-Under `-open Base`, each mutant compiles. Base deprecates `mod`. The
-original gives the same alert, and the guard takes the alert attributes
-of the site.
+The rewriter does not see a `-open` flag of the compiler. A flag can
+give `*`, `/`, `mod`, `*.`, `/.`, a bit operator, `+`, `-`, `+.`,
+`-.`, `~-`, `~-.`, `@`, `incr` or `decr` another type. It can also
+give only the replacement another type. For example, an `@` on two
+values of one type that is not a list breaks the `left` mutant. Then
+the instrumented file does not compile. The compiler shows the error at
+the expression, and `[@mutate off "reason"]` or
+`[@@@mutate exclude_file]` removes it. The rewriter also does not see
+a module `Atomic` of another file of the library, which `-open` makes
+visible. Then `Atomic.incr a` is not that of Stdlib.
+
+Under `-open Base`, each mutant compiles. Base deprecates `mod`, `incr`
+and `decr`. The original gives the same alert, and the guard takes the
+alert attributes of the site.
 
 The `none` mutant names `None` without a module, and the `tail` mutant
 gives `t` the type of `h :: t`. The rewriter does not see a `Some` or a
@@ -1779,8 +1818,8 @@ the file.
 The mutation backend is applied without dune as
 [the coverage backend](coverage.md#instrumenting-without-dune) is, and
 the suite then runs with `--mutate`. If the coverage rewriter runs
-first, the rewrites of `*`, `/`, `mod`, `*.`, `/.` and the bit operators
-give no mutant.
+first, the rewrites of `*`, `/`, `mod`, `*.`, `/.`, the bit operators,
+the unary minus, `@`, `incr` and `decr` give no mutant.
 
 ## When a run cannot mutate
 

@@ -649,8 +649,8 @@ let same a b =
    IEEE 754 gives the same rule for floats. A shift by [0] is [x], and a
    shift of [0] is [0]. [a land a], [a lor a], [a && a] and [a || a] are [a].
    [x mod 1] is [0] but [x * 1] is [x], and [a lxor a] is [0] but [a land a]
-   is [a]. [left] on a list literal gives [a @ []], which is [a], or a
-   mutant that [tail] gives. *)
+   is [a]. [a @ []] is [a], so [left] skips a list literal on the right, as
+   in [acc @ [ x ]], where [tail] gives [acc @ []]. *)
 let neutral app =
   let rec is_list_literal e =
     match (e.pexp_desc, cons e) with
@@ -779,10 +779,10 @@ let negation ~loc ~module_name ~index value =
     if [%e armed ~loc ~module_name index] then Stdlib.not [%e evar ~loc p]
     else [%e evar ~loc p]]
 
-(* [cmp] on an ordering, [ari], [mul], [fmul] and [bit]: [let l, r = left,
-   right in if armed then ... else l op r], where the disarmed arm is the
-   application of [e] rebuilt over the binders, with its location and its
-   attributes.
+(* [cmp] on an ordering, [ari], [mul], [fmul], [bit] and [left]:
+   [let l, r = left, right in if armed then ... else l op r], where the
+   disarmed arm is the application of [e] rebuilt over the binders, with its
+   location and its attributes.
 
    The type-checker reads the tuple left to right, as it reads the arguments
    of an application, so a qualified field of the left operand still resolves
@@ -807,7 +807,9 @@ let negation ~loc ~module_name ~index value =
    annotation [ints] or [floats], with [type ints = int * int] and
    [type floats = float * float]. Outside Stdlib scope [ari] does not pin,
    because an [open] can give [+] two types. The other three have no site
-   there.
+   there. [left] pins its operands to [_ lists], with
+   [type 'a lists = 'a list * 'a list], which gives the right operand the
+   type of the left one and the two operands a list type.
 
    The operands move out of [e], so the [let] takes the warning and alert
    attributes of [e], which also cover the operands.
@@ -1052,9 +1054,8 @@ class instrumenter ~keeps ~declares ~module_name =
     val mutable logging = false
     val mutable message = false
 
-    (* The opaque modules that are open at the code that the rewriter reads.
-       An operator there is Stdlib's when this is empty and the file keeps
-       the family of the operator. *)
+    (* The opaque modules that are open at the code that the rewriter reads,
+       which [kept] reads for the scope of a family. *)
     val mutable opens : opening list = []
 
     (* Whether the code being rewritten is in a class body with an

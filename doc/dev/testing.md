@@ -86,9 +86,11 @@ what is non-obvious.
   an opened `None`, the right-hand sides of `let rec`, the typing-order
   and expected-type corpora, an operator under an open of another
   module, a file that binds an operator, a GADT operand under
-  `-principal`, the operators of Base under `-open Base` (where Base is
-  installed), and a registration suite that arms each mutant and checks
-  that the library then behaves as the mutant's text says. An
+  `-principal` and of `@` without it, a counter under a local open of
+  each module of the fixed list, the operators and counters of Base
+  under `-open Base` (where Base is installed), and a registration suite
+  that arms each mutant and checks that the library then behaves as the
+  mutant's text says. An
   instrumenter change that cannot keep the semantics suites
   green is rejected, not accommodated; grow the fixtures with every
   expression form the instrumenter learns.
