@@ -930,55 +930,6 @@ let state_first =
         equal int 3 (Subject.widen 1 2));
   ]
 
-(* As [order], but the fast test ends its worker after it evaluates [widen]
-   when it runs first. *)
-let exit_order =
-  [
-    test "sets the state" (fun () ->
-        slow_test ();
-        is_true (Subject.widen 3 4 <> 0);
-        state := true);
-    test "needs the state" (fun () ->
-        is_true (Subject.widen 1 2 <> 99);
-        if not !state then Unix._exit 3);
-  ]
-
-(* The fast test ends its worker under the mutant of [widen]. The order is
-   fast, medium, slow, and the medium test fails when it runs before the slow
-   test. *)
-let end_prefix =
-  [
-    test "z slow sets the state" (fun () ->
-        slow_test ();
-        is_true (Subject.widen 3 4 <> 0);
-        state := true);
-    test "y medium needs the state" (fun () ->
-        Unix.sleepf 0.02;
-        is_true (Subject.widen 1 2 <> 99);
-        if not !state then fail "the state is not set");
-    test "x fast ends" (fun () -> if Subject.widen 2 2 <> 4 then Unix._exit 3);
-  ]
-
-(* The fast test kills the mutant of [widen], and then the release of its
-   fixture ends the worker. The slow test fails when it runs after the fast
-   test. *)
-let ender =
-  fixture
-    ~teardown:(fun () -> if Subject.widen 2 2 <> 4 then Unix._exit 3)
-    Fun.id
-
-let bail_end =
-  [
-    test "b slow refuses the state" (fun () ->
-        slow_test ();
-        is_true (Subject.widen 3 4 <> 0);
-        if !state then fail "the state is set");
-    test "a fast kills" (fun () ->
-        ender ();
-        state := true;
-        equal int 4 (Subject.widen 2 2));
-  ]
-
 (* As [state_first], but the fast test fails before it evaluates [widen] only
    at the runs in MUTATE_FAIL_AT. It counts its runs in the file of
    MUTATE_RUNS, as in [flaky_kill]. *)
@@ -1099,9 +1050,6 @@ let () =
   | "order" -> exit @@ run "calc" [ group "order" order ]
   | "release_order" -> exit @@ run "calc" [ group "order" release_order ]
   | "state_first" -> exit @@ run "calc" [ group "order" state_first ]
-  | "exit_order" -> exit @@ run "calc" [ group "order" exit_order ]
-  | "end_prefix" -> exit @@ run "calc" [ group "order" end_prefix ]
-  | "bail_end" -> exit @@ run "calc" [ group "order" bail_end ]
   | "retry_order" -> exit @@ run "calc" [ group "order" retry_order ]
   | "start_hangs" ->
       (match Sys.getenv_opt "MUTATE_STARTS" with

@@ -535,14 +535,12 @@ let first_failure (ran : Supervisor.ran) =
 type goal =
   | Killing of string list (* a counted failure of this killing test *)
   | Release (* a failure of a fixture release *)
-  | End (* an early end, or a failure *)
 
 (* The failure that [goal] finds in a run of a check, as one line. A run that
    ended before the killing test ended has no row of it, and gives none. A
    run that ended before its releases has no release failure, and gives
-   none for [Release]. [deadline] is the deadline of the run. Under [fast],
-   the text names the fast order. *)
-let check_failure ~fast ~deadline goal (ran : Supervisor.ran) =
+   none for [Release]. Under [fast], the text names the fast order. *)
+let check_failure ~fast goal (ran : Supervisor.ran) =
   let in_order = if fast then " in the fast order" else "" in
   let also (what, failure) =
     strf "%s also fails with no mutant%s: %s" what in_order failure
@@ -561,13 +559,6 @@ let check_failure ~fast ~deadline goal (ran : Supervisor.ran) =
           | Pass | Fail _ | Skip _ -> None)
         ran.results
   | Release -> Option.map also (release_failure ran)
-  | End -> (
-      match end_reason ~deadline ran.ended with
-      | Some reason ->
-          Some
-            (strf "the job also ends with no mutant%s: %s" in_order
-               (Verdicts.reason_text reason))
-      | None -> Option.map also (first_failure ran))
 
 (* The failure of a job that did not evaluate the armed site. *)
 let uncaused (ran : Supervisor.ran) =
@@ -845,8 +836,7 @@ type waiter = {
 }
 
 (* The check of the verdicts whose jobs ran [paths]. For [Killing test], the
-   paths end with [test]. For [Release], they are the whole job. For [End],
-   they end with the test that ran at the end. *)
+   paths end with [test]. For [Release], they are the whole job. *)
 type check = {
   paths : string list list;
   goal : goal;
@@ -860,8 +850,7 @@ type check = {
    fast order, a kill with a killing test waits for the check of its tests,
    which runs in up to [check_runs] passes after the last retry. Under the
    fast order, a kill by a fixture release waits for the check of the whole
-   job, and an early end for the check of the tests up to the end. The loop
-   starts no pass after a signal. [reached] holds a reused verdict in place of
+   job. The loop starts no pass after a signal. [reached] holds a reused verdict in place of
    the job of its mutant, and each job has its tests in the job order. *)
 let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
     ~dry_run ~rank ~pooled ~wall ~save reached =
@@ -988,7 +977,9 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
      ended early gives a line of the survivor's block. The mutant [i] waits
      for another run when it survived and [run] is not its last. Under the
      fast order, a first run with a failure before the site gives no survivor
-     and no [Not_evaluated], because the order can cause that failure. *)
+     and no [Not_evaluated], because the order can cause that failure. For
+     the same cause, an early end gives an [Other] reason, which
+     [--crash-kills] does not count. *)
   let judge ~run i (ran : Supervisor.ran) =
     let paths = paths i in
     let ended_early why =
@@ -1021,12 +1012,15 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
                    (strf "%s fails before the site in the fast order: %s" what
                       failure))
           | None -> verdict)
+      | Verdicts.Unknown ((Deadline _ | Crashed _ | Memory _) as reason)
+        when fast ->
+          Verdicts.Unknown
+            (Other (strf "%s in the fast order" (Verdicts.reason_text reason)))
       | verdict -> verdict
     in
     let matrix = matrix ~full_matrix verdict ran in
-    (* The check runs the tests up to the first killing test, the whole job
-       for a kill by a fixture release, or the tests up to the end. After a
-       kill, the job bails, so the check of an end stops at the killing test. *)
+    (* The check runs the tests up to the first killing test, or the whole job
+       for a kill by a fixture release. *)
     let await goal paths =
       await_check goal paths { i; run; held = verdict; matrix }
     in
@@ -1038,21 +1032,12 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
     | Verdicts.Killed { by = [] }, None when fast ->
         await Release paths;
         `Done
-    | Verdicts.Unknown (Deadline _ | Crashed _ | Memory _), killing when fast ->
-        await End
-          (match killing with
-          | Some test when not full_matrix -> Verdicts.through test paths
-          | Some _ | None ->
-              let ran_to = List.length ran.results in
-              List.filteri (fun k _ -> k <= ran_to) paths);
-        `Done
     | verdict, _ ->
         commit ~failed:(uncaused ran) ~run ?matrix i verdict;
         `Done
   in
   (* A kill in a retry that the check does not trust leaves the survivor of
-     the first run. An early end that the check finds again gives a reason
-     that [--crash-kills] does not count. *)
+     the first run. *)
   let settle check failure =
     List.iter
       (fun { i; run; held; matrix } ->
@@ -1063,8 +1048,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
               (Verdicts.Unknown
                  (match goal with
                  | Killing test -> Flaky_kill { test; failure }
-                 | Release -> Flaky_kill { test = []; failure }
-                 | End -> Other failure))
+                 | Release -> Flaky_kill { test = []; failure }))
         | Some reason, _ ->
             early.(i) <- (run, reason) :: early.(i);
             commit ~failed:None ~run i (Verdicts.survived (paths i)))
@@ -1089,9 +1073,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
         let on_ran j ran =
           given ran;
           let check = due.(j) in
-          (match
-             check_failure ~fast ~deadline:(longest check) check.goal ran
-           with
+          (match check_failure ~fast check.goal ran with
           | Some _ as failure -> settle check failure
           | None when run < check_runs -> clean := check :: !clean
           | None -> settle check None);

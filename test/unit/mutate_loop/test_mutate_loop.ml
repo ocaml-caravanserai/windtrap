@@ -5829,94 +5829,44 @@ let order_fails_before_the_site () =
   contains ~sub:(strf "\n    %s\n" reason) r.out;
   not_contains ~sub:"none failed" r.out
 
-(* [needs the state] ends its worker when it runs before [sets the state]. *)
-let order_ends_the_job () =
-  let r = spawn ~env:[ suite "exit_order" ] [ mutate; "--crash-kills" ] in
-  ended_well r;
-  equal string survived_outcome (outcome r.out);
-  let r = spawn ~env:[ suite "exit_order" ] [ mutate; fast; "--crash-kills" ] in
-  ended_well r;
-  equal string unknown_outcome (outcome r.out);
-  let reason =
-    "the job also ends with no mutant in the fast order: its run exited with \
-     code 3"
-  in
-  equal
-    (option (list string))
-    (intermittent_rows ("unknown: " ^ reason))
-    (rows r);
-  contains ~sub:(strf "\n    %s\n" reason) r.out;
-  not_contains ~sub:"counted as killed" r.out
-
-(* The mutant of [crasher] ends its worker, and the check runs the test three
-   times with no mutant. Under --crash-kills, the end counts as a kill, as
-   without the fast order. *)
-let mutant_ends_the_job () =
+(* The mutant of [crasher] ends its worker. Under the fast order, the end
+   stays unknown with a reason that names the order, and --crash-kills does
+   not count it. No check runs the test again. *)
+let fast_end_is_unknown () =
   let crash_runs args =
     let runs = Filename.concat (temp_dir ()) "runs" in
-    let r = spawn ~env:[ suite "crash"; ("MUTATE_RUNS", runs) ] args in
-    ended_well r;
-    contains
-      ~sub:
-        (strf
-           "  %s  a - b \u{2192} a + b\n\
-           \    its run exited with code 3 (counted as killed)\n"
-           (site 27))
-      r.out;
-    line_count runs
-  in
-  equal int 3 (crash_runs [ mutate; "--crash-kills" ]);
-  equal int 6 (crash_runs [ mutate; fast; "--crash-kills" ])
-
-(* The mutant of [widen] makes the fast test end its worker. The job ends at
-   the fast test, so its check runs only that test, and a later test that
-   fails with no mutant does not change the verdict. *)
-let end_check_runs_the_prefix () =
-  let crash_kill args =
     let r =
-      spawn ~env:[ suite "end_prefix" ] (mutate :: "--crash-kills" :: args)
+      spawn
+        ~env:[ suite "crash"; ("MUTATE_RUNS", runs) ]
+        (mutate :: "--crash-kills" :: args)
     in
     ended_well r;
-    equal string
-      "mutants: 1 reached by this suite, 1 killed (1 by --crash-kills), 3 \
-       never reached, score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
-      (outcome r.out);
-    contains
-      ~sub:
-        (strf
-           "  %s  a + b \u{2192} a - b\n\
-           \    its run exited with code 3 (counted as killed)\n"
-           (site 18))
-      r.out;
-    not_contains ~sub:"also fails with no mutant" r.out
+    (r, line_count runs)
   in
-  crash_kill [];
-  crash_kill [ fast ]
-
-(* The fast test kills the mutant of [widen], and the release of its fixture
-   then ends the worker. The check of the end runs only the fast test, so the
-   slow test, which the job did not run, does not change the verdict. *)
-let end_check_after_a_kill () =
-  let crash_kill args =
-    let r =
-      spawn ~env:[ suite "bail_end" ] (mutate :: "--crash-kills" :: args)
-    in
-    ended_well r;
-    equal string
-      "mutants: 1 reached by this suite, 1 killed (1 by --crash-kills), 3 \
-       never reached, score 100.0% (1/1), reach 25.0% (1/4), total 25.0% (1/4)"
-      (outcome r.out);
-    contains
-      ~sub:
-        (strf
-           "  %s  a + b \u{2192} a - b\n\
-           \    its run exited with code 3 (counted as killed)\n"
-           (site 18))
-      r.out;
-    not_contains ~sub:"also fails with no mutant" r.out
-  in
-  crash_kill [];
-  crash_kill [ fast ]
+  let r, runs = crash_runs [] in
+  contains
+    ~sub:
+      (strf
+         "  %s  a - b \u{2192} a + b\n\
+         \    its run exited with code 3 (counted as killed)\n"
+         (site 27))
+    r.out;
+  equal int 3 runs;
+  let r, runs = crash_runs [ fast ] in
+  equal string
+    "mutants: 1 survived of 3 reached by this suite, 1 killed, 1 unknown, 1 \
+     never reached, score 50.0% (1/2), reach 75.0% (3/4), total 33.3% (1/3)"
+    (outcome r.out);
+  contains
+    ~sub:
+      (strf
+         "  %s  a - b \u{2192} a + b\n\
+         \    its run exited with code 3 in the fast order\n"
+         (site 27))
+    r.out;
+  not_contains ~sub:"counted as killed" r.out;
+  equal (list string) [ "subject.ml:27 other" ] (reason_kinds r);
+  equal int 3 runs
 
 (* A fixture release kills the mutant, and does not fail with no mutant. The
    test runs in the dry run, the probe and the job, and under the fast order
@@ -6040,21 +5990,9 @@ let job_order =
          and a kill in the catalogue order"
         order_fails_before_the_site;
       test
-        "an early end that the fast order causes gives unknown that \
-         --crash-kills does not count, and a survivor in the catalogue order"
-        order_ends_the_job;
-      test
-        "under the fast order, an early end that its check does not find again \
-         keeps its reason"
-        mutant_ends_the_job;
-      test
-        "under the fast order, the check of an early end runs the tests up to \
-         the end"
-        end_check_runs_the_prefix;
-      test
-        "under the fast order, the check of an end after a kill runs the tests \
-         up to the kill"
-        end_check_after_a_kill;
+        "under the fast order, an early end gives unknown that --crash-kills \
+         does not count, and a counted kill in the catalogue order"
+        fast_end_is_unknown;
       test
         "under the fast order, a kill by a fixture release that its check \
          trusts stays"
