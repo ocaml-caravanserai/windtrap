@@ -97,11 +97,13 @@
     module.
 
     [Atomic.incr a] is a site only in a file that declares no module [Atomic]. A
-    longer path, as [Float.Array] or [Stdlib.Atomic], gives no site. A class
-    body with an [inherit] has no counter site, because the parent class can
-    give an instance variable named [incr]. A file declares a module by a module
-    binding, a module declaration, a functor parameter, a [let module] or a
-    pattern of a first-class module.
+    longer path, as [Float.Array] or [Stdlib.Atomic], gives no site. The check
+    reads only the name of the module in each [open]. Thus in
+    [Float.( Array.( incr r ) )], [Array] counts as a module of the list. A
+    class body with an [inherit] has no counter site, because the parent class
+    can give an instance variable named [incr]. A file declares a module by a
+    module binding, a module declaration, a functor parameter, a [let module] or
+    a pattern of a first-class module.
 
     The arm of a counter names the replacement with the path of the source:
     [Atomic.( incr c )] gives [decr c], and [Atomic.incr a] gives
@@ -278,11 +280,12 @@
       [a lor a] under the rule of [con]. [a lxor a] keeps its mutant, because it
       is [0] and [a land a] is [a].
     - [left] skips [a @ l] where [l] is a list literal: [[]], or [h :: t] with
-      the constructor [(::)] and a list literal [t], as [[ x; y ]]. [a @ []] is
-      [a], and in [acc @ [ x ]] [tail] gives the mutant [acc @ []]. Thus
-      [acc @ [ x ]] has no [left] site also where [tail] has no site: at load,
-      in the right-hand side of a [let rec], and in a file that loses [tail].
-      [[] @ b] and [a @ (x :: t)] keep their mutants.
+      the constructor [(::)] and a list literal [t], as [[ x; y ]], with or
+      without a type constraint. [a @ []] is [a], and in [acc @ [ x ]] [tail]
+      gives the mutant [acc @ []]. Thus [acc @ [ x ]] has no [left] site also
+      where [tail] has no site: at load, in the right-hand side of a [let rec],
+      and in a file that loses [tail]. [[] @ b] and [a @ (x :: t)] keep their
+      mutants.
     - [con] skips [a && a] and [a || a] when the two operands are one expression
       and [a] is an identifier, a constructor without an argument, as [true], or
       a field of such an expression, with or without a type constraint. Such an
@@ -359,8 +362,13 @@
       the same way, [@] is right associative: [a @ b @ c] is [a @ (b @ c)] and
       carries two mutants, and [(a @ b) @ c] carries one. An
       {{!section-arid}arid} site ends the chain.
-    - A [pos] site whose operand is a [pos] site of the same operator, as in
-      [-(-x)], carries the only [pos] mutant of the two.
+    - In [-(-x)], the outer [pos] carries the mutant, and the inner one has no
+      site. A type constraint between the two, as in [-((-x) : int)], does not
+      change this.
+    - A unary minus on the right operand of an [ari] site, as in [x - (-y)], has
+      no [pos] site. Its mutant gives [x + y], as [add] does. Where the operator
+      has no site, as the inner [-] of [(a - (-b)) - c], the minus keeps its
+      site.
     - Two sites can start at one byte under two rewrites, as [mod] and [mul] in
       [a / b mod c], [del] and [decr] in the statement [incr r], and [sub] and
       [pos] in [-a + b], which is [(-a) + b].

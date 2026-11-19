@@ -19,5 +19,6 @@
   `acc @ [ x ]`, where `tail` gives `acc @ []`.
 - Under a compiler flag `-open M` where `M` gives `~-`, `~-.`, `@`,
   `incr` or `decr` another type, the instrumented file can fail to
-  compile. A module `Atomic` of the same library has the same effect.
+  compile. A module of the library with a name of the list has the same
+  effect.
   Use `[@mutate off "reason"]` or `[@@@mutate exclude_file]`.

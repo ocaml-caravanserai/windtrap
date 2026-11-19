@@ -522,7 +522,7 @@ before and after, and the reason of a dismissed site.
   let gadt (type a) (w : a witness) (x : a) = incr (match w with | Ref -> x)
 
   $ mut --impl ./fixture_pos.ml | ../elide.exe
-  mutation sites of "./fixture_pos.ml" in Windtrap_mut_________fixture_pos___ml, with type ints:
+  mutation sites of "./fixture_pos.ml" in Windtrap_mut_________fixture_pos___ml, with type ints, type floats:
     0: 5:15-5:17 "pos" "- x" -> "x"
     1: 6:16-6:19 "pos" "-. x" -> "x"
     2: 7:18-7:22 "pos" "- (f x)" -> "f x"
@@ -531,6 +531,12 @@ before and after, and the reason of a dismissed site.
     5: 13:14-13:20 "sub" "(- a) + b" -> "(- a) - b"
     6: 13:14-13:16 "pos" "- a" -> "a"
     7: 29:18-29:22 "pos" "- x" -> "x", dismissed "the sign is not checked"
+    8: 35:16-35:22 "add" "x - (- y)" -> "x + (- y)"
+    9: 36:15-36:31 "sub" "x + (- y : int)" -> "x - (- y : int)"
+    10: 37:17-37:25 "fadd" "x -. (-. y)" -> "x +. (-. y)"
+    11: 38:20-38:33 "pos" "- (- x : int)" -> "(- x : int)"
+    12: 42:20-42:30 "add" "(a - (- b)) - c" -> "(a - (- b)) + c"
+    13: 42:24-42:26 "pos" "- b" -> "b"
   let negate x =
     let __windtrap_mut_0_p : Stdlib.Int.t = x in
     if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 0
@@ -574,6 +580,39 @@ before and after, and the reason of a dismissed site.
   let let_opened x = let open Counters in - x
   let dismissed x = ((- x)[@mutate off "the sign is not checked"])
   let logged x = Logs.debug (fun m -> m "%d" (- x))
+  let minus x y =
+    let (__windtrap_mut_8_l, __windtrap_mut_8_r) =
+      ((x, (- y)) : Windtrap_mut_________fixture_pos___ml.ints) in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 8
+    then __windtrap_mut_8_l + __windtrap_mut_8_r
+    else __windtrap_mut_8_l - __windtrap_mut_8_r
+  let plus x y =
+    let (__windtrap_mut_9_l, __windtrap_mut_9_r) =
+      ((x, (- y : int)) : Windtrap_mut_________fixture_pos___ml.ints) in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 9
+    then __windtrap_mut_9_l - __windtrap_mut_9_r
+    else __windtrap_mut_9_l + __windtrap_mut_9_r
+  let fminus x y =
+    let (__windtrap_mut_10_l, __windtrap_mut_10_r) =
+      ((x, (-. y)) : Windtrap_mut_________fixture_pos___ml.floats) in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 10
+    then __windtrap_mut_10_l +. __windtrap_mut_10_r
+    else __windtrap_mut_10_l -. __windtrap_mut_10_r
+  let constrained x =
+    let __windtrap_mut_11_p : Stdlib.Int.t = (- x : int) in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 11
+    then __windtrap_mut_11_p
+    else - __windtrap_mut_11_p
+  let chained a b c =
+    let (__windtrap_mut_12_l, __windtrap_mut_12_r) =
+      (((a -
+           (let __windtrap_mut_13_p : Stdlib.Int.t = b in
+            if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 13
+            then __windtrap_mut_13_p
+            else - __windtrap_mut_13_p)), c) : Windtrap_mut_________fixture_pos___ml.ints) in
+    if Windtrap_mut_________fixture_pos___ml.___windtrap_armed___ 12
+    then __windtrap_mut_12_l + __windtrap_mut_12_r
+    else __windtrap_mut_12_l - __windtrap_mut_12_r
 
   $ mut --impl ./fixture_left.ml | ../elide.exe
   mutation sites of "./fixture_left.ml" in Windtrap_mut_________fixture_left___ml, with type 'a lists:
@@ -589,6 +628,7 @@ before and after, and the reason of a dismissed site.
     9: 18:17-18:29 "left" "a @ (x :: t)" -> "a"
     10: 18:21-18:29 "tail" "x :: t" -> "t"
     11: 19:14-19:20 "left" "[] @ b" -> "[]"
+    12: 28:31-28:53 "tail" "x :: ([] : int list)" -> "([] : int list)"
   let append a b =
     let (__windtrap_mut_0_l, __windtrap_mut_0_r) =
       ((a, b) : _ Windtrap_mut_________fixture_left___ml.lists) in
@@ -665,6 +705,14 @@ before and after, and the reason of a dismissed site.
   let opened a b = let open List in a @ b
   let qualified a b = Stdlib.(@) a b
   let partial a = List.map ((@) a)
+  let constrained a = a @ ([] : int list)
+  let constrained_tail a x =
+    a @
+      (if
+         Stdlib.not
+           (Windtrap_mut_________fixture_left___ml.___windtrap_armed___ 12)
+       then x :: ([] : int list)
+       else ([] : int list))
 
   $ mut --impl ./fixture_del.ml | ../elide.exe
   mutation sites of "./fixture_del.ml" in Windtrap_mut_________fixture_del___ml:

@@ -1627,7 +1627,10 @@ these names (see
   A statement `incr r` carries `del` and `decr`.
 - `pos` drops a unary minus: `-x` and `-.x` become `x`. A minus on a
   literal, as `-1`, is part of the literal and carries no mutant. In
-  `-(-x)`, the outer minus alone carries a mutant.
+  `-(-x)` and in `-((-x) : int)`, the outer minus alone carries a
+  mutant. A minus on the right operand of `+`, `-`, `+.` or `-.` carries
+  no mutant when that operator carries one: `x - (-y)` carries only
+  `add`, because the two mutants give `x + y`.
 - `left` drops the right operand of `@`: `a @ b` becomes `a`. `b` runs
   also in the mutant. In a chain, as `(a @ b) @ c`, the outermost `@`
   alone is a site. `a @ b @ c` is `a @ (b @ c)`, with two sites.
@@ -1675,7 +1678,8 @@ log message or a failure message alone. These cases are:
   keeps its mutant.
 - `a && a` and `a || a`, when `a` is a name, a constructor without an
   argument or a field.
-- `a @ l` when `l` is a list literal, as `a @ []` or `acc @ [ x ]`.
+- `a @ l` when `l` is a list literal, as `a @ []` or `acc @ [ x ]`,
+  also with a type constraint, as `a @ ([] : int list)`.
   `a @ []` is `a`, and the `tail` mutant of `acc @ [ x ]` is
   `acc @ []`. Thus `acc @ [ x ]` has no `left` mutant also where `tail`
   gives none, as at load. `[] @ b` and `a @ (x :: t)` keep their
@@ -1749,7 +1753,9 @@ the same file by its name, as `open Infix`, also removes them.
 `Int64`, `Nativeint`, `Char`, `String`, `Bytes`, `List`, `Array`,
 `Option`, `Result`, `Bool`, `Fun`, `Seq`, `Hashtbl`, `Printf`,
 `Format`, `Buffer` and `Atomic`. Of these modules, only `Atomic` gives
-`incr` and `decr`. A longer path, as `Float.Array`, removes them. A
+`incr` and `decr`. A longer path, as `Float.Array`, removes them. The
+rewriter reads only the name of the module in each `open`. Thus in
+`Float.( Array.( incr r ) )`, `Array` counts as a module of the list. A
 module of the file with one of these names also removes them, and
 `Atomic.incr a` has no mutant in a file that declares a module
 `Atomic`. A class body with an `inherit` has no `decr` or `incr`
@@ -1764,8 +1770,9 @@ values of one type that is not a list breaks the `left` mutant. Then
 the instrumented file does not compile. The compiler shows the error at
 the expression, and `[@mutate off "reason"]` or
 `[@@@mutate exclude_file]` removes it. The rewriter also does not see
-a module `Atomic` of another file of the library, which `-open` makes
-visible. Then `Atomic.incr a` is not that of Stdlib.
+a module of the library with a name of the list, which `-open` makes
+visible. Then `Int.( incr r )` or `Atomic.incr a` can apply the `incr`
+of that module.
 
 Under `-open Base`, each mutant compiles. Base deprecates `mod`, `incr`
 and `decr`. The original gives the same alert, and the guard takes the

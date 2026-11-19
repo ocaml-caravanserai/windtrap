@@ -28,3 +28,15 @@ let let_opened x =
 (* A dismissal, and an arid site in a log message. *)
 let dismissed x = (-x) [@mutate off "the sign is not checked"]
 let logged x = Logs.debug (fun m -> m "%d" (-x))
+
+(* A minus on the right of [+] or [-] has no site where the operator has
+   one: [x - (-y)] gives only [add]. A chain of [~-] looks through a type
+   constraint. *)
+let minus x y = x - -y
+let plus x y = x + ((-y) : int)
+let fminus x y = x -. -.y
+let constrained x = -((-x) : int)
+
+(* In [(a - (-b)) - c], the inner [-] has no site, so the minus keeps its
+   site. *)
+let chained a b c = a - -b - c

@@ -351,8 +351,15 @@ let unary e =
       Some { fn; path; fname = name; arg }
   | _ -> None
 
-let is_unary name e =
-  match unary e with Some u -> String.equal u.fname name | None -> false
+(* [unary_minus e] is the name of the unary minus that [e] applies, under its
+   type constraints. *)
+let rec unary_minus e =
+  match e.pexp_desc with
+  | Pexp_constraint (e, _) -> unary_minus e
+  | _ -> (
+      match unary e with
+      | Some { fname = ("~-" | "~-.") as name; _ } -> Some name
+      | Some _ | None -> None)
 
 (* [apply ~loc name args] applies the bare operator [name] to [args]. *)
 let apply ~loc name args =
@@ -655,6 +662,7 @@ let neutral app =
   let rec is_list_literal e =
     match (e.pexp_desc, cons e) with
     | Pexp_construct ({ txt = Lident "[]"; _ }, None), _ -> true
+    | Pexp_constraint (e, _), _ -> is_list_literal e
     | _, Some (_, t) -> is_list_literal t
     | _, None -> false
   in
@@ -1240,7 +1248,9 @@ class instrumenter ~keeps ~declares ~module_name =
 
     (* [chained] marks the left operand of a site that applies the same
        operator: a chain of one operator carries one mutant, and reading it
-       from the tree keeps a bracket from changing the count. A dismissal
+       from the tree keeps a bracket from changing the count. It also marks a
+       unary minus on the right of an [ari] site, whose [pos] mutant is the
+       mutant of [ari]. It passes through a type constraint. A dismissal
        leaves [e] as written, and an arid site ends the chain. [branches] is
        for the condition of an [if], as [arid] reads it. [parent] and
        [at_load] hold for the children of [e] while they are rewritten. *)
@@ -1288,7 +1298,12 @@ class instrumenter ~keeps ~declares ~module_name =
             if not chained then
               ignore (self#site e mutant ~dismissed:(Some reason));
             e
-        | None, None -> self#descend e
+        | None, None -> (
+            match e.pexp_desc with
+            | Pexp_constraint (inner, t) when chained ->
+                let inner = self#mutate ~chained Ordinary inner in
+                { e with pexp_desc = Pexp_constraint (inner, self#core_type t) }
+            | _ -> self#descend e)
         | None, Some mutant ->
             let arid = self#arid ~branches mutant in
             let index =
@@ -1330,7 +1345,7 @@ class instrumenter ~keeps ~declares ~module_name =
           | None -> value
           | Some index -> recount ~loc ~module_name ~index value u replacement)
       | Positive u -> (
-          let chained = chain && is_unary u.fname u.arg in
+          let chained = chain && unary_minus u.arg = Some u.fname in
           let arg = self#mutate ~chained Ordinary u.arg in
           match index with
           | None -> { e with pexp_desc = Pexp_apply (u.fn, [ (Nolabel, arg) ]) }
@@ -1343,7 +1358,12 @@ class instrumenter ~keeps ~declares ~module_name =
           in
           let chained = chain && applies app.name app.left in
           let left = self#mutate ~chained context app.left in
-          let right = self#mutate context app.right in
+          let negated =
+            Option.is_some index
+            && family_of app.name = Some Ari
+            && Option.is_some (unary_minus app.right)
+          in
+          let right = self#mutate ~chained:negated context app.right in
           let rebuilt =
             {
               e with
