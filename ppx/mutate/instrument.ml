@@ -185,11 +185,9 @@ let operators =
   ]
 
 let family_of name =
-  match
-    (List.assoc_opt name operators, List.assoc_opt name unary_operators)
-  with
-  | Some (family, _, _), _ | None, Some (family, _) -> Some family
-  | None, None -> None
+  match List.assoc_opt name operators with
+  | Some (family, _, _) -> Some family
+  | None -> Option.map fst (List.assoc_opt name unary_operators)
 
 (* What the file binds and declares, which [kept_families] reads. *)
 type facts = { lost : family list; modules : string list }
@@ -333,22 +331,12 @@ type unary = {
 let unary e =
   match e.pexp_desc with
   | Pexp_apply
-      ( ({ pexp_desc = Pexp_ident { txt = Lident name as path; _ }; _ } as fn),
-        [ (Nolabel, arg) ] ) ->
-      Some { fn; path; fname = name; arg }
-  | Pexp_apply
-      ( ({
-           pexp_desc =
-             Pexp_ident
-               {
-                 txt =
-                   Ldot (Lident "Atomic", (("incr" | "decr") as name)) as path;
-                 _;
-               };
-           _;
-         } as fn),
-        [ (Nolabel, arg) ] ) ->
-      Some { fn; path; fname = name; arg }
+      ( ({ pexp_desc = Pexp_ident { txt = path; _ }; _ } as fn),
+        [ (Nolabel, arg) ] ) -> (
+      match path with
+      | Lident fname | Ldot (Lident "Atomic", (("incr" | "decr") as fname)) ->
+          Some { fn; path; fname; arg }
+      | _ -> None)
   | _ -> None
 
 (* [unary_minus e] is the name of the unary minus that [e] applies, under its
@@ -383,7 +371,7 @@ let render e =
 type guard =
   | Neg
   | Operator of application * operator_guard
-  | Recount of unary * expression (* a counter, by this function *)
+  | Recount of expression (* a counter, by this application *)
   | Positive of unary (* [pos] *)
   | Literal of expression (* [int] and [bool], by this constant *)
   | Nothing (* [none] on [Some e] *)
@@ -419,38 +407,38 @@ let mutant ~keeps ~declares context e =
       let negated = apply ~loc "not" [ { e with pexp_attributes = [] } ] in
       Some { guard = Neg; rewrite = "not"; after = render negated }
   in
-  match (application e, unary e) with
-  | None, None -> neg ()
-  | None, Some u -> (
-      match List.assoc_opt u.fname unary_operators with
-      | Some (Counter, rewrite)
-        when keeps Counter && is_pure u.arg
-             &&
-             match u.path with
-             | Ldot _ -> not (declares "Atomic")
-             | _ -> true ->
-          let txt =
-            match u.path with
-            | Ldot (path, _) -> Ldot (path, rewrite)
-            | _ -> Lident rewrite
-          in
-          let replacement = pexp_ident ~loc { txt; loc } in
-          let after =
-            render (pexp_apply ~loc replacement [ (Nolabel, u.arg) ])
-          in
-          Some { guard = Recount (u, replacement); rewrite; after }
-      | Some (Pos, rewrite) when keeps Pos -> (
-          match u.arg.pexp_desc with
-          | Pexp_constant _ -> neg ()
-          | _ -> Some { guard = Positive u; rewrite; after = render u.arg })
-      | Some _ | None -> neg ())
-  | Some app, _ -> (
+  let unary_mutant u =
+    let in_scope =
+      match u.path with Ldot _ -> not (declares "Atomic") | _ -> true
+    in
+    match List.assoc_opt u.fname unary_operators with
+    | Some (Counter, rewrite) when keeps Counter && is_pure u.arg && in_scope ->
+        let txt =
+          match u.path with
+          | Ldot (path, _) -> Ldot (path, rewrite)
+          | _ -> Lident rewrite
+        in
+        let replaced =
+          pexp_apply ~loc (pexp_ident ~loc { txt; loc }) [ (Nolabel, u.arg) ]
+        in
+        Some { guard = Recount replaced; rewrite; after = render replaced }
+    | Some (Pos, rewrite) when keeps Pos -> (
+        match u.arg.pexp_desc with
+        | Pexp_constant _ -> neg ()
+        | _ -> Some { guard = Positive u; rewrite; after = render u.arg })
+    | Some _ | None -> neg ()
+  in
+  match application e with
+  | None -> ( match unary e with Some u -> unary_mutant u | None -> neg ())
+  | Some app -> (
       match List.assoc_opt app.name operators with
       | Some (family, rewrite, replacement) when keeps family -> (
-          let replaced () =
-            render (apply ~loc replacement [ app.left; app.right ])
+          let after =
+            match family with
+            | Append -> render app.left
+            | _ -> render (apply ~loc replacement [ app.left; app.right ])
           in
-          let mutant ?(after = replaced ()) guard =
+          let mutant guard =
             Some { guard = Operator (app, guard); rewrite; after }
           in
           match family with
@@ -463,7 +451,7 @@ let mutant ~keeps ~declares context e =
               mutant
                 (if app.name = "=" || app.name = "<>" then Negate else Swap)
           | Ari | Mul | Fmul | Bit -> mutant (Replace replacement)
-          | Append -> mutant ~after:(render app.left) Keep_left
+          | Append -> mutant Keep_left
           | Counter | Pos | Ret | Log | Message (* no binary operator *) ->
               neg ())
       | Some _ | None -> neg ())
@@ -554,6 +542,14 @@ let cons e =
       ({ txt = Lident "::"; _ }, Some { pexp_desc = Pexp_tuple [ h; t ]; _ }) ->
       Some (h, t)
   | _ -> None
+
+(* [[]], or [h :: t] with a list literal [t], under any type constraints. *)
+let rec is_list_literal e =
+  match (e.pexp_desc, cons e) with
+  | Pexp_construct ({ txt = Lident "[]"; _ }, None), _ -> true
+  | Pexp_constraint (e, _), _ -> is_list_literal e
+  | _, Some (_, t) -> is_list_literal t
+  | _, None -> false
 
 (* Equivalence *)
 
@@ -659,13 +655,6 @@ let same a b =
    is [a]. [a @ []] is [a], so [left] skips a list literal on the right, as
    in [acc @ [ x ]], where [tail] gives [acc @ []]. *)
 let neutral app =
-  let rec is_list_literal e =
-    match (e.pexp_desc, cons e) with
-    | Pexp_construct ({ txt = Lident "[]"; _ }, None), _ -> true
-    | Pexp_constraint (e, _), _ -> is_list_literal e
-    | _, Some (_, t) -> is_list_literal t
-    | _, None -> false
-  in
   match app.name with
   | "+" | "-" -> is_int 0 app.right
   | "*" | "/" -> is_int 1 app.right || is_int (-1) app.right
@@ -965,10 +954,8 @@ let tail ~loc ~module_name ~index e value t =
    The disarmed arm is the site, with its location and its attributes. The
    application gives [r'] the expected type of [r], so the guard has no
    constraint, which would name [Stdlib.ref] or [Stdlib.Atomic.t]. *)
-let recount ~loc ~module_name ~index e u replacement =
-  let replaced =
-    ghost#expression (pexp_apply ~loc replacement [ (Nolabel, u.arg) ])
-  in
+let recount ~loc ~module_name ~index e replaced =
+  let replaced = ghost#expression replaced in
   {
     ([%expr
        if [%e armed ~loc ~module_name index] then [%e replaced] else [%e e]])
@@ -1339,11 +1326,11 @@ class instrumenter ~keeps ~declares ~module_name =
           match index with
           | None -> value
           | Some index -> negation ~loc ~module_name ~index value)
-      | Recount (u, replacement) -> (
+      | Recount replaced -> (
           let value = self#descend e in
           match index with
           | None -> value
-          | Some index -> recount ~loc ~module_name ~index value u replacement)
+          | Some index -> recount ~loc ~module_name ~index value replaced)
       | Positive u -> (
           let chained = chain && unary_minus u.arg = Some u.fname in
           let arg = self#mutate ~chained Ordinary u.arg in
