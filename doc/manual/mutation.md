@@ -173,9 +173,10 @@ an earlier test in the selection ran the site. An evaluation outside
 every test counts as one before every test. A test whose worker crashed,
 or was killed at its limit, kills the mutant, because its evaluations
 are unknown. Under `-x` the run stops at the first failure that kills
-the mutant. Under `dune runtest`, the mirror arms it in every suite that
-holds its file, as in
-`WINDTRAP_MUTATE_ARM=ID dune runtest --force --instrument-with ppx_windtrap.mutate`
+the mutant. An `--arm` run runs the tests in the catalogue order, also
+for a mutant of a run under `--mutate-order=fast`. Under
+`dune runtest`, the mirror arms it in every suite that holds its file,
+as in `WINDTRAP_MUTATE_ARM=ID dune runtest --force --instrument-with ppx_windtrap.mutate`
 (see [Mutation testing a project](#mutation-testing-a-project) for
 `--force`). Arming a killed mutant shows the failure that killed it:
 
@@ -462,16 +463,20 @@ the withheld-correction warning:
 - The determinism probe runs the suite again and checks that it passes
   again.
 - Each reached mutant runs with its reaching tests, up to the first
-  failure in or after the test that first evaluates its site. Under
-  `--full-matrix`, it runs all its reaching tests (see [Finding the
-  tests that kill each mutant](#finding-the-tests-that-kill-each-mutant)).
+  failure in or after the test that first evaluates its site. The tests
+  run in the catalogue order, or under `--mutate-order=fast` the
+  fastest first (see [Running the fastest test
+  first](#running-the-fastest-test-first)). Under `--full-matrix`, it
+  runs all its reaching tests (see [Finding the tests that kill each
+  mutant](#finding-the-tests-that-kill-each-mutant)).
   One that evaluates its site more than `hits * 8 + 1000` times, `hits`
   being the dry run's count, fails its test, and the mutant is killed.
 - Under `--mutate-retry N`, the job of each survivor runs again, up to
   `N` more times (see
   [Running a survivor again](#running-a-survivor-again)).
-- Under `--mutate-retry N` with `N` above 0, the tests of each kill run
-  again with no mutant, up to 3 times (see [Flaky kills](#flaky-kills)).
+- Under `--mutate-retry N` with `N` above 0, or under
+  `--mutate-order=fast`, the tests of each kill run again with no
+  mutant, up to 3 times (see [Flaky kills](#flaky-kills)).
 
 Every pass runs in worker processes, and the probe and each mutant in a
 worker of its own, started as a run's workers are (see [Running
@@ -482,7 +487,8 @@ the worker's module initialisation is over. They run up to `-j` at once,
 as tests do, and are reported in catalogue order. Unless `--seed` is
 given, a mutation run draws its property cases from one fixed seed,
 `s1:6d7574616e747321`, so a verdict is the same on every run of one
-binary.
+binary. Under `--mutate-order=fast` this is not always true, because
+the order of the tests comes from the times of the dry run.
 
 A mutant whose run ends before its tests do is unknown, and so is no
 survivor. The run ends early when the process crashes or exits, or
@@ -624,12 +630,13 @@ A test that depends on the clock, on threads or on a schedule of
 domains can fail with no mutant. When such a test fails in the run of a
 mutant, it can kill a mutant that the tests do not find.
 
-Under `--mutate-retry N` with `N` above 0, the loop does a check of each
-kill that names a test. The killing test is the first test that fails
-in or after the test that first evaluates the site. The check runs the
-tests of the job that killed the mutant, which are its reaching tests,
-up to and with the killing test. It runs them with no mutant, in a
-fresh worker. A failure of an earlier test does not stop this run. The
+Under `--mutate-retry N` with `N` above 0, or under
+`--mutate-order=fast`, the loop does a check of each kill that names a
+test. The killing test is the first test that fails in or after the
+test that first evaluates the site. The check runs the tests of the job
+that killed the mutant, which are its reaching tests, up to and with the
+killing test, in the order of the job. It runs them with no mutant, in
+a fresh worker. A failure of an earlier test does not stop this run. The
 check does this run up to 3 times:
 
 - If the killing test fails in a run, the check fails and stops.
@@ -638,8 +645,10 @@ check does this run up to 3 times:
 A run that ends before the killing test ends, at its deadline, at its
 memory limit or with its worker, does not give a failure of the test.
 A failure of the test counts also when the run then ends early, for
-example in a fixture release that hangs. A kill that names no test gets
-no check, for example a kill by a fixture release. An `--arm` run does no check.
+example in a fixture release that hangs. A kill that names no test, for
+example a kill by a fixture release, gets no check, except under
+`--mutate-order=fast` (see [Running the fastest test
+first](#running-the-fastest-test-first)). An `--arm` run does no check.
 
 When the check of a kill in the first run fails, the mutant is unknown.
 The report lists it under `unknown`, with the killing test, its failure
@@ -681,8 +690,9 @@ the two jobs had different tests after the killing test. Under
 
 Each run of the check has the longest deadline of the jobs that wait for
 it. Thus a killing test that fails at its own timeout also fails in the
-check. Each different list of tests costs up to 3 more runs. The live
-line shows a run of a check with the first mutant that waits for it.
+check. Each different list of tests costs up to 3 more runs. Under
+`--mutate-order=fast`, the order of the list is part of the list. The
+live line shows a run of a check with the first mutant that waits for it.
 
 Three runs with no failure do not prove that a test is not flaky. For
 example, a test that fails in 1 run of 10 passes 3 runs in about 73 of
@@ -696,6 +706,59 @@ verdict file. The signal can come during a pass of checks or between
 two passes. If the first mutant with no verdict then waits for its
 check, the message names that mutant, as in
 `interrupted while the kill of calc.ml:13:9:sub waits for its check`.
+
+## Running the fastest test first
+
+The job of a mutant runs its reaching tests in the catalogue order, and
+stops at the first kill. `--mutate-order=fast` (mirror
+`WINDTRAP_MUTATE_ORDER`) runs them by their time in the dry run, the
+fastest first. Thus a kill comes earlier, and a killed mutant costs less
+time. The value is `catalogue` (the default) or `fast`, in any case.
+
+```
+$ WINDTRAP_MUTATE=1 WINDTRAP_MUTATE_ORDER=fast dune runtest --force --instrument-with ppx_windtrap.mutate
+```
+
+The order uses the time of each test in whole milliseconds, truncated.
+Thus a change of some microseconds between two runs does not change the
+order. Two tests with the same time keep the catalogue order. A test
+with no time in the dry run comes after all the others. A reaching test
+always has a time, so this rule does not usually apply. The dry run and
+the determinism probe keep the catalogue order. Under `-j` above 1, the
+dry run measures the times on a loaded machine.
+
+The default stays `catalogue`, because a test can depend on the state
+that an earlier test leaves. A new order can make such a test fail when
+no mutant causes the failure. Thus under `--mutate-order=fast`, the run
+does the check of each kill, also at `--mutate-retry=0` (see [Flaky
+kills](#flaky-kills)). The check runs the tests of the job in the order
+of the job, up to the killing test. A kill by a fixture release also
+gets a check under this flag. That check runs all the tests of the job,
+and it fails when a fixture release fails. When a check fails, the
+reason tells the order:
+
+```
+its killing test calc › needs the state also fails with no mutant in the fast order: the state is not set
+```
+
+A worker keeps a fixture until it ends. Thus the first test of the job
+that uses a fixture pays its setup, and no fixture is set up two times,
+unless the worker retires (a test that spawned, a timeout, or a kill
+under `--full-matrix`). In the dry run, the first such test in the
+catalogue order paid the setup. Thus the time of a test in the dry run
+can include a setup that it does not pay in a job.
+
+The `reproduce:` and `arm:` commands run the suite in the catalogue
+order, because an `--arm` run takes no order. Thus the `arm:` command of
+a kill that the check does not trust under `--mutate-order=fast` can
+pass.
+
+Under `--sample`, the order acts only on the jobs of the mutants of the
+sample. Under `--skip-killed`, the order acts only on the mutants that
+the run does not skip. An invalid value is a usage error, from the flag
+and from the mirror. If neither the command line nor a mirror gives
+`--mutate`, the flag on the command line is a usage error. The mirror
+alone has no effect on a suite that does not mutate.
 
 ## Stateful tests on several domains
 
@@ -978,12 +1041,12 @@ the same source file, with the same digest. The mutant has the same
 renderings and extent. The run that tested the mutant and this run must
 have the same seed, `--prop-count`, `--replay`, `--case` and
 `--timeout`. They must also have the same `--mutate-memory`,
-`--mutate-workers` and windtrap version. Then the rule of the last
-verdict applies:
+`--mutate-workers`, `--mutate-order` and windtrap version. Then the
+rule of the last verdict applies:
 
 | Last verdict | The run uses it again when |
 | --- | --- |
-| Killed | The kill names its killing test. In this dry run, that test reaches the mutant. The tests before it in the job of this run are the tests before it in the job of the run that tested the mutant, in the same order. The source files of these tests did not change. Under `--mutate-retry N` with `N` above 0, the run that tested the mutant also had `N` above 0. Only such a run does the check of the kill. A kill in the `k`-th retry is used again only when `N` is `k` or more. |
+| Killed | The kill names its killing test. In this dry run, that test reaches the mutant. The tests before it in the job of this run are the tests before it in the job of the run that tested the mutant, in the same order. The source files of these tests did not change. Under `--mutate-retry N` with `N` above 0, the run that tested the mutant also had `N` above 0. Only such a run, or a run under `--mutate-order=fast`, does the check of the kill. A kill in the `k`-th retry is used again only when `N` is `k` or more. |
 | Survived | In this dry run, the same tests reach the mutant. The source files of these tests did not change. The `N` of `--mutate-retry` is not more than the `N` of the run that tested the mutant. |
 | Not evaluated, unknown, killed elsewhere | Never. |
 
@@ -1002,6 +1065,14 @@ A kill by a fixture release or by an `at_exit` function names no test.
 Thus the run never uses it again. The order of the reaching tests comes
 from the dry run. Under `-j` above 1, this order can change from one run
 to the next, and then the run uses a kill again less frequently.
+
+The run uses no verdict of a `--mutate-order=fast` run again in a
+`catalogue` run, and the reverse. Under `--mutate-order=fast`, the order
+of a job comes from the times of the dry run. When the times change the
+order, the tests before the killing test change, and the run does not
+use the kill again. But the run uses a survivor again, because the rule
+of a survivor compares the reaching tests as a set. Thus a survivor of
+the old order can stay, when the new order makes a test fail.
 
 The source file of a test is the file of its location, which the report
 shows after the test, as in `test_calc.ml:31`. The run reads this file on
@@ -1095,7 +1166,9 @@ A mutation run compares the verdict of each mutant with the verdict of
 the last run of the same suite. When the verdict changed, the report
 lists the mutant in the `unstable` section. A change to a test can
 cause this. A test whose result depends on the clock, on the order of
-domains or on the tests before it can cause it too:
+domains or on the tests before it can cause it too. Under
+`--mutate-order=fast`, a change of the times of the dry run can change
+the order of a job, and thus a verdict:
 
 ```
 ────────────────────── unstable (2) ──────────────────────
@@ -1484,11 +1557,20 @@ deadline, or its worker ends, the mutant is unknown.
 
 The verdict file records the flag of the run for each verdict. For each
 kill, it also records the tests that ran in its job, and if the job ran
-each of them. Under `--mutate-retry N` with `N` above 0, the check of a
-kill runs only up to the first killing test, as without the flag (see
-[Flaky kills](#flaky-kills)). When the check trusts the kill, the kill
-keeps each killing test. Thus `killed_by` can hold a later test that
-also fails with no mutant.
+each of them. Under `--mutate-retry N` with `N` above 0, or under
+`--mutate-order=fast`, the check of a kill runs only up to the first
+killing test in the order of the job, as without the flag (see [Flaky
+kills](#flaky-kills)). When the check trusts the kill, the kill keeps
+each killing test. Thus `killed_by` can hold a later test that also
+fails with no mutant.
+
+Under `--mutate-order=fast`, the job runs all its reaching tests in the
+fast order. The record keeps the tests that ran sorted, and not in the
+order of the job. Only the first killing test in the job order has a
+check, and `by` does not show which test that is. A test that fails
+only after an earlier test in the fast order can be a later killing
+test. Thus `windtrap mutants --tests` can count a kill that the order
+caused.
 
 `--full-matrix` with `--skip-killed` is a usage error, from the command
 line and from the mirrors, also without `--mutate`. A skipped mutant
