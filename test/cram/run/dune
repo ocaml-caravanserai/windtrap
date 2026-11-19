@@ -158,3 +158,18 @@
  (enabled_if
   (<> %{os_type} Win32))
  (deps division_main.exe))
+
+; order.t runs the mutation loop over suites in which the order of the
+; tests of a job changes the verdict, and merges its verdict file.
+
+(executable
+ (name order_main)
+ (modules order_main)
+ (libraries windtrap mutant_subject unix))
+
+(cram
+ (package ppx_windtrap)
+ (applies_to order)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps order_main.exe %{bin:windtrap}))

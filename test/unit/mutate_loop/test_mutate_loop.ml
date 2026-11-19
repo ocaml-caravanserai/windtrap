@@ -5687,6 +5687,332 @@ let full_matrix =
         full_reuse_compares_each_test;
     ]
 
+(* Job order *)
+
+let fast = "--mutate-order=fast"
+let slow_sub = [ "speed"; "slow sub" ]
+let fast_sub = [ "speed"; "fast sub" ]
+
+let speed_rows verdict =
+  Some
+    [
+      "subject.ml:15 " ^ verdict;
+      "subject.ml:18 unreached";
+      "subject.ml:21 unreached";
+      "subject.ml:27 unreached";
+    ]
+
+let killed_by tests =
+  Some
+    [
+      "subject.ml:15 killed by " ^ String.concat "; " (List.map path_row tests);
+    ]
+
+(* A run of [speed], and the runs of its fast test and of its slow test in
+   workers: the dry run, the probe, and then the job and the check. *)
+let speed_run ?(env = []) args =
+  let dir = temp_dir () in
+  let fast_file = Filename.concat dir "fast-runs"
+  and slow_file = Filename.concat dir "slow-runs" in
+  let r =
+    spawn
+      ~env:
+        ([
+           suite "speed";
+           ("MUTATE_RUNS", fast_file);
+           ("MUTATE_FIRST_RUNS", slow_file);
+         ]
+        @ env)
+      (mutate :: args)
+  in
+  ended_well r;
+  equal string killed_outcome (outcome r.out);
+  equal (option (list string)) (speed_rows "killed") (rows r);
+  (r, line_count fast_file, line_count slow_file)
+
+let fastest_kills () =
+  let r, _, _ = speed_run [] in
+  equal (option (list string)) (killed_by [ slow_sub ]) (kills r);
+  let r, _, _ = speed_run [ fast ] in
+  equal (option (list string)) (killed_by [ fast_sub ]) (kills r);
+  let r, _, _ = speed_run ~env:[ ("WINDTRAP_MUTATE_ORDER", "fast") ] [] in
+  equal (option (list string)) (killed_by [ fast_sub ]) (kills r)
+
+(* The job runs the fast test once, and the check three times. *)
+let fast_check_with_no_retry () =
+  let _, fast_runs, slow_runs = speed_run [ fast ] in
+  equal (pair int int) (6, 2) (fast_runs, slow_runs);
+  let _, fast_runs, slow_runs = speed_run [ "--mutate-retry=0" ] in
+  equal (pair int int) (2, 3) (fast_runs, slow_runs)
+
+let order_reason test failure =
+  strf "its killing test %s also fails with no mutant in the fast order: %s"
+    test failure
+
+(* [needs the state] fails when it runs before [sets the state]. *)
+let order_causes_the_failure () =
+  let r = spawn ~env:[ suite "order" ] [ mutate ] in
+  ended_well r;
+  equal string survived_outcome (outcome r.out);
+  equal
+    (option (list string))
+    (intermittent_rows
+       "survived by order \u{203a} needs the state, order \u{203a} sets the \
+        state")
+    (rows r);
+  let r = spawn ~env:[ suite "order" ] [ mutate; fast ] in
+  ended_well r;
+  equal string unknown_outcome (outcome r.out);
+  let reason =
+    order_reason "order \u{203a} needs the state" "the state is not set"
+  in
+  equal
+    (option (list string))
+    (intermittent_rows ("unknown: " ^ reason))
+    (rows r);
+  contains ~sub:(strf "\n    %s\n" reason) r.out
+
+(* The release of the fixture of the fast test fails when the fast test runs
+   first, and the check of the whole job finds it again. *)
+let order_causes_a_release_failure () =
+  let r = spawn ~env:[ suite "release_order" ] [ mutate ] in
+  ended_well r;
+  equal string survived_outcome (outcome r.out);
+  equal
+    (option (list string))
+    (intermittent_rows
+       "survived by order \u{203a} needs the state at its release, order \
+        \u{203a} sets the state")
+    (rows r);
+  let r = spawn ~env:[ suite "release_order" ] [ mutate; fast ] in
+  ended_well r;
+  equal string unknown_outcome (outcome r.out);
+  (* The headline names the line of the fixture, and the report cuts it. *)
+  let prefix =
+    "subject.ml:18 unknown: a fixture release also fails with no mutant in the \
+     fast order: fixture (test/unit/mutate_loop/suite_main.ml:"
+  in
+  match rows r with
+  | Some [ unreached_15; row; unreached_21; unreached_27 ] ->
+      equal (list string)
+        [
+          "subject.ml:15 unreached";
+          "subject.ml:21 unreached";
+          "subject.ml:27 unreached";
+        ]
+        [ unreached_15; unreached_21; unreached_27 ];
+      is_true (String.starts_with ~prefix row);
+      contains ~sub:"): release raised Failure" row;
+      equal (list string) [ "subject.ml:18 flaky_kill" ] (reason_kinds r)
+  | rows ->
+      failf "rows: %s"
+        (Option.fold ~none:"none" ~some:(String.concat " | ") rows)
+
+(* [needs the state] fails before it evaluates [widen] when it runs before
+   [sets the state], and pins [widen] after it. *)
+let order_fails_before_the_site () =
+  let r = spawn ~env:[ suite "state_first" ] [ mutate ] in
+  ended_well r;
+  equal string killed_outcome (outcome r.out);
+  equal (option (list string)) (intermittent_rows "killed") (rows r);
+  let r = spawn ~env:[ suite "state_first" ] [ mutate; fast ] in
+  ended_well r;
+  equal string unknown_outcome (outcome r.out);
+  let reason =
+    "test order \u{203a} needs the state fails before the site in the fast \
+     order: the state is not set"
+  in
+  equal
+    (option (list string))
+    (intermittent_rows ("unknown: " ^ reason))
+    (rows r);
+  contains ~sub:(strf "\n    %s\n" reason) r.out;
+  not_contains ~sub:"none failed" r.out
+
+(* The mutant of [crasher] ends its worker. Under the fast order, the end
+   stays unknown with a reason that names the order, and --crash-kills does
+   not count it. No check runs the test again. *)
+let fast_end_is_unknown () =
+  let crash_runs args =
+    let runs = Filename.concat (temp_dir ()) "runs" in
+    let r =
+      spawn
+        ~env:[ suite "crash"; ("MUTATE_RUNS", runs) ]
+        (mutate :: "--crash-kills" :: args)
+    in
+    ended_well r;
+    (r, line_count runs)
+  in
+  let r, runs = crash_runs [] in
+  contains
+    ~sub:
+      (strf
+         "  %s  a - b \u{2192} a + b\n\
+         \    its run exited with code 3 (counted as killed)\n"
+         (site 27))
+    r.out;
+  equal int 3 runs;
+  let r, runs = crash_runs [ fast ] in
+  equal string
+    "mutants: 1 survived of 3 reached by this suite, 1 killed, 1 unknown, 1 \
+     never reached, score 50.0% (1/2), reach 75.0% (3/4), total 33.3% (1/3)"
+    (outcome r.out);
+  contains
+    ~sub:
+      (strf
+         "  %s  a - b \u{2192} a + b\n\
+         \    its run exited with code 3 in the fast order\n"
+         (site 27))
+    r.out;
+  not_contains ~sub:"counted as killed" r.out;
+  equal (list string) [ "subject.ml:27 other" ] (reason_kinds r);
+  equal int 3 runs
+
+(* A fixture release kills the mutant, and does not fail with no mutant. The
+   test runs in the dry run, the probe and the job, and under the fast order
+   also in the three runs of the check. *)
+let release_kill_checked () =
+  let release_runs args =
+    let runs = Filename.concat (temp_dir ()) "runs" in
+    let r =
+      spawn ~env:[ suite "release"; measured (); ("MUTATE_RUNS", runs) ] args
+    in
+    ended_well r;
+    equal string killed_outcome (outcome r.out);
+    line_count runs
+  in
+  equal int 3 (release_runs [ mutate ]);
+  equal int 6 (release_runs [ mutate; fast ])
+
+(* Run 3 survives, run 4 is the retry and kills, and run 5 is the first check
+   run. The fast order can change the order of the two tests, and these
+   assertions hold for the two orders. *)
+let fast_kill_in_a_retry () =
+  let k = kill_run ~env:[ fail_at "4,5" ] [ fast; retry_once ] in
+  ended_well k.r;
+  equal string survived_outcome (outcome k.r.out);
+  equal int 5 k.b_runs;
+  equal (option (list string)) kill_survived_rows (rows k.r);
+  is_true (String.ends_with ~suffix:"  (2 runs)" (title_of 18 k.r.out));
+  equal (list string)
+    [ "run 2: " ^ order_reason b "run 5" ]
+    (early_runs k.r.out)
+
+(* The fast test fails before the site at the given run. Run 3 is the job, and
+   run 4 the retry. A failure before the site gives unknown only in the first
+   run. *)
+let fast_failure_before_the_site_in_a_retry () =
+  let retry_run fail_at =
+    let runs = Filename.concat (temp_dir ()) "runs" in
+    let r =
+      spawn
+        ~env:
+          [
+            suite "retry_order";
+            ("MUTATE_RUNS", runs);
+            ("MUTATE_FAIL_AT", fail_at);
+          ]
+        [ mutate; fast; retry_once ]
+    in
+    ended_well r;
+    r
+  in
+  let r = retry_run "3" in
+  equal string unknown_outcome (outcome r.out);
+  contains
+    ~sub:
+      "test order \u{203a} fast fails at the given runs fails before the site \
+       in the fast order: run 3"
+    r.out;
+  let r = retry_run "4" in
+  equal string survived_outcome (outcome r.out);
+  not_contains ~sub:"fails before the site" r.out
+
+(* The two tests kill the mutant. The check runs the fast test alone. *)
+let fast_full_matrix () =
+  let r, fast_runs, slow_runs = speed_run [ fast; full ] in
+  equal (option (list string)) (killed_by [ fast_sub; slow_sub ]) (kills r);
+  equal (list string)
+    [
+      "subject.ml:15 ran "
+      ^ String.concat "; " (List.map path_row [ fast_sub; slow_sub ]);
+    ]
+    (matrices r);
+  equal (pair int int) (6, 3) (fast_runs, slow_runs)
+
+let speed_marks m15 =
+  Some
+    [
+      "subject.ml:15 " ^ m15;
+      "subject.ml:18 fresh";
+      "subject.ml:21 fresh";
+      "subject.ml:27 fresh";
+    ]
+
+(* A verdict of one order is not reused under the other order. *)
+let order_reuse () =
+  ignore (first_run ());
+  let r = second_run ~args:[ fast ] () in
+  as_green 0 r;
+  equal (option (list string)) fresh (marks r);
+  let env = [ suite "speed" ] in
+  remove (verdicts_path ());
+  let r = rerun ~env [ mutate; fast ] in
+  ended_well r;
+  equal (option (list string)) (killed_by [ fast_sub ]) (kills r);
+  let r = rerun ~env [ mutate; incremental; fast ] in
+  ended_well r;
+  equal (option string) (Some (reused_line 1)) (reused_of r.out);
+  equal (option (list string)) (speed_marks "reused") (marks r);
+  equal (option (list string)) (killed_by [ fast_sub ]) (kills r);
+  let r = rerun ~env [ mutate; incremental ] in
+  ended_well r;
+  equal (option string) (Some (reused_line 0)) (reused_of r.out);
+  equal (option (list string)) (speed_marks "fresh") (marks r);
+  equal (option (list string)) (killed_by [ slow_sub ]) (kills r)
+
+let job_order =
+  group "Job order"
+    [
+      test "under the fast order, the fastest killing test kills" fastest_kills;
+      test "under the fast order, a kill gets its check also with no retry"
+        fast_check_with_no_retry;
+      test
+        "a failure that the fast order causes gives unknown, and a survivor in \
+         the catalogue order"
+        order_causes_the_failure;
+      test
+        "a release failure that the fast order causes gives unknown, and a \
+         survivor in the catalogue order"
+        order_causes_a_release_failure;
+      test
+        "a failure before the site that the fast order causes gives unknown, \
+         and a kill in the catalogue order"
+        order_fails_before_the_site;
+      test
+        "under the fast order, an early end gives unknown that --crash-kills \
+         does not count, and a counted kill in the catalogue order"
+        fast_end_is_unknown;
+      test
+        "under the fast order, a kill by a fixture release that its check \
+         trusts stays"
+        release_kill_checked;
+      test
+        "under the fast order, a kill in a retry that its check does not trust \
+         leaves the survivor"
+        fast_kill_in_a_retry;
+      test
+        "under the fast order, a failure before the site in a retry gives no \
+         unknown"
+        fast_failure_before_the_site_in_a_retry;
+      test
+        "under the fast order and --full-matrix, the check runs up to the \
+         first killing test in the job order"
+        fast_full_matrix;
+      test "--incremental reuses a verdict only from a run with the same order"
+        order_reuse;
+    ]
+
 (* The rewrite filter *)
 
 (* A rewrite names what the site becomes: [add] gives the mutants of lines 15
@@ -6132,6 +6458,7 @@ let changed_settings =
     ("--timeout", fun c -> { c with timeout = Some 1. });
     ("the default timeout", fun c -> { c with default_timeout = 1. });
     ("--mutate-memory", fun c -> { c with mutate_memory = 1 });
+    ("--mutate-order", fun c -> { c with mutate_order = Run.Fast });
   ]
 
 let settings_shape () =
@@ -6146,6 +6473,56 @@ let settings_shape () =
 let settings_input (_, change) =
   let c = config () in
   is_true (Loop.settings c <> Loop.settings (change c))
+
+(* Each test has its time in milliseconds and its index in the catalogue. *)
+let timed tests path =
+  Option.map
+    (fun (ms, index) -> (ms /. 1000., index))
+    (List.assoc_opt path tests)
+
+let t name = [ "g"; name ]
+
+let job_orders =
+  [
+    ("the empty list", Run.Fast, [], [], []);
+    ( "the catalogue order keeps the input",
+      Run.Catalogue,
+      [ ("a", (3.4, 0)); ("b", (2.1, 1)); ("c", (0., 2)) ],
+      [ "c"; "a"; "b" ],
+      [ "c"; "a"; "b" ] );
+    ( "the fast order puts 2.1 ms before 3.4 ms",
+      Run.Fast,
+      [ ("a", (3.4, 0)); ("b", (2.1, 1)) ],
+      [ "a"; "b" ],
+      [ "b"; "a" ] );
+    ( "2.9 ms and 2.1 ms are a tie, which the index breaks",
+      Run.Fast,
+      [ ("a", (2.9, 0)); ("b", (2.1, 1)) ],
+      [ "b"; "a" ],
+      [ "a"; "b" ] );
+    ( "3.0 ms comes after 2.9 ms",
+      Run.Fast,
+      [ ("a", (3.0, 0)); ("b", (2.9, 1)) ],
+      [ "a"; "b" ],
+      [ "b"; "a" ] );
+    ( "a tie of four tests keeps the catalogue order",
+      Run.Fast,
+      [ ("a", (1.0, 0)); ("b", (1.9, 1)); ("c", (1.5, 2)); ("d", (1.2, 3)) ],
+      [ "c"; "a"; "d"; "b" ],
+      [ "a"; "b"; "c"; "d" ] );
+    ( "a test with no time comes last, in the order of the input",
+      Run.Fast,
+      [ ("a", (5., 1)); ("b", (1., 0)) ],
+      [ "y"; "a"; "x"; "b" ],
+      [ "b"; "a"; "y"; "x" ] );
+  ]
+
+let job_order_case (_, order, tests, input, expected) =
+  let rank path = timed (List.map (fun (n, v) -> (t n, v)) tests) path in
+  equal
+    (list (list string))
+    (List.map t expected)
+    (Loop.job_order order ~rank (List.map t input))
 
 let file_digest path = Digest.to_hex (Digest.file path)
 
@@ -6178,6 +6555,9 @@ let evidence =
         settings_shape;
       cases "settings changes with each of its inputs" ~id:fst changed_settings
         settings_input;
+      cases "job_order"
+        ~id:(fun (name, _, _, _, _) -> name)
+        job_orders job_order_case;
       test
         "test_digest is the MD5 of a regular file, and None for a missing \
          file, a directory or a FIFO"
@@ -6226,6 +6606,7 @@ let () =
          killing_tests;
          incremental_reuse;
          full_matrix;
+         job_order;
          rewrite_filter;
          sampling;
          evidence;

@@ -454,7 +454,7 @@ The points, in the order of a run:
 | `pass-P:K/T` | After the `K`-th of the `T` mutant jobs of pass `P`, when `K` is a multiple of `N` and `K < T`. |
 | `pass-P` | When pass `P` ends. Pass 1 is the probe and one job for each reached mutant that the loop does not skip (`--skip-killed`). Passes 2 and more are the retries. |
 | `check-C:K/T` | After the `K`-th of the `T` jobs of check pass `C`, with the same rule. |
-| `check-C` | When check pass `C` ends (up to 3 passes, under `--mutate-retry`). |
+| `check-C` | When check pass `C` ends (up to 3 passes, under `--mutate-retry` or `--mutate-order=fast`). |
 | `report` | Before the loop prints its report, so the outcome line stays the last line. |
 
 A probe that refuses gives `probe` and no `pass-1`. A loop that a signal

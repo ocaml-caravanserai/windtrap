@@ -86,6 +86,13 @@ type mutation =
           identifier is kept as typed, and its grammar is that of
           [Windtrap_runtime.Mutate.id_of_string]. *)
 
+(** The type for the order of the reaching tests in the job of a mutant. *)
+type mutate_order =
+  | Catalogue  (** The order of the catalogue. *)
+  | Fast
+      (** The time of each test in the dry run, the fastest first (see
+          [Mutate_loop.job_order]). *)
+
 type broadcast = {
   selection : bool;
       (** A mirror gave a filter, an exclusion, a tag or a shard, and the
@@ -189,6 +196,12 @@ type config = {
       (** [--mutate-retry]: under {!Loop}, the job of a mutant that survived
           runs again, each time in a fresh worker, up to this many more times.
           [0] runs each job once. *)
+  mutate_order : mutate_order;
+      (** [--mutate-order]: under {!Loop}, the order of the reaching tests in
+          the job of each mutant. Under {!Fast}, the loop does the check of each
+          kill, also of a kill by a fixture release and when [mutate_retry] is
+          [0]. An early end gets no check, and [crash_kills] does not count it
+          (see [Mutate_loop]). *)
   mutate_memory : int;
       (** [--mutate-memory]: under {!Loop}, the limit of the resident memory of
           each worker of a mutant, in MB, from 1 to 1048576. On Linux, the loop
@@ -197,7 +210,8 @@ type config = {
   crash_kills : bool;
       (** [--crash-kills]: under {!Loop}, the report counts a mutant whose run
           passed its deadline, crashed or passed its memory limit as killed
-          ({!Report_sections.val-counted_as_killed}). The verdict file does not
+          ({!Report_sections.val-counted_as_killed}). Under {!Fast}, such a run
+          has another reason, and does not count. The verdict file does not
           change. *)
   incremental : bool;
       (** [--incremental]: under {!Loop}, a reached mutant whose evidence did
@@ -229,7 +243,7 @@ val default_config : unit -> config
     selection, every boolean [false], no replay and no case file,
     {!Baseline.Check}, no [timeout], a [default_timeout] of [600.] seconds, ten
     minutes, no count, [color = Os.Auto], [slow_threshold = 1.], {!No_mutation},
-    [`Mirrors] and nothing broadcast. Every call draws [seed] from
+    {!Catalogue}, [`Mirrors] and nothing broadcast. Every call draws [seed] from
     {!Seed.random} and takes [log_dir] from {!Os.default_log_dir}. *)
 
 (** {1:runs Run records} *)

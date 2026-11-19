@@ -430,7 +430,11 @@ a lossy `%g` spelling is asked for at the call site.
   and a kill keeps the digest of the tests of its job up to the killing
   test. A test before the killing test can leave a state that is
   necessary for the kill. No record names that test, so `--incremental`
-  compares the whole prefix of the job.
+  compares the whole prefix of the job. The prefix is in the order of
+  the job, so the verdict file has no field for the order of
+  `--mutate-order`.
+  `Mutate_loop.settings` holds the fast order, so no verdict is
+  reused across orders.
 - The sample of a run (`--sample`) is a field of the file, and a
   reached mutant out of the sample has a `Not_sampled` record. The merge
   gives an interval only when the files of the tested suites have one

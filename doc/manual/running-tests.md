@@ -458,6 +458,11 @@ OPTIONS:
       is above 0, also check each kill with no mutant (with --mutate, default
       0).
 
+  --mutate-order=ORDER (env WINDTRAP_MUTATE_ORDER)
+      Run the reaching tests of each mutant in ORDER: catalogue, or fast for the
+      fastest first by their time in the dry run, which also checks each kill
+      with no mutant (with --mutate, default catalogue).
+
   --mutate-memory=MB (env WINDTRAP_MUTATE_MEMORY)
       Kill the worker of a mutant whose resident memory is above MB megabytes,
       and give the mutant as unknown (with --mutate, Linux only, default 1024).

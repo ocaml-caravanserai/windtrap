@@ -512,6 +512,20 @@ above 0, the run also runs the tests of each kill again with no mutant,
 up to 3 times. A kill whose test also fails there is unknown, with the
 reason, and a kill in a retry then leaves the survivor.
 
+`--mutate-order=fast` (`WINDTRAP_MUTATE_ORDER=fast`) runs the reaching
+tests of each mutant by their time in the dry run, the fastest first,
+so a kill comes earlier. The default is `catalogue`, because a test can
+depend on the state that an earlier test leaves. The flag without
+`--mutate` is a usage error. Under `--incremental`, the run reuses no
+verdict of a run with the other order.
+
+Under `fast`, the run does the check of each kill also at
+`--mutate-retry=0`, with the tests of the job in the same order. A kill
+by a fixture release also gets a check. A kill that only the order
+causes is then unknown, with the reason. A failure before the site that
+only the order causes is also unknown. An early end is unknown, and
+`--crash-kills` does not count it.
+
 `--mutate-memory MB` (`WINDTRAP_MUTATE_MEMORY=MB`, default 1024) is the
 memory limit of each worker of a mutant, on Linux. A mutant can make
 its test take memory with no limit. The loop then kills its worker,
@@ -519,7 +533,8 @@ and the mutant is unknown. Raise the limit if the probe passes it.
 
 `--crash-kills` (`WINDTRAP_CRASH_KILLS=1`) counts an unknown mutant as
 killed when its run passed its deadline, crashed or passed its memory
-limit. Give it with `--mutate`.
+limit. Give it with `--mutate`. Under `--mutate-order=fast`, it does
+not count an early end.
 
 A run and `windtrap mutants` list under `unstable` each mutant whose
 verdict changed since the last run of its suite, on the same source. A

@@ -20,6 +20,7 @@ module Lines = Windtrap.Private.Lines
 let strf = Printf.sprintf
 let words items = "[" ^ String.concat "; " items ^ "]"
 let joined = function [] -> "no argument" | args -> String.concat " " args
+let order_name = function Run.Catalogue -> "catalogue" | Run.Fast -> "fast"
 
 let color_name = function
   | Os.Always -> "always"
@@ -94,6 +95,7 @@ let flags (p : Cli.parsed) =
         opt "sample" (strf "%g") p.sample;
         bool "mutate_workers" c.mutate_workers;
         some "--mutate-retry" "mutate_retry" string_of_int c.mutate_retry;
+        some "--mutate-order" "mutate_order" order_name c.mutate_order;
         some "--mutate-memory" "mutate_memory" string_of_int c.mutate_memory;
         bool "crash_kills" c.crash_kills;
         bool "incremental" c.incremental;
@@ -176,6 +178,7 @@ let changes (c : Run.config) =
         field "mutation" mutation_name (fun c -> c.Run.mutation);
         field "mutate_workers" bool (fun c -> c.Run.mutate_workers);
         field "mutate_retry" string_of_int (fun c -> c.Run.mutate_retry);
+        field "mutate_order" order_name (fun c -> c.Run.mutate_order);
         field "mutate_memory" string_of_int (fun c -> c.Run.mutate_memory);
         field "crash_kills" bool (fun c -> c.Run.crash_kills);
         field "incremental" bool (fun c -> c.Run.incremental);
@@ -298,6 +301,7 @@ let mirrors =
           ("WINDTRAP_SAMPLE", "--sample", "inf");
           ("WINDTRAP_SAMPLE", "--sample", "half");
           ("WINDTRAP_SAMPLE", "--sample", "50%");
+          ("WINDTRAP_MUTATE_ORDER", "--mutate-order", "slow");
         ]
         refused_alike;
       mirror_rows "a mirror set to the empty string counts as unset"
@@ -641,6 +645,9 @@ let parsing =
           ([ "--mutate-retry"; "2" ], "mutate_retry 2");
           ([ "--mutate-retry=0" ], "mutate_retry 0");
           ([ "--mutate-retry=100" ], "mutate_retry 100");
+          ([ "--mutate-order"; "fast" ], "mutate_order fast");
+          ([ "--mutate-order=catalogue" ], "mutate_order catalogue");
+          ([ "--mutate-order=Fast" ], "mutate_order fast");
           ([ "--mutate-memory"; "64" ], "mutate_memory 64");
           ([ "--mutate-memory=4096" ], "mutate_memory 4096");
           ([ "--mutate-memory=1048576" ], "mutate_memory 1048576");
@@ -756,6 +763,8 @@ let parsing =
           ("--mutate-retry", "-1");
           ("--mutate-retry", "101");
           ("--mutate-retry", "two");
+          ("--mutate-order", "slow");
+          ("--mutate-order", "");
           ("--mutate-memory", "0");
           ("--mutate-memory", "-5");
           ("--mutate-memory", "lots");
@@ -1161,6 +1170,48 @@ let resolution =
           ( [ ("WINDTRAP_MUTATE_RETRY", "101") ],
             [ "--mutate=lib/" ],
             {|invalid WINDTRAP_MUTATE_RETRY "101"|} );
+        ];
+      resolve_rows
+        "--mutate-order or its mirror sets mutate_order under --mutate, and on \
+         the command line it needs --mutate"
+        [
+          ( [],
+            [ "--mutate"; "--mutate-order=fast" ],
+            "mutation loop [], mutate_order fast" );
+          ( [],
+            [ "--mutate"; "--mutate-order=FAST" ],
+            "mutation loop [], mutate_order fast" );
+          ([], [ "--mutate"; "--mutate-order=catalogue" ], "mutation loop []");
+          ( [ ("WINDTRAP_MUTATE_ORDER", "fast") ],
+            [ "--mutate" ],
+            "mutation loop [], mutate_order fast" );
+          ( [ ("WINDTRAP_MUTATE_ORDER", "fast") ],
+            [ "--mutate"; "--mutate-order=catalogue" ],
+            "mutation loop []" );
+          ( [ ("WINDTRAP_MUTATE", "1") ],
+            [ "--mutate-order=fast" ],
+            "mutation loop [], mutate_order fast, broadcast mutate" );
+          ( [ ("WINDTRAP_MUTATE", "1"); ("WINDTRAP_MUTATE_ORDER", "fast") ],
+            [],
+            "mutation loop [], mutate_order fast, broadcast mutate" );
+          ([], [ "--mutate-order=fast" ], "--mutate-order requires --mutate");
+          ( [],
+            [ "--arm"; "lib/a.ml:9:12:add"; "--mutate-order=fast" ],
+            "--mutate-order requires --mutate" );
+          ([ ("WINDTRAP_MUTATE_ORDER", "fast") ], [], "defaults");
+          ( [ ("WINDTRAP_MUTATE_ORDER", "fast") ],
+            [ "--arm"; "lib/a.ml:9:12:add" ],
+            "mutation armed lib/a.ml:9:12:add" );
+          ( [ ("WINDTRAP_MUTATE_ORDER", "slow") ],
+            [ "--mutate=lib/" ],
+            {|invalid WINDTRAP_MUTATE_ORDER "slow"|} );
+          ( [],
+            [ "--mutate"; "--mutate-order=fast"; "--skip-killed" ],
+            "mutation loop [] skip_killed, mutate_order fast" );
+          ( [],
+            [ "--mutate"; "--mutate-order=fast"; "--sample=50" ],
+            "mutation loop [] sample 50 s1:6d7574616e747321, mutate_order fast"
+          );
         ];
       resolve_rows
         "--mutate-memory or its mirror sets mutate_memory under --mutate, and \
