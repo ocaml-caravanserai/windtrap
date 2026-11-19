@@ -220,6 +220,10 @@ let settings (config : Run.config) =
   field "timeout" (Option.map (strf "%h") config.timeout);
   field "default_timeout" (Some (strf "%h" config.default_timeout));
   field "mutate_memory" (Some (string_of_int config.mutate_memory));
+  (* A [Catalogue] run adds no line. *)
+  (match config.mutate_order with
+  | Run.Catalogue -> ()
+  | Run.Fast -> field "mutate_order" (Some "fast"));
   Digest.to_hex (Digest.string (Buffer.contents b))
 
 (* The loop opens only a regular file, because the read of a FIFO or of a
@@ -383,10 +387,23 @@ let deadline_multiplier = 10.
 
 (* The dry run's wall clock bounds what a job pays besides its tests: the
    start of its worker, and its share of a loaded machine. *)
-let deadline ~wall ~durations paths =
-  let took path = Option.value ~default:0. (Hashtbl.find_opt durations path) in
+let deadline ~wall ~rank paths =
+  let took path = Option.fold ~none:0. ~some:fst (rank path) in
   let scheduled = List.fold_left (fun acc path -> acc +. took path) 0. paths in
   wall +. Float.max 1. (deadline_multiplier *. scheduled)
+
+(* Whole milliseconds, so that a change of microseconds between two runs does
+   not change the order. *)
+let job_order order ~rank paths =
+  match order with
+  | Run.Catalogue -> paths
+  | Run.Fast ->
+      let key path =
+        match rank path with
+        | Some (duration, index) -> (0, Float.to_int (duration *. 1000.), index)
+        | None -> (1, 0, 0)
+      in
+      List.stable_sort (fun a b -> compare (key a) (key b)) paths
 
 let budget_of hits =
   if hits > (max_int - 1000) / 8 then max_int else (hits * 8) + 1000
@@ -486,20 +503,62 @@ let killed_by ~full_matrix (ran : Supervisor.ran) =
 (* The runs of the check of a kill, at most. *)
 let check_runs = 3
 
-(* The failure of [test] in a run of a check, as one line. A run that ended
-   before [test] ended has no row of it, and gives none. *)
-let check_failure test (ran : Supervisor.ran) =
-  List.find_map
-    (fun (r : Run.result) ->
-      match r.outcome with
-      | Failure.Fail (f :: _)
-        when kills r && List.equal String.equal r.path test ->
-          Some
-            (strf "its killing test %s also fails with no mutant: %s"
-               (Test_tree.path_to_string test)
-               (Report_sections.headline f))
-      | Pass | Fail _ | Skip _ -> None)
-    ran.results
+(* The reason of a run that ended before its tests did. *)
+let end_reason ~deadline : Supervisor.ended -> Verdicts.unknown_reason option =
+  function
+  | Ran -> None
+  | Expired -> Some (Deadline { seconds = deadline })
+  | Lost { signal; status; how } -> Some (Crashed { signal; status; how })
+  | Outgrown mb -> Some (Memory { mb })
+
+(* The first release failure of a run, as what failed and its headline. *)
+let release_failure (ran : Supervisor.ran) =
+  match ran.release_failures with
+  | f :: _ -> Some ("a fixture release", Report_sections.headline f)
+  | [] -> None
+
+(* The first counted failure of a run, as what failed and its headline. *)
+let first_failure (ran : Supervisor.ran) =
+  match
+    List.find_map
+      (fun (r : Run.result) ->
+        match r.outcome with
+        | Failure.Fail (f :: _) when kills r ->
+            Some ("test " ^ Test_tree.path_to_string r.path, f)
+        | Pass | Fail _ | Skip _ -> None)
+      ran.results
+  with
+  | Some (what, f) -> Some (what, Report_sections.headline f)
+  | None -> release_failure ran
+
+(* What a check looks for in its runs. *)
+type goal =
+  | Killing of string list (* a counted failure of this killing test *)
+  | Release (* a failure of a fixture release *)
+
+(* The failure that [goal] finds in a run of a check, as one line. A run that
+   ended before the killing test ended has no row of it, and gives none. A
+   run that ended before its releases has no release failure, and gives
+   none for [Release]. Under [fast], the text names the fast order. *)
+let check_failure ~fast goal (ran : Supervisor.ran) =
+  let in_order = if fast then " in the fast order" else "" in
+  let also (what, failure) =
+    strf "%s also fails with no mutant%s: %s" what in_order failure
+  in
+  match goal with
+  | Killing test ->
+      List.find_map
+        (fun (r : Run.result) ->
+          match r.outcome with
+          | Failure.Fail (f :: _)
+            when kills r && List.equal String.equal r.path test ->
+              Some
+                (also
+                   ( "its killing test " ^ Test_tree.path_to_string test,
+                     Report_sections.headline f ))
+          | Pass | Fail _ | Skip _ -> None)
+        ran.results
+  | Release -> Option.map also (release_failure ran)
 
 (* The failure of a job that did not evaluate the armed site. *)
 let uncaused (ran : Supervisor.ran) =
@@ -512,14 +571,11 @@ let uncaused (ran : Supervisor.ran) =
    not evaluate the armed site tested nothing: neither is a survivor. Under
    [full_matrix], a kill before such an end stays a kill. *)
 let verdict ~full_matrix ~deadline paths (ran : Supervisor.ran) =
-  match (ran.ended, killed_by ~full_matrix ran) with
+  match (end_reason ~deadline ran.ended, killed_by ~full_matrix ran) with
   | _, Some by when full_matrix -> Verdicts.killed by
-  | Supervisor.Expired, _ -> Verdicts.Unknown (Deadline { seconds = deadline })
-  | Lost { signal; status; how }, _ ->
-      Verdicts.Unknown (Crashed { signal; status; how })
-  | Outgrown mb, _ -> Verdicts.Unknown (Memory { mb })
-  | Ran, Some by -> Verdicts.killed by
-  | Ran, None -> (
+  | Some reason, _ -> Verdicts.Unknown reason
+  | None, Some by -> Verdicts.killed by
+  | None, None -> (
       match ran.evaluated with
       | None -> Verdicts.Not_evaluated
       | Some _ -> Verdicts.survived paths)
@@ -751,11 +807,12 @@ let probe_job ~deadline ~pooled dry_run =
   unarmed_job ~deadline ~pooled
     (List.map (fun (r : Run.result) -> r.path) dry_run)
 
-(* The budget counts the job's evaluations, not the dry run's. *)
-let mutant_job ~deadline ~pooled ~bail ((mutant : Mutate.mutant), site) =
+(* The budget counts the job's evaluations, not the dry run's. [paths] are the
+   reaching tests in the order of the job. *)
+let mutant_job ~deadline ~pooled ~bail ((mutant : Mutate.mutant), site, paths) =
   job ~deadline ~pooled ~bail
     ~armed:(Some (mutant.id, budget_of site.hits))
-    (List.rev site.tests)
+    paths
 
 (* One pass: [jobs] in fresh workers, up to [-j] at once, given in order. A
    signal that came before the pass installed its handlers stops it at once,
@@ -770,37 +827,34 @@ let pass ?(on_stop = ignore) (config : Run.config) ~suite tests jobs ~on_ran =
       end)
 
 (* A mutant that waits for a check, with the run, the verdict and the matrix
-   of its kill. *)
+   of its job. *)
 type waiter = {
   i : int;
   run : int;
-  kill : Verdicts.verdict;
+  held : Verdicts.verdict;
   matrix : Verdicts.matrix option;
 }
 
-(* The check of the kills whose jobs ran [paths], which end with the killing
-   test [test]. *)
+(* The check of the verdicts whose jobs ran [paths]. For [Killing test], the
+   paths end with [test]. For [Release], they are the whole job. *)
 type check = {
   paths : string list list;
-  test : string list;
+  goal : goal;
   mutable waiting : waiter list;
 }
 
 (* The first pass runs the probe and then one job per reached mutant, in
    catalogue order. Each later pass runs again the jobs of the mutants that
    survived the pass before it, up to [config.mutate_retry] passes, and a
-   survivor waits for its verdict until its last run. Under a retry, a kill
-   with a killing test waits for the check of its tests, which runs in up to
-   [check_runs] passes after the last retry. The loop starts no pass after a
-   signal. [reached] holds a reused verdict in place of the job of its
-   mutant. *)
+   survivor waits for its verdict until its last run. Under a retry or the
+   fast order, a kill with a killing test waits for the check of its tests,
+   which runs in up to [check_runs] passes after the last retry. Under the
+   fast order, a kill by a fixture release waits for the check of the whole
+   job. The loop starts no pass after a signal. [reached] holds a reused verdict in place of
+   the job of its mutant, and each job has its tests in the job order. *)
 let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
-    ~dry_run ~pooled ~wall ~save reached =
-  let durations = Hashtbl.create 256 in
-  List.iter
-    (fun (r : Run.result) -> Hashtbl.replace durations r.path r.duration)
-    dry_run;
-  let deadline = deadline ~wall ~durations in
+    ~dry_run ~rank ~pooled ~wall ~save reached =
+  let deadline = deadline ~wall ~rank in
   let locations = Hashtbl.create 256 in
   List.iter
     (fun (case : Test_tree.case) ->
@@ -820,6 +874,10 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   (* The catalogue index of each job. *)
   let indices = Array.of_list (List.map fst fresh) in
   let mutants = Array.of_list (List.map snd fresh) in
+  let mutant i : Mutate.mutant =
+    let m, _, _ = mutants.(i) in
+    m
+  in
   let total = Array.length mutants in
   let judged = Array.make total false in
   let probed = ref false in
@@ -829,17 +887,21 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   let testing i =
     if i < total then
       Report.mutation_testing renderer ~index:(i + 1) ~total
-        ~id:(Mutate.id_to_string (fst mutants.(i) : Mutate.mutant).id)
+        ~id:(Mutate.id_to_string (mutant i).id)
   in
   (* The retries of each mutant that ended early, newest first. *)
   let early = Array.make total [] in
-  let paths i = List.rev (snd mutants.(i)).tests in
+  let paths i =
+    let _, _, paths = mutants.(i) in
+    paths
+  in
   let full_matrix = config.full_matrix in
+  let fast = config.mutate_order = Run.Fast in
   (* A kill that names a test keeps the tests of its job up to it, or each
      test of its job under [full_matrix]. *)
   let commit ~failed ~run ?matrix i verdict =
     judged.(i) <- true;
-    let mutant = fst mutants.(i) in
+    let mutant = mutant i in
     let prefix =
       match verdict with
       | Verdicts.Killed { by = _ :: _ } when full_matrix -> Some (paths i)
@@ -878,12 +940,12 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   (* The checks by their paths, and the mutants that wait for one. *)
   let checks = Hashtbl.create 16 in
   let checking = Array.make total false in
-  let await_check test waiter =
+  let await_check goal paths waiter =
     checking.(waiter.i) <- true;
-    let paths = Verdicts.through test (paths waiter.i) in
-    match Hashtbl.find_opt checks paths with
+    match Hashtbl.find_opt checks (paths, goal) with
     | Some check -> check.waiting <- waiter :: check.waiting
-    | None -> Hashtbl.add checks paths { paths; test; waiting = [ waiter ] }
+    | None ->
+        Hashtbl.add checks (paths, goal) { paths; goal; waiting = [ waiter ] }
   in
   let measured point =
     match meter with
@@ -913,7 +975,11 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   in
   (* After the first run, only a kill replaces the survivor, and a retry that
      ended early gives a line of the survivor's block. The mutant [i] waits
-     for another run when it survived and [run] is not its last. *)
+     for another run when it survived and [run] is not its last. Under the
+     fast order, a first run with a failure before the site gives no survivor
+     and no [Not_evaluated], because the order can cause that failure. For
+     the same cause, an early end gives an [Other] reason, which
+     [--crash-kills] does not count. *)
   let judge ~run i (ran : Supervisor.ran) =
     let paths = paths i in
     let ended_early why =
@@ -936,12 +1002,35 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
                   what)
       | verdict -> verdict
     in
+    let verdict =
+      match verdict with
+      | (Verdicts.Survived _ | Not_evaluated) when fast && run = 1 -> (
+          match first_failure ran with
+          | Some (what, failure) ->
+              Verdicts.Unknown
+                (Other
+                   (strf "%s fails before the site in the fast order: %s" what
+                      failure))
+          | None -> verdict)
+      | Verdicts.Unknown ((Deadline _ | Crashed _ | Memory _) as reason)
+        when fast ->
+          Verdicts.Unknown
+            (Other (strf "%s in the fast order" (Verdicts.reason_text reason)))
+      | verdict -> verdict
+    in
     let matrix = matrix ~full_matrix verdict ran in
-    (* The check runs the tests up to the first killing test. *)
+    (* The check runs the tests up to the first killing test, or the whole job
+       for a kill by a fixture release. *)
+    let await goal paths =
+      await_check goal paths { i; run; held = verdict; matrix }
+    in
     match (verdict, killing_test ran) with
     | Verdicts.Survived _, _ when run < last -> `Again
-    | Verdicts.Killed _, Some test when config.mutate_retry > 0 ->
-        await_check test { i; run; kill = verdict; matrix };
+    | Verdicts.Killed _, Some test when config.mutate_retry > 0 || fast ->
+        await (Killing test) (Verdicts.through test paths);
+        `Done
+    | Verdicts.Killed { by = [] }, None when fast ->
+        await Release paths;
         `Done
     | verdict, _ ->
         commit ~failed:(uncaused ran) ~run ?matrix i verdict;
@@ -951,19 +1040,29 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
      the first run. *)
   let settle check failure =
     List.iter
-      (fun { i; run; kill; matrix } ->
-        match failure with
-        | None -> commit ~failed:None ~run ?matrix i kill
-        | Some failure when run = 1 ->
+      (fun { i; run; held; matrix } ->
+        match (failure, check.goal) with
+        | None, _ -> commit ~failed:None ~run ?matrix i held
+        | Some failure, goal when run = 1 ->
             commit ~failed:None ~run i
-              (Verdicts.Unknown (Flaky_kill { test = check.test; failure }))
-        | Some reason ->
+              (Verdicts.Unknown
+                 (match goal with
+                 | Killing test -> Flaky_kill { test; failure }
+                 | Release -> Flaky_kill { test = []; failure }))
+        | Some reason, _ ->
             early.(i) <- (run, reason) :: early.(i);
             commit ~failed:None ~run i (Verdicts.survived (paths i)))
       (List.sort (fun a b -> Int.compare a.i b.i) check.waiting)
   in
   let first check =
     List.fold_left (fun m waiter -> Int.min m waiter.i) total check.waiting
+  in
+  (* A run of a check has the longest deadline of the jobs that wait for it,
+     so a killing test that fails at its own timeout fails in time. *)
+  let longest check =
+    List.fold_left
+      (fun d waiter -> Float.max d (deadline (paths waiter.i)))
+      0. check.waiting
   in
   let rec check_passes ~run = function
     | [] -> ()
@@ -974,7 +1073,7 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
         let on_ran j ran =
           given ran;
           let check = due.(j) in
-          (match check_failure check.test ran with
+          (match check_failure ~fast check.goal ran with
           | Some _ as failure -> settle check failure
           | None when run < check_runs -> clean := check :: !clean
           | None -> settle check None);
@@ -982,15 +1081,8 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
           if j + 1 < Array.length due then testing (first due.(j + 1))
         in
         testing (first due.(0));
-        (* A run of a check has the longest deadline of the jobs that wait for
-           it, so a killing test that fails at its own timeout fails in time. *)
         let job check =
-          let longest =
-            List.fold_left
-              (fun d waiter -> Float.max d (deadline (paths waiter.i)))
-              0. check.waiting
-          in
-          unarmed_job ~deadline:(fun _ -> longest) ~pooled check.paths
+          unarmed_job ~deadline:(fun _ -> longest check) ~pooled check.paths
         in
         let jobs = Array.to_list (Array.map job due) in
         starting jobs;
@@ -1082,10 +1174,10 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
         in
         match (!signal, !next, unjudged) with
         | Some s, _, _ when not !probed -> Interrupted (s, `Probe)
-        | Some s, Some i, _ -> Interrupted (s, `Job (fst mutants.(i)))
+        | Some s, Some i, _ -> Interrupted (s, `Job (mutant i))
         | Some s, None, Some i when checking.(i) ->
-            Interrupted (s, `Check (fst mutants.(i)))
-        | Some s, None, Some i -> Interrupted (s, `Wait (fst mutants.(i)))
+            Interrupted (s, `Check (mutant i))
+        | Some s, None, Some i -> Interrupted (s, `Wait (mutant i))
         | (Some _ | None), _, _ ->
             commit_reused (fun _ -> true);
             Finished (save (List.rev found.records)))
@@ -1329,6 +1421,26 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                   unreached
               in
               let wall = Float.max 0.01 (Os.count_s started) in
+              (* The time in the dry run and the catalogue index of each test
+                 that the dry run ran. *)
+              let ranks = Hashtbl.create 256 in
+              List.iter
+                (fun (r : Run.result) ->
+                  Hashtbl.replace ranks r.path (r.duration, max_int))
+                dry_run;
+              List.iteri
+                (fun k (case : Test_tree.case) ->
+                  match Hashtbl.find_opt ranks case.path with
+                  | Some (duration, _) ->
+                      Hashtbl.replace ranks case.path (duration, k)
+                  | None -> ())
+                (Test_tree.flatten tests);
+              let rank = Hashtbl.find_opt ranks in
+              let job (m, site) =
+                ( m,
+                  site,
+                  job_order config.mutate_order ~rank (List.rev site.tests) )
+              in
               let test_digests = test_digests tests in
               let skipped, to_test, skip_lines =
                 if not scope.skip_killed then ([], reached, [])
@@ -1364,6 +1476,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                     Report_sections.Uniform { percent; seed; judged; exact = 0 })
                   scope.sample
               in
+              let to_test = List.map job to_test in
               let to_test =
                 match if config.incremental then last_run ~suite else None with
                 | None -> List.map Either.right to_test
@@ -1371,10 +1484,10 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
                     let recorded = Verdicts.lookup last.test_digests
                     and digest = Verdicts.lookup test_digests in
                     List.map
-                      (fun (((m : Mutate.mutant), site) as mutant) ->
+                      (fun (((m : Mutate.mutant), _, paths) as mutant) ->
                         match
                           Verdicts.reuse ~last ~recorded ~digest ~effort
-                            ~reaching:(List.rev site.tests) m
+                            ~reaching:paths m
                         with
                         | Some r -> Either.Left (m, r)
                         | None -> Either.Right mutant)
@@ -1404,7 +1517,7 @@ let loop renderer ~scope ~suite (config : Run.config) tests =
               in
               match
                 test_mutants renderer ~meter ~suite config ~effort tests
-                  ~dry_run ~pooled ~wall ~save to_test
+                  ~dry_run ~rank ~pooled ~wall ~save to_test
               with
               | exception Sys_error _ when !signal = Some Sys.sigpipe ->
                   Os.die_by Sys.sigpipe

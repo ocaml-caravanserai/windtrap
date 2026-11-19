@@ -38,7 +38,9 @@ type unknown_reason =
   | Memory of { mb : int }  (** The run passed its memory limit of [mb] MB. *)
   | Flaky_kill of { test : reaching_test; failure : string }
       (** The check of a kill found that the killing test [test] also fails with
-          no mutant. [failure] is the phrase of the failure. *)
+          no mutant. [test] is empty when a fixture release killed the mutant
+          and also fails with no mutant. [failure] is the phrase of the failure.
+      *)
   | Other of string
       (** Each other reason, as the text says: a red dry run, a suite that is
           not deterministic, a selection that narrows the suite, or a refused

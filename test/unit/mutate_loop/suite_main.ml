@@ -34,6 +34,21 @@ let () =
           output_string oc (string_of_int (Unix.getpid ()) ^ "\n");
           close_out oc)
 
+(* Appends a line to the file of [var], and gives its number of lines. It
+   gives 0 when [var] is not set. *)
+let count var =
+  match Sys.getenv_opt var with
+  | None | Some "" -> 0
+  | Some path ->
+      let fd = Unix.openfile path [ O_WRONLY; O_APPEND; O_CREAT ] 0o644 in
+      Fun.protect
+        ~finally:(fun () -> Unix.close fd)
+        (fun () ->
+          (* The offset after an appended write is atomic with the write, so
+             two processes never get the same count. *)
+          ignore (Unix.write_substring fd "run\n" 0 4);
+          Unix.lseek fd 0 SEEK_CUR / 4)
+
 let strong =
   [
     test "sub of two positives" (fun () -> equal int 6 (Subject.sub 10 4));
@@ -112,6 +127,7 @@ let skippy =
 let crash =
   [
     test "crasher leaves without a word" (fun () ->
+        ignore (count "MUTATE_RUNS");
         if Subject.crasher 3 1 <> 2 then Unix._exit 3;
         equal int 2 (Subject.crasher 3 1));
   ]
@@ -403,6 +419,7 @@ let probe_block =
      of its fixture, at the end of the run, checks the answer. Outside
      the process that measured the reach map the release also prints on
      both standard descriptors, which is what a child's /dev/null hides.
+     Each of its runs appends a line to the file of MUTATE_RUNS.
    - [budget] evaluates [sub] [k] times unarmed and [target] times armed
      (MUTATE_BUDGET="k target"), and pins nothing: the runaway budget
      alone decides the mutant.
@@ -431,6 +448,7 @@ let released =
 let release =
   [
     test "holds a fixture and pins nothing about sub" (fun () ->
+        ignore (count "MUTATE_RUNS");
         released ();
         is_true (Subject.sub 10 4 < 100));
   ]
@@ -750,21 +768,6 @@ let start_index path =
      first test: the dry run, the probe, and then each run of the mutant. At
      the line MUTATE_SKIP_AT, the two tests do not run [widen]. *)
 
-(* Appends a line to the file of [var], and gives its number of lines. It
-   gives 0 when [var] is not set. *)
-let count var =
-  match Sys.getenv_opt var with
-  | None | Some "" -> 0
-  | Some path ->
-      let fd = Unix.openfile path [ O_WRONLY; O_APPEND; O_CREAT ] 0o644 in
-      Fun.protect
-        ~finally:(fun () -> Unix.close fd)
-        (fun () ->
-          (* The offset after an appended write is atomic with the write, so
-             two processes never get the same count. *)
-          ignore (Unix.write_substring fd "run\n" 0 4);
-          Unix.lseek fd 0 SEEK_CUR / 4)
-
 let at var n = Sys.getenv_opt var = Some (string_of_int n)
 let skipped_widen = ref false
 
@@ -858,6 +861,86 @@ let timed_kill =
         if among "MUTATE_FAIL_AT" run then Unix.sleepf 600.);
     test "takes 0.5 s" (fun () ->
         Unix.sleepf 0.5;
+        is_true (Subject.widen 1 2 <> 99));
+  ]
+
+(* The fixtures of --mutate-order. A slow test sleeps for 0.1 s, so that its
+   time in whole milliseconds is above that of a fast test also on a loaded
+   machine. *)
+let slow_test () = Unix.sleepf 0.1
+
+(* Two tests kill the mutant of [sub]: a slow test, and then a fast test. Each
+   run of the fast test appends a line to the file of MUTATE_RUNS, and each run
+   of the slow test a line to the file of MUTATE_FIRST_RUNS. *)
+let speed =
+  [
+    test "slow sub" (fun () ->
+        ignore (count "MUTATE_FIRST_RUNS");
+        slow_test ();
+        equal int 6 (Subject.sub 10 4));
+    test "fast sub" (fun () ->
+        ignore (count "MUTATE_RUNS");
+        equal int 0 (Subject.sub 4 4));
+  ]
+
+(* Two tests reach [widen], and neither pins it. The fast test passes only
+   after the slow test, so only the fast order makes it fail. It evaluates
+   [widen] before it fails, so the failure is a kill. *)
+let state = ref false
+
+let order =
+  [
+    test "sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "needs the state" (fun () ->
+        is_true (Subject.widen 1 2 <> 99);
+        if not !state then fail "the state is not set");
+  ]
+
+(* As [order], but the release of the fixture of the fast test fails when the
+   fixture was set up before the slow test ran. *)
+let after_the_state =
+  fixture
+    ~teardown:(fun set -> if not set then failwith "set up before the state")
+    (fun () -> !state)
+
+let release_order =
+  [
+    test "sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "needs the state at its release" (fun () ->
+        ignore (after_the_state ());
+        is_true (Subject.widen 1 2 <> 99));
+  ]
+
+(* As [order], but the fast test fails before it evaluates [widen] when it
+   runs first, and pins [widen] when it runs after the slow test. *)
+let state_first =
+  [
+    test "sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "needs the state" (fun () ->
+        if not !state then fail "the state is not set";
+        equal int 3 (Subject.widen 1 2));
+  ]
+
+(* As [state_first], but the fast test fails before it evaluates [widen] only
+   at the runs in MUTATE_FAIL_AT. It counts its runs in the file of
+   MUTATE_RUNS, as in [flaky_kill]. *)
+let retry_order =
+  [
+    test "slow reaches widen" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0));
+    test "fast fails at the given runs" (fun () ->
+        let run = count "MUTATE_RUNS" in
+        if among "MUTATE_FAIL_AT" run then fail (Printf.sprintf "run %d" run);
         is_true (Subject.widen 1 2 <> 99));
   ]
 
@@ -963,6 +1046,11 @@ let () =
   | "intermittent" -> exit @@ run "calc" [ group "intermittent" intermittent ]
   | "flaky_kill" -> exit @@ run "calc" [ group "kill" flaky_kill ]
   | "timed_kill" -> exit @@ run "calc" [ group "kill" timed_kill ]
+  | "speed" -> exit @@ run "calc" [ group "speed" speed ]
+  | "order" -> exit @@ run "calc" [ group "order" order ]
+  | "release_order" -> exit @@ run "calc" [ group "order" release_order ]
+  | "state_first" -> exit @@ run "calc" [ group "order" state_first ]
+  | "retry_order" -> exit @@ run "calc" [ group "order" retry_order ]
   | "start_hangs" ->
       (match Sys.getenv_opt "MUTATE_STARTS" with
       | Some path when start_index path = 5 -> Unix.sleepf 60.

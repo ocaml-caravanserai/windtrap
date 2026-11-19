@@ -372,7 +372,8 @@
       the kind of this reason: ["deadline"] when the run passed its deadline,
       ["crashed"] when its worker ended first, ["memory"] when it passed its
       memory limit, ["flaky_kill"] when the killing test also fails with no
-      mutant, and ["other"] for each other reason.
+      mutant, and ["other"] for each other reason. Under [--mutate-order=fast],
+      an early end gives ["other"].
     - ["counted_as_killed"] is in the object of an unknown mutant only. It is
       [true] when the counts and the measures count the mutant as killed
       ({{!section-gate}the gates}), and [false] otherwise. The ["verdict"] of
