@@ -199,7 +199,8 @@ type config = {
   mutate_order : mutate_order;
       (** [--mutate-order]: under {!Loop}, the order of the reaching tests in
           the job of each mutant. Under {!Fast}, the loop does the check of each
-          kill, also when [mutate_retry] is [0] (see [Mutate_loop]). *)
+          kill, also of a kill by a fixture release and when [mutate_retry] is
+          [0]. It also does the check of each early end (see [Mutate_loop]). *)
   mutate_memory : int;
       (** [--mutate-memory]: under {!Loop}, the limit of the resident memory of
           each worker of a mutant, in MB, from 1 to 1048576. On Linux, the loop

@@ -633,11 +633,11 @@ mutant, it can kill a mutant that the tests do not find.
 Under `--mutate-retry N` with `N` above 0, or under
 `--mutate-order=fast`, the loop does a check of each kill that names a
 test. The killing test is the first test that fails in or after the
-test that first evaluates the site. The check runs the tests of the job
-that killed the mutant, in the order of the job. These are its reaching
-tests, up to and with the killing test. It runs them with no mutant, in
-a fresh worker. A failure of an earlier test does not stop this run. The
-check does this run up to 3 times:
+test that first evaluates the site. The check runs the reaching tests
+of the job that killed the mutant, in the order of the job, up to and
+with the killing test. It runs them with no mutant, in a fresh worker.
+A failure of an earlier test does not stop this run. The check does this
+run up to 3 times:
 
 - If the killing test fails in a run, the check fails and stops.
 - If the killing test does not fail in the 3 runs, the kill stays.
@@ -722,17 +722,17 @@ $ WINDTRAP_MUTATE=1 WINDTRAP_MUTATE_ORDER=fast dune runtest --force --instrument
 The order uses the time of each test in whole milliseconds, truncated.
 Thus a change of some microseconds between two runs does not change the
 order. Two tests with the same time keep the catalogue order. A test
-with no time in the dry run comes after all the others. A reaching test
-always has a time, so this rule has no effect in a run. The dry run and
-the determinism probe keep the catalogue order. Under `-j` above 1, the
-dry run measures the times on a loaded machine.
+with no time in the dry run comes after all the others, but a reaching
+test always has a time. The dry run and the determinism probe keep the
+catalogue order. Under `-j` above 1, the dry run measures the times on a
+loaded machine.
 
 The default stays `catalogue`, because a test can depend on the state
 that an earlier test leaves. A new order can make such a test fail when
 no mutant causes the failure.
 
-Thus under `--mutate-order=fast`, the run does the check of each kill,
-also at `--mutate-retry=0` (see [Flaky kills](#flaky-kills)). The check
+Under `--mutate-order=fast`, the run does the check of each kill, also
+at `--mutate-retry=0` (see [Flaky kills](#flaky-kills)). The check
 runs the tests of the job in the job order, up to the killing test.
 When a check fails, the reason tells the order:
 
@@ -764,14 +764,19 @@ The order can also make a job end early, at its deadline, by a crash
 or at its memory limit. Under `--mutate-order=fast`, each early end
 gets a check of the tests of the job, up to and with the test that ran
 at the end. When the end comes after a kill, for example in a fixture
-release, the check stops at the killing test. The check fails when one of its runs ends early, or has a
-failure. Then the mutant is unknown, with the
-reason `the job also ends with no mutant in the fast order:` and the
-end of the check. For a failure, the reason names the test or the
-fixture release, and then has `also fails with no mutant in the fast
-order:`. `--crash-kills` does not count this reason (see
+release, the check stops at the killing test. The check fails when one
+of its runs ends early, or has a failure. Then the mutant is unknown,
+with the reason `the job also ends with no mutant in the fast order:`
+and the end of the check.
+
+For a failure, the reason names the test or the fixture release, and
+then has `also fails with no mutant in the fast order:`.
+`--crash-kills` does not count this reason (see
 [Counting a crash as a kill](#counting-a-crash-as-a-kill)). When the
-check passes, the end keeps its reason.
+check passes, the end keeps its reason. A worker can retire before the
+end, and its replacement can end before it runs a test. Then the check
+also runs the next test of the job, which did not run in the job. This
+test can only add a failure or an early end to the check.
 
 A worker keeps a fixture until it ends. Thus the first test of the job
 that uses a fixture pays its setup. The worker sets up no fixture two

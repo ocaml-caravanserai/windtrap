@@ -522,8 +522,8 @@ verdict of a run with the other order.
 Under `fast`, the run does the check of each kill also at
 `--mutate-retry=0`, with the tests of the job in the same order. A kill
 by a fixture release also gets a check. A kill that only the order
-causes is then unknown, with the reason. So is a failure before the
-site, or an early end, that only the order causes.
+causes is then unknown, with the reason. A failure before the site, and
+an early end, that only the order causes are also unknown.
 
 `--mutate-memory MB` (`WINDTRAP_MUTATE_MEMORY=MB`, default 1024) is the
 memory limit of each worker of a mutant, on Linux. A mutant can make
