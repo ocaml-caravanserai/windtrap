@@ -700,12 +700,12 @@ example, a test that fails in 1 run of 10 passes 3 runs in about 73 of
 not prove that the mutant is not killed. The mutant can make the test
 fail in each run, and the test can also fail with no mutant.
 
-A signal stops the loop during a check as it does during a job. A
-mutant that waits for its check gets no verdict, and the loop writes no
+A signal stops the loop during a check as it does during a job. A kill
+that waits for its check gets no verdict, and the loop writes no
 verdict file. The signal can come during a pass of checks or between
 two passes. If the first mutant with no verdict then waits for its
 check, the message names that mutant, as in
-`interrupted while the verdict of calc.ml:13:9:sub waits for its check`.
+`interrupted while the kill of calc.ml:13:9:sub waits for its check`.
 
 ## Running the fastest test first
 

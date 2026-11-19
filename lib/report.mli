@@ -432,7 +432,7 @@ val mutation_interrupted :
     signal is stopping. It says on standard error what was interrupted: the
     determinism probe under [`Probe], the job of the mutant [id] under
     [`Job id], the wait of the survivor [id] for its next run under [`Wait id],
-    when the signal comes between two passes, or the wait of the verdict of [id]
+    when the signal comes between two passes, or the wait of the kill of [id]
     for its check under [`Check id]. It then calls {!mutation_finish} over [m]
     and [lines]. *)
 
