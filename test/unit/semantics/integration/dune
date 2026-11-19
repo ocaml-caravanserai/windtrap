@@ -14,7 +14,8 @@
   rebound
   rebound_unary
   recursive
-  shadowed)
+  shadowed
+  warnerror)
  (flags
   (:standard -w +a-70 -warn-error +a))
  (preprocess

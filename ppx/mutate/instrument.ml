@@ -820,14 +820,22 @@ let negation ~loc ~module_name ~index value =
    [type 'a lists = 'a list * 'a list], which gives the right operand the
    type of the left one and the two operands a list type.
 
-   The operands move out of [e], so the [let] takes the warning and alert
-   attributes of [e], which also cover the operands.
+   The operands move out of [e], so the [let] takes the warning, warnerror and
+   alert attributes of [e], which also cover the operands.
 
    An applied [(fun l r -> ...) left right] would keep its call and its
    closure in bytecode under [-g]. Binding the operator, as in [let op = if
    armed then ( <= ) else ( < )], names a second operator, and reaches the
    polymorphic comparison even when nothing is armed. *)
-let scoping = [ "ocaml.warning"; "warning"; "ocaml.alert"; "alert" ]
+let scoping =
+  [
+    "ocaml.warning";
+    "warning";
+    "ocaml.warnerror";
+    "warnerror";
+    "ocaml.alert";
+    "alert";
+  ]
 
 let scoped e =
   List.filter (fun a -> List.mem a.attr_name.txt scoping) e.pexp_attributes
