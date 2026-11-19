@@ -537,7 +537,8 @@ type goal =
 (* The failure that [goal] finds in a run of a check, as one line. A run that
    ended before the killing test ended has no row of it, and gives none. A
    run that ended before its releases has no release failure, and gives
-   none for [Release]. [deadline] is the deadline of the run. *)
+   none for [Release]. [deadline] is the deadline of the run. Under [Fast],
+   the text names the fast order. *)
 let check_failure order ~deadline goal (ran : Supervisor.ran) =
   let in_order =
     match order with Run.Catalogue -> "" | Run.Fast -> " in the fast order"

@@ -176,9 +176,10 @@ val execute_and_report :
     order. The check runs the cases of the job, which are the reaching tests of
     the mutant in the job order, up to and with the killing test, or all of them
     for a kill by a fixture release. It runs them with no mutant and with no
-    stop at a failure, in a fresh worker. Two kills whose checks run the same
-    cases in the same order, and name the same killing test or none, share one
-    check. Under [config.full_matrix], the check also runs only up to the first
+    stop at a failure, in a fresh worker. Two checks that run the same cases in
+    the same order and look for the same failure are one check. The failure is
+    of one killing test, of a release, or of an early end ({b Order failures}
+    below). Under [config.full_matrix], the check also runs only up to the first
     killing test. When the check trusts the kill, the kill keeps each of its
     killing tests. Thus [by] can hold a later killing test that also fails with
     no mutant.
@@ -220,10 +221,10 @@ val execute_and_report :
     ["a fixture release"] when no test has one. A retry keeps the rule of the
     catalogue order.
 
-    Under the fast order, an early end of a job (a deadline, a lost worker or
-    the memory limit) waits for a check of the whole job, as a kill by a fixture
-    release does. That check fails when one of its runs ends early, or has a
-    counted failure or a release failure. Then the mutant is
+    Under the fast order, a job can end early at its deadline, by a lost worker
+    or at its memory limit. Such an end waits for a check of the whole job, as a
+    kill by a fixture release does. That check fails when one of its runs ends
+    early, or has a counted failure or a release failure. Then the mutant is
     {!Windtrap_runtime.Verdicts.Unknown}, with the reason
     ["the job also ends with no mutant in the fast order: <reason>"], or
     ["<what> also fails with no mutant in the fast order: <failure>"]. These

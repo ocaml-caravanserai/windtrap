@@ -515,13 +515,14 @@ reason, and a kill in a retry then leaves the survivor.
 `--mutate-order=fast` (`WINDTRAP_MUTATE_ORDER=fast`) runs the reaching
 tests of each mutant by their time in the dry run, the fastest first,
 so a kill comes earlier. The default is `catalogue`, because a test can
-depend on the state that an earlier test leaves. Under `fast`, the run
-does the check of each kill also at `--mutate-retry=0`, with the tests
-of the job in the same order. A kill by a fixture release also gets a
-check. A kill that only the order causes is then unknown, with the
-reason. So is a failure before the site, or an early end, that only
-the order causes. The flag without `--mutate` is a usage error. The run
-reuses no verdict across orders.
+depend on the state that an earlier test leaves. The flag without
+`--mutate` is a usage error. The run reuses no verdict across orders.
+
+Under `fast`, the run does the check of each kill also at
+`--mutate-retry=0`, with the tests of the job in the same order. A kill
+by a fixture release also gets a check. A kill that only the order
+causes is then unknown, with the reason. So is a failure before the
+site, or an early end, that only the order causes.
 
 `--mutate-memory MB` (`WINDTRAP_MUTATE_MEMORY=MB`, default 1024) is the
 memory limit of each worker of a mutant, on Linux. A mutant can make

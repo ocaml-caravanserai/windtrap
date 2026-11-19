@@ -764,7 +764,9 @@ or at its memory limit. Under `--mutate-order=fast`, such an end gets a
 check of all the tests of the job. The check fails when one of its
 runs ends early, or has a failure. Then the mutant is unknown, with the
 reason `the job also ends with no mutant in the fast order:` and the
-end of the check. `--crash-kills` does not count this reason (see
+end of the check. For a failure, the reason names the test or the
+fixture release, and then has `also fails with no mutant in the fast
+order:`. `--crash-kills` does not count this reason (see
 [Counting a crash as a kill](#counting-a-crash-as-a-kill)). When the
 check passes, the end keeps its reason.
 
@@ -1335,8 +1337,9 @@ passed its memory limit. When more than one suite holds the mutant as
 unknown, one such reason in a mutation-tested suite is sufficient. A
 flaky kill stays unknown, because the test that killed it also fails
 with no mutant. An unknown mutant with another reason stays unknown too.
+
 Under `--mutate-order=fast`, an end that also occurs with no mutant has
-another reason.
+another reason. Thus `--crash-kills` does not count it.
 
 The score, the total and each gate then count these mutants with the
 killed mutants. The reach does not change, because it counts a killed
