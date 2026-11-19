@@ -943,6 +943,22 @@ let exit_order =
         if not !state then Unix._exit 3);
   ]
 
+(* The fast test ends its worker under the mutant of [widen]. The order is
+   fast, medium, slow, and the medium test fails when it runs before the slow
+   test. *)
+let end_prefix =
+  [
+    test "z slow sets the state" (fun () ->
+        slow_test ();
+        is_true (Subject.widen 3 4 <> 0);
+        state := true);
+    test "y medium needs the state" (fun () ->
+        Unix.sleepf 0.02;
+        is_true (Subject.widen 1 2 <> 99);
+        if not !state then fail "the state is not set");
+    test "x fast ends" (fun () -> if Subject.widen 2 2 <> 4 then Unix._exit 3);
+  ]
+
 let retried = ref 0
 let handle = fixture ~teardown:(fun () -> ignore (Subject.crasher 3 1)) Fun.id
 
@@ -1050,6 +1066,7 @@ let () =
   | "release_order" -> exit @@ run "calc" [ group "order" release_order ]
   | "state_first" -> exit @@ run "calc" [ group "order" state_first ]
   | "exit_order" -> exit @@ run "calc" [ group "order" exit_order ]
+  | "end_prefix" -> exit @@ run "calc" [ group "order" end_prefix ]
   | "start_hangs" ->
       (match Sys.getenv_opt "MUTATE_STARTS" with
       | Some path when start_index path = 5 -> Unix.sleepf 60.

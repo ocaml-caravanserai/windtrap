@@ -850,7 +850,8 @@ type waiter = {
 }
 
 (* The check of the verdicts whose jobs ran [paths]. For [Killing test], the
-   paths end with [test]. For [Release] and [End], they are the whole job. *)
+   paths end with [test]. For [Release], they are the whole job. For [End],
+   they end with the test that ran at the end. *)
 type check = {
   paths : string list list;
   goal : goal;
@@ -863,10 +864,10 @@ type check = {
    survivor waits for its verdict until its last run. Under a retry or the
    fast order, a kill with a killing test waits for the check of its tests,
    which runs in up to [check_runs] passes after the last retry. Under the
-   fast order, a kill by a fixture release and an early end wait for the
-   check of the whole job. The loop starts no pass after a signal. [reached] holds a reused
-   verdict in place of the job of its mutant, and each job has its tests in
-   the order of the job. *)
+   fast order, a kill by a fixture release waits for the check of the whole
+   job, and an early end for the check of the tests up to the end. The loop
+   starts no pass after a signal. [reached] holds a reused verdict in place of
+   the job of its mutant, and each job has its tests in the job order. *)
 let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
     ~dry_run ~rank ~pooled ~wall ~save reached =
   let deadline = deadline ~wall ~rank in
@@ -955,13 +956,8 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
   (* The checks by their paths, and the mutants that wait for one. *)
   let checks = Hashtbl.create 16 in
   let checking = Array.make total false in
-  let await_check goal waiter =
+  let await_check goal paths waiter =
     checking.(waiter.i) <- true;
-    let paths =
-      match goal with
-      | Killing test -> Verdicts.through test (paths waiter.i)
-      | Release | End -> paths waiter.i
-    in
     match Hashtbl.find_opt checks (paths, goal) with
     | Some check -> check.waiting <- waiter :: check.waiting
     | None ->
@@ -1031,19 +1027,24 @@ let test_mutants renderer ~meter ~suite (config : Run.config) ~effort tests
       | verdict, _ -> verdict
     in
     let matrix = matrix ~full_matrix verdict ran in
-    (* The check runs the tests up to the first killing test, or the whole job
-       for a kill by a fixture release or an early end. *)
-    let await goal = await_check goal { i; run; held = verdict; matrix } in
+    (* The check runs the tests up to the first killing test, the whole job
+       for a kill by a fixture release, or the tests up to the end. When the
+       replacement of a retired worker ends before it serves, that prefix
+       holds one test that did not run. *)
+    let await goal paths =
+      await_check goal paths { i; run; held = verdict; matrix }
+    in
     match (verdict, killing_test ran) with
     | Verdicts.Survived _, _ when run < last -> `Again
     | Verdicts.Killed _, Some test when config.mutate_retry > 0 || fast ->
-        await (Killing test);
+        await (Killing test) (Verdicts.through test paths);
         `Done
     | Verdicts.Killed { by = [] }, None when fast ->
-        await Release;
+        await Release paths;
         `Done
     | Verdicts.Unknown (Deadline _ | Crashed _ | Memory _), _ when fast ->
-        await End;
+        let ran_to = List.length ran.results in
+        await End (List.filteri (fun k _ -> k <= ran_to) paths);
         `Done
     | verdict, _ ->
         commit ~failed:(uncaused ran) ~run ?matrix i verdict;
